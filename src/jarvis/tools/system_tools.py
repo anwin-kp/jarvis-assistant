@@ -142,3 +142,44 @@ def register(reg: ToolRegistry) -> None:
         percent = max(0, min(int(percent), 100))
         sbc.set_brightness(percent)
         return f"Brightness set to {percent}%."
+
+
+def register_power(reg: ToolRegistry) -> None:
+    import subprocess
+
+    def _shutdown(*args: str) -> None:
+        subprocess.run(["shutdown", *args], check=True, capture_output=True)
+
+    @reg.tool(
+        "shutdown_pc",
+        "Shut down the PC after a delay (can be cancelled with cancel_shutdown).",
+        {"delay_minutes": {"type": "integer", "description": "1-120, default 1"}},
+        required=[],
+        risk=Risk.DANGER,
+        group="system",
+    )
+    def shutdown_pc(delay_minutes: int = 1):
+        secs = max(1, min(int(delay_minutes), 120)) * 60
+        _shutdown("/s", "/t", str(secs))
+        return f"Shutting down in {secs // 60} minute(s). Say 'cancel shutdown' to stop it."
+
+    @reg.tool(
+        "restart_pc",
+        "Restart the PC after a delay (can be cancelled with cancel_shutdown).",
+        {"delay_minutes": {"type": "integer", "description": "1-120, default 1"}},
+        required=[],
+        risk=Risk.DANGER,
+        group="system",
+    )
+    def restart_pc(delay_minutes: int = 1):
+        secs = max(1, min(int(delay_minutes), 120)) * 60
+        _shutdown("/r", "/t", str(secs))
+        return f"Restarting in {secs // 60} minute(s). Say 'cancel shutdown' to stop it."
+
+    @reg.tool("cancel_shutdown", "Cancel a scheduled shutdown or restart.", {}, group="system")
+    def cancel_shutdown():
+        try:
+            _shutdown("/a")
+        except subprocess.CalledProcessError:
+            return "There was no shutdown or restart scheduled."
+        return "Cancelled the scheduled shutdown/restart."

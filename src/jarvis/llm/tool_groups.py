@@ -4,7 +4,8 @@ reliably when they see ~10 relevant tools instead of every tool."""
 KEYWORDS: dict[str, list[str]] = {
     "system": [
         "volume", "mute", "sound", "brightness", "lock", "process", "cpu", "ram", "memory usage",
-        "battery", "open", "close", "launch", "start", "quit", "kill", "app", "program",
+        "battery", "shutdown", "restart", "reboot", "powershell", "command", "ip address", "network",
+        "open", "close", "launch", "start", "quit", "kill", "app", "program",
     ],
     "files": [
         "file", "folder", "document", "pdf", "docx", "photo", "picture", "download", "desktop",

@@ -23,6 +23,7 @@ voice:
   tts_voice: null        # part of a Windows voice name, e.g. "David" or "Zira"
 
 security:
+  shell_enabled: false   # true = allow read-only PowerShell commands (always asks first)
   # Folders JARVIS may read/search. Known-folder names are resolved via Windows
   # (handles OneDrive redirection); you can also add full paths.
   allowed_roots:
