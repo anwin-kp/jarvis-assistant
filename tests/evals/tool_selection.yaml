@@ -38,9 +38,9 @@
 - {say: "schedule lunch with Sam on Friday at 1pm", expect: [create_event]}
 - {say: "pause the music", expect: [media_control]}
 - {say: "skip this song", expect: [media_control]}
-- {say: "play Believer by Imagine Dragons", expect: [play_youtube, search_spotify]}
+- {say: "play Believer by Imagine Dragons", expect: [play_youtube, search_spotify, spotify_play]}
 - {say: "put on some lofi music on youtube", expect: [play_youtube]}
-- {say: "find Arijit Singh on Spotify", expect: [search_spotify]}
+- {say: "find Arijit Singh on Spotify", expect: [search_spotify, spotify_play]}
 - {say: "switch to chrome", expect: [window_action]}
 - {say: "snap this window to the left", expect: [window_action, list_windows]}
 - {say: "what windows are open?", expect: [list_windows]}
@@ -76,4 +76,4 @@
 - {say: "what's in this picture on my screen?", expect: [look_at_screen]}
 - {say: "click the save button", expect: [list_ui_elements, click_ui_element]}
 - {say: "what buttons are in this window?", expect: [list_ui_elements, look_at_screen]}
-- {say: "in calculator press seven", expect: [click_ui_element, list_ui_elements]}
+- {say: "in calculator press seven", expect: [click_ui_element, list_ui_elements, operate_app]}

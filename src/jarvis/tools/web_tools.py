@@ -43,6 +43,47 @@ WMO = {
 }
 
 
+ENGINES = ("bing", "google", "yahoo", "duckduckgo", "brave")
+_cache: dict[str, tuple[float, list[dict]]] = {}
+
+
+def search(query: str, max_results: int = 5, timeout: float = 6.0, engines=ENGINES) -> list[dict]:
+    """Ask several engines at once and take the first that answers. Free scraping engines are individually
+    flaky (often empty), and ddgs' "auto" tries them one after another (2-5 s, sometimes nothing)."""
+    import time
+    from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
+
+    from ddgs import DDGS
+
+    key = " ".join(query.lower().split())
+    hit = _cache.get(key)
+    if hit and time.monotonic() - hit[0] < 600:
+        return hit[1]
+
+    def one(engine):
+        try:
+            return DDGS(timeout=int(timeout)).text(query, max_results=max_results, backend=engine) or []
+        except Exception:
+            return []
+
+    pool = ThreadPoolExecutor(max_workers=len(engines))
+    end = time.monotonic() + timeout
+    results: list[dict] = []
+    try:
+        for _round in range(2):  # all empty is usually a transient block: one more try within the time budget
+            pending = {pool.submit(one, e) for e in engines}
+            while pending and not results and (left := end - time.monotonic()) > 0:
+                done, pending = wait(pending, timeout=left, return_when=FIRST_COMPLETED)
+                results = next((f.result() for f in done if f.result()), [])
+            if results or end - time.monotonic() < 1.5:
+                break
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)  # don't wait for the slower engines
+    if results:
+        _cache[key] = (time.monotonic(), results)
+    return results
+
+
 def register(reg: ToolRegistry, rss_feeds: list[str]) -> None:
     @reg.tool(
         "web_search",
@@ -52,9 +93,7 @@ def register(reg: ToolRegistry, rss_feeds: list[str]) -> None:
         read_only=True,
     )
     def web_search(query: str):
-        from ddgs import DDGS
-
-        results = DDGS().text(query, max_results=5)
+        results = search(query)
         lines = [f"- {r.get('title')} ({r.get('href')}): {r.get('body')}" for r in results]
         return untrusted("web_search", "\n".join(lines) or "No results.")
 
