@@ -27,7 +27,16 @@ def build(dry_run: bool = False):
     if google.is_configured():
         google.register(reg)
 
-    brain = OllamaBrain(reg, cfg["llm"])
+    local = OllamaBrain(reg, cfg["llm"])
+    ccfg = cfg["llm"].get("cloud") or {}
+    cloud = None
+    if ccfg.get("provider"):
+        from jarvis.llm.cloud_brain import CloudBrain
+
+        cloud = CloudBrain(reg, ccfg["provider"], ccfg.get("model", ""), cfg["llm"].get("max_steps", 6))
+    from jarvis.llm.cloud_brain import Router
+
+    brain = Router(local, cloud, reg, cfg["llm"].get("mode", "local"), ccfg.get("use_in_gaming_mode", True))
     orch = Orchestrator(brain, reg, memory, load_persona(), cfg.get("history_turns", 8),
                         cfg.get("idle_summary_minutes", 10))
     return cfg, orch, brain, reg, memory, roots

@@ -32,6 +32,7 @@ HELP = """Commands:
   /briefing your daily briefing now
   /gaming   toggle gaming mode (GPU freed, slower CPU replies)
   /hud      open the HUD window
+  /private  toggle private mode (never use the cloud model)
   /wake     toggle the wake word
   /mute     stop speaking replies (/unmute to resume)
   /quit     exit"""
@@ -306,7 +307,8 @@ class App:
             self._publish("notice", text=f"Error: {e}")
             self._state("idle")
             return False
-        print(f"{CYAN}{self.name}:{RESET} {reply}  {DIM}({time.perf_counter() - start:.1f}s){RESET}")
+        where = " · cloud" if getattr(self.brain, "last_backend", "local") == "cloud" else ""
+        print(f"{CYAN}{self.name}:{RESET} {reply}  {DIM}({time.perf_counter() - start:.1f}s{where}){RESET}")
         self._publish("reply", text=reply)
         self._state("speaking")
         self._say(reply)
@@ -343,6 +345,9 @@ class App:
             self.gaming.set(on)
         elif cmd == "/briefing":
             self.handle(self.briefing_prompt(), show=False)
+        elif cmd == "/private":
+            self.brain.private = not self.brain.private
+            print(f"{DIM}Private mode {'on: everything stays on this PC' if self.brain.private else 'off'}.{RESET}")
         elif cmd == "/hud":
             if self.hud:
                 self.hud.open()
