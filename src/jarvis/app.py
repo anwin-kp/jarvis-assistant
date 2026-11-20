@@ -43,6 +43,9 @@ def build(dry_run: bool = False):
 
     vision_tools.register(reg, cfg)
     ui_tools.register(reg)
+    from jarvis.tools import operator_tools
+
+    operator_tools.register(reg, cfg)
     reg.spotify = spotify.setup(reg)
     if reg.spotify:  # the real Spotify tools replace the "open a search" fallback
         reg.unregister("search_spotify")

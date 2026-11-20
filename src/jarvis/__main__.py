@@ -204,6 +204,7 @@ class App:
     def __init__(self, args):
         self.cfg, self.orch, self.brain, self.reg, self.memory, _ = build(dry_run=args.dry_run)
         self.reg.on_call = self._on_tool
+        self.reg.confirm_fn = self.confirm
         self.hud = None
         self.name = self.cfg.get("assistant_name", "JARVIS")
         self.q: queue.Queue = queue.Queue()
@@ -355,6 +356,8 @@ class App:
         brain = getattr(self.brain, "local", self.brain)
         if hasattr(brain, "cancel"):
             brain.cancel.set()
+        if getattr(self.reg, "operator_cancel", None):
+            self.reg.operator_cancel.set()  # stop an app task in progress
         logger.info("Interrupted ({})", "you talked over JARVIS" if force else text)
         return True
 
@@ -886,6 +889,9 @@ def main() -> None:
     args = parser.parse_args()
 
     ensure_data_dirs()
+    from jarvis.agent.operator import make_dpi_aware
+
+    make_dpi_aware()
     if args.background or sys.stdout is None:  # pythonw has no console
         args.background = True
         global CYAN, YELLOW, RED, DIM, RESET
