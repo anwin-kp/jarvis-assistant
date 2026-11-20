@@ -331,7 +331,9 @@ class App:
             self._flags()
             self._publish("notice", text=f"{self.name} online")
         if self.voice:
+            self._state("speaking")
             self._say(f"{self.name} online.")
+        self._state("ready")  # startup done: the HUD leaves "initializing" (it used to wait for the first speech)
         logger.info("JARVIS ready (pid {})", os.getpid())  # start-jarvis.ps1 waits for this line
 
     # ------------------------------------------------------------ background threads
