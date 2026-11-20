@@ -77,6 +77,22 @@ class CloudBrain:
         return "That took more steps than I'm allowed, so I stopped."
 
 
+def personal_context(messages: list[dict], keep: bool) -> list[dict]:
+    """The system prompt's <<personal>> block (facts, summaries, location): kept (markers removed) or dropped."""
+    from jarvis.core.orchestrator import PERSONAL_END, PERSONAL_START
+
+    out = []
+    for m in messages:
+        c = m.get("content")
+        if m.get("role") == "system" and isinstance(c, str) and PERSONAL_START in c:
+            head, rest = c.split(PERSONAL_START, 1)
+            body, tail = rest.split(PERSONAL_END, 1) if PERSONAL_END in rest else (rest, "")
+            kept = "\n\n" + body.strip() if keep else ""
+            m = {**m, "content": (head.rstrip() + kept + tail).strip()}
+        out.append(m)
+    return out
+
+
 class Router:
     """Same interface as OllamaBrain. Local by default; cloud when configured, falling back to local."""
 
@@ -89,6 +105,7 @@ class Router:
         self.gaming = False
         self.last_tool_calls: list[str] = []
         self.last_backend = "local"
+        self.share_personal = False  # memory.share_with_cloud: send what JARVIS knows about you to the cloud model
 
     @property
     def model(self) -> str:
@@ -116,7 +133,7 @@ class Router:
         if self._use_cloud(tools, think, private):
             try:
                 public_tools = [t for t in tools or [] if not self._is_private(t)]  # the cloud never gets private tools
-                reply = self.cloud.respond(messages, public_tools, confirm)
+                reply = self.cloud.respond(personal_context(messages, self.share_personal), public_tools, confirm)
                 self.last_tool_calls, self.last_backend = self.cloud.last_tool_calls, "cloud"
                 return reply
             except CloudUnavailable as e:
@@ -127,7 +144,7 @@ class Router:
         kw = {"on_sentence": on_sentence} if on_sentence else {}
         if think:
             kw["think"] = True
-        reply = self.local.respond(messages, tools, confirm, **kw)
+        reply = self.local.respond(personal_context(messages, True), tools, confirm, **kw)
         self.last_tool_calls, self.last_backend = self.local.last_tool_calls, "local"
         return reply
 
@@ -135,7 +152,7 @@ class Router:
         return self.local.complete(messages)
 
     def warmup(self, messages: list[dict], tools: list[dict]) -> None:
-        self.local.warmup(messages, tools)  # summaries contain personal history: keep local
+        self.local.warmup(personal_context(messages, True), tools)  # personal history: keep local
 
     # pass-throughs to the local brain
     def check(self) -> None:

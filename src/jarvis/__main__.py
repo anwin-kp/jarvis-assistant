@@ -5,6 +5,7 @@ import argparse
 import json
 import os
 import queue
+import re
 import sys
 import threading
 import time
@@ -206,6 +207,7 @@ class App:
         self.reg.on_call = self._on_tool
         self.reg.confirm_fn = self.confirm
         self.hud = None
+        self.learner = None  # learns about the user while idle (jarvis/memory/learner.py)
         self.name = self.cfg.get("assistant_name", "JARVIS")
         self.q: queue.Queue = queue.Queue()
         self.busy = threading.Event()  # set while a turn runs: pauses the wake-word listener
@@ -252,6 +254,7 @@ class App:
                 self.hud = Hud(self.q, hcfg.get("port", 8765))
                 self.hud.on_stop = self.interrupt
                 self.hud.on_input = self.preempt
+                self.hud.memory_api = self._memory_api
                 self.hud.start()
                 self._publish("state", state="booting")
                 if hcfg.get("open_on_start", True):
@@ -317,6 +320,7 @@ class App:
                 logger.exception("Tray failed")
 
         self.gaming.start_watcher()
+        self._start_learner()
         self.reminders.start()
         if getattr(self.reg, "doc_index", None) and self.cfg.get("documents", {}).get("index_on_start", True):
             self.reg.doc_index.start_background()
@@ -335,6 +339,39 @@ class App:
             self._say(f"{self.name} online.")
         self._state("ready")  # startup done: the HUD leaves "initializing" (it used to wait for the first speech)
         logger.info("JARVIS ready (pid {})", os.getpid())  # start-jarvis.ps1 waits for this line
+
+    def _memory_api(self, action: str, msg: dict) -> list[dict]:
+        """HUD Memory panel: list what JARVIS knows, forget a fact, or teach one in your own words."""
+        if action == "forget":
+            self.memory.forget(int(msg.get("id", 0)))
+        elif action == "teach" and (text := " ".join(str(msg.get("text", "")).split())[:300]):
+            learned = []
+            if self.learner:  # same checked extraction as conversations: "I love biryani" -> "[food] Loves biryani."
+                try:
+                    learned = self.learner.apply(self.learner.extract(f"User: {text}"), text)
+                except Exception:
+                    logger.exception("Teaching failed")
+            if not learned:
+                from jarvis.memory.learner import clean_fact
+
+                if fact := clean_fact(f"[other] In their own words: {text}"):
+                    self.memory.learn(fact)
+        return self.memory.list_facts()
+
+    def _start_learner(self) -> None:
+        mcfg = self.cfg.get("memory") or {}
+        if not mcfg.get("learn", True) or self.args.dry_run:
+            return
+        from jarvis.memory.learner import Learner, ollama_chat
+
+        self.learner = Learner(
+            self.memory, ollama_chat(self.brain),
+            is_busy=lambda: self.busy.is_set() or self.speaking or self.gaming.active or self.sleeping,
+            summarize=self.orch.summarize_if_idle, idle_s=mcfg.get("learn_idle_seconds", 15),
+            summary_idle_s=self.orch.idle_seconds)
+        self.learner.on_learned = lambda facts: self._publish(
+            "notice", text="Learned: " + "; ".join(re.sub(r"^\[\w+\]\s*", "", f) for f in facts[:3]))
+        self.learner.start()
 
     # ------------------------------------------------------------ background threads
     @property
@@ -713,6 +750,8 @@ class App:
         """Run one turn. Returns True if a reply was produced. With route_text (attachments), commands are
         only taken from the user's own words, never from inside a file."""
         words = text if route_text is None else route_text
+        if self.learner:
+            self.learner.touch()  # learning waits for a quiet moment
         if is_kill_command(words):
             self.kill()
             return False

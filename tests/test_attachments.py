@@ -60,7 +60,10 @@ def test_routing_uses_the_users_words_not_the_attachment():
     orch = Orchestrator.__new__(Orchestrator)
     orch.history, orch.last_activity, orch.idle_seconds, orch.history_turns = [], 0, 1e9, 6
     orch.brain, orch.semantic = Brain(), None
-    orch.system_prompt = lambda: "sys"
+    orch.system_prompt = lambda *a: "sys"
+    import threading
+
+    orch.lock, orch.interview = threading.RLock(), False
     orch.reg = type("R", (), {"schemas": lambda self, g: [], "execute": lambda *a: None})()
     orch.memory = type("M", (), {"log_turn": lambda *a: None})()
     long_doc = "screenshot of my files and documents " * 20
