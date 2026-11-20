@@ -80,7 +80,8 @@ class Orchestrator:
             personal.append(f"The user is currently in or near: {where} (approximate).")
         if facts := self.memory.profile(query):
             personal.append("What you know about the user (use it naturally, without being asked; categories "
-                            f"in brackets):\n{facts}")
+                            "in brackets; [lessons] are corrections the user gave you: always follow them):\n"
+                            f"{facts}")
         if sums := self.memory.recent_summaries():
             personal.append("Summaries of recent earlier conversations:\n" + "\n".join(f"- {s}" for s in sums))
         prompt = self.persona

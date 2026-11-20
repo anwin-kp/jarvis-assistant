@@ -158,7 +158,7 @@ class Memory:
         (who/where/work/people/preferences) plus the ones most related to the current message."""
         facts = self.list_facts()
         if len(facts) > core + relevant:
-            core_cats = ("[identity]", "[people]", "[places]", "[work]", "[preferences]")
+            core_cats = ("[lessons]", "[identity]", "[people]", "[places]", "[work]", "[preferences]")
             chosen = [f for f in facts if f["fact"].lower().startswith(core_cats)][-core:]
             picked = {f["id"] for f in chosen}
             if query and getattr(self, "embed", None):
