@@ -31,6 +31,11 @@ voice:
 
 tray: true               # system-tray icon
 
+briefing:
+  enabled: true
+  time: "08:30"          # daily briefing (weather, tasks, reminders, news); fires once per day
+  city: null             # e.g. "Kochi, India" for the weather part
+
 gaming:
   auto_detect: true      # free the GPU automatically while one of these games runs
   processes:             # add your games' .exe names (see Task Manager > Details)

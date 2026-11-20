@@ -16,6 +16,10 @@ KEYWORDS: dict[str, list[str]] = {
         "who is", "who was", "what is", "what's", "when is", "latest", "today", "price", "score",
         "wiki", "http", "www", "website",
     ],
+    "reminder": [
+        "remind", "reminder", "alarm", "timer", "minutes", "tomorrow", "schedule", "task", "to-do", "todo",
+        "to do", "briefing", "agenda",
+    ],
     "memory": ["remember", "forget", "recall", "my name", "my favorite", "do you know", "facts", "about me"],
 }
 
