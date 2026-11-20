@@ -7,7 +7,6 @@ from loguru import logger
 
 from jarvis.tools.registry import ConfirmFn, ToolRegistry
 
-
 CLAIMS_ACTION = re.compile(
     r"\b(added|saved|created|scheduled|opened|closed|deleted|removed|moved|renamed|muted|unmuted|remembered|"
     r"noted|cancell?ed|marked|launched|started|stopped|locked|set (?:to|for|up)|turned (?:on|off|up|down)|"
