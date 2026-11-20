@@ -2,6 +2,9 @@
 
 import datetime as dt
 import re
+import time
+
+from loguru import logger
 
 from jarvis.llm.tool_groups import pick_groups
 from jarvis.memory.store import Memory
@@ -37,22 +40,50 @@ def explicit_remember_request(text: str) -> str | None:
 
 
 class Orchestrator:
-    def __init__(self, brain, registry: ToolRegistry, memory: Memory, persona: str, history_turns: int = 8):
+    def __init__(self, brain, registry: ToolRegistry, memory: Memory, persona: str, history_turns: int = 8,
+                 idle_summary_minutes: float = 10):
         self.brain = brain
         self.reg = registry
         self.memory = memory
         self.persona = persona
         self.history_turns = history_turns
         self.history: list[dict] = []  # plain-text turns only
+        self.idle_seconds = idle_summary_minutes * 60
+        self.last_activity = time.monotonic()
 
     def system_prompt(self) -> str:
-        facts = self.memory.profile()
-        return self.persona + (f"\n\nKnown facts about the user:\n{facts}" if facts else "")
+        prompt = self.persona
+        if facts := self.memory.profile():
+            prompt += f"\n\nKnown facts about the user:\n{facts}"
+        if sums := self.memory.recent_summaries():
+            prompt += "\n\nSummaries of recent earlier conversations:\n" + "\n".join(f"- {s}" for s in sums)
+        return prompt
+
+    def summarize_session(self) -> None:
+        """Condense the current conversation into a stored summary, then start fresh."""
+        if len(self.history) < 4:  # under two exchanges: not worth keeping
+            self.history.clear()
+            return
+        transcript = "\n".join(f"{m['role']}: {m['content']}" for m in self.history)
+        try:
+            summary = self.brain.complete([
+                {"role": "system", "content": "Summarize this conversation in 1-3 short sentences for future "
+                 "reference. Keep names, decisions, open tasks and preferences. Output only the summary."},
+                {"role": "user", "content": transcript},
+            ])
+            if summary:
+                self.memory.add_summary(summary)
+        except Exception:
+            logger.exception("Session summary failed")
+        self.history.clear()
 
     def reset(self) -> None:
         self.history.clear()
 
     def handle(self, text: str, confirm: ConfirmFn) -> str:
+        if self.history and time.monotonic() - self.last_activity > self.idle_seconds:
+            self.summarize_session()
+        self.last_activity = time.monotonic()
         now = dt.datetime.now().strftime("%A %d %B %Y, %H:%M")
         user_msg = {"role": "user", "content": f"[Local time: {now}] {text}"}
         messages = [{"role": "system", "content": self.system_prompt()}, *self.history, user_msg]

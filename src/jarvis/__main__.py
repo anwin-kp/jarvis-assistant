@@ -1,8 +1,10 @@
 """Text console for JARVIS (Phase 1). Run:  uv run python -m jarvis"""
 
 import argparse
+import json
 import sys
 import time
+from datetime import datetime
 
 from loguru import logger
 
@@ -17,6 +19,7 @@ HELP = """Commands:
   /help     show this help
   /reset    forget the current conversation (saved facts stay)
   /facts    list what JARVIS remembers about you
+  /export   save everything JARVIS knows (facts, summaries, history) to a JSON file
   /tools    list available tools
   /unload   free the GPU memory now (e.g. before gaming)
   /mute     stop speaking replies (/unmute to resume)
@@ -156,6 +159,10 @@ def main() -> None:
             elif cmd == "/facts":
                 facts = memory.list_facts()
                 print("\n".join(f"  {f['id']}: {f['fact']}" for f in facts) or "  (nothing saved yet)")
+            elif cmd == "/export":
+                out = DATA / f"export-{datetime.now():%Y%m%d-%H%M%S}.json"
+                out.write_text(json.dumps(memory.export(), indent=2, ensure_ascii=False), encoding="utf-8")
+                print(f"{DIM}Exported to {out}{RESET}")
             elif cmd == "/tools":
                 for n in reg.names():
                     t = reg.get(n)
@@ -186,6 +193,7 @@ def main() -> None:
             except Exception:
                 logger.exception("TTS failed")
 
+    orch.summarize_session()
     print(f"{DIM}Goodbye.{RESET}")
 
 

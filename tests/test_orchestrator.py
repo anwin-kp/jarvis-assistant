@@ -35,3 +35,23 @@ def test_safety_net_saves_fact_when_model_forgets(tmp_path):
     orch = Orchestrator(LazyBrain(), reg, mem, persona="test")
     orch.handle("remember that I like masala chai", confirm=lambda t, a: True)
     assert [f["fact"] for f in mem.list_facts()] == ["I like masala chai"]
+
+
+class SummaryBrain(LazyBrain):
+    def complete(self, messages):
+        return "User asked about chai."
+
+
+def test_idle_session_is_summarized(tmp_path):
+    mem = Memory(tmp_path / "m.db")
+    reg = ToolRegistry()
+    memory_tools.register(reg, mem)
+    orch = Orchestrator(SummaryBrain(), reg, mem, persona="test", idle_summary_minutes=0)
+    orch.handle("hello", confirm=lambda t, a: True)
+    orch.handle("how about chai?", confirm=lambda t, a: True)
+    orch.last_activity -= 1  # simulate idle time
+    orch.handle("new topic", confirm=lambda t, a: True)
+    assert mem.recent_summaries()[0].endswith("User asked about chai.")
+    assert "User asked about chai." in orch.system_prompt()
+    assert "chai" in " ".join(mem.recall("chai"))
+    assert set(mem.export()) == {"facts", "summaries", "messages", "audit_log"}

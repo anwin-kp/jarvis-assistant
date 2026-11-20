@@ -15,6 +15,9 @@ CREATE TRIGGER IF NOT EXISTS messages_ai AFTER INSERT ON messages BEGIN
 CREATE TABLE IF NOT EXISTS facts(
   id INTEGER PRIMARY KEY, ts TEXT DEFAULT (datetime('now','localtime')), fact TEXT UNIQUE);
 
+CREATE TABLE IF NOT EXISTS summaries(
+  id INTEGER PRIMARY KEY, ts TEXT DEFAULT (datetime('now','localtime')), summary TEXT);
+
 CREATE TABLE IF NOT EXISTS audit_log(
   id INTEGER PRIMARY KEY, ts TEXT DEFAULT (datetime('now','localtime')),
   tool TEXT, args TEXT, risk TEXT, status TEXT);
@@ -67,12 +70,39 @@ class Memory:
                 "WHERE messages_fts MATCH ? ORDER BY rank LIMIT ?",
                 (fts, limit),
             ).fetchall()
-        return [f"fact: {f[0]}" for f in facts] + [f"{ts} {role}: {text[:300]}" for ts, role, text in msgs]
+            sums = self.db.execute(
+                "SELECT ts, summary FROM summaries WHERE " + " OR ".join("summary LIKE ?" for _ in words) + " LIMIT 3",
+                [f"%{w}%" for w in words],
+            ).fetchall()
+        return (
+            [f"fact: {f[0]}" for f in facts]
+            + [f"summary {ts}: {s}" for ts, s in sums]
+            + [f"{ts} {role}: {text[:300]}" for ts, role, text in msgs]
+        )
 
     def profile(self, limit: int = 30) -> str:
         with self.lock:
             rows = self.db.execute("SELECT fact FROM facts ORDER BY id LIMIT ?", (limit,)).fetchall()
         return "\n".join(f"- {r[0]}" for r in rows)
+
+    def add_summary(self, summary: str) -> None:
+        with self.lock:
+            self.db.execute("INSERT INTO summaries(summary) VALUES (?)", (summary.strip(),))
+            self.db.commit()
+
+    def recent_summaries(self, limit: int = 3) -> list[str]:
+        with self.lock:
+            rows = self.db.execute("SELECT ts, summary FROM summaries ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+        return [f"{ts}: {s}" for ts, s in reversed(rows)]
+
+    def export(self) -> dict:
+        out = {}
+        with self.lock:
+            for table in ("facts", "summaries", "messages", "audit_log"):
+                cur = self.db.execute(f"SELECT * FROM {table}")
+                cols = [c[0] for c in cur.description]
+                out[table] = [dict(zip(cols, row, strict=True)) for row in cur]
+        return out
 
     def audit(self, tool: str, args: dict, risk: str, status: str) -> None:
         with self.lock:

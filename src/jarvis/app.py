@@ -24,5 +24,6 @@ def build(dry_run: bool = False):
     memory_tools.register(reg, memory)
 
     brain = OllamaBrain(reg, cfg["llm"])
-    orch = Orchestrator(brain, reg, memory, load_persona(), cfg.get("history_turns", 8))
+    orch = Orchestrator(brain, reg, memory, load_persona(), cfg.get("history_turns", 8),
+                        cfg.get("idle_summary_minutes", 10))
     return cfg, orch, brain, reg, memory, roots

@@ -36,6 +36,12 @@ class OllamaBrain:
         """Free the GPU memory immediately (e.g. before gaming)."""
         self.client.generate(model=self.model, prompt="", keep_alive=0)
 
+    def complete(self, messages: list[dict]) -> str:
+        """Plain completion without tools (summaries etc.)."""
+        resp = self.client.chat(model=self.model, messages=messages, think=False,
+                                keep_alive=self.keep_alive, options=self.options)
+        return (resp.message.content or "").strip()
+
     def respond(self, messages: list[dict], tools: list[dict], confirm: ConfirmFn) -> str:
         """messages: plain [{"role", "content"}] dicts. Tool calls live only inside this turn."""
         msgs = list(messages)

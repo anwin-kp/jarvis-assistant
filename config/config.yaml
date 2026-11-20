@@ -10,6 +10,7 @@ llm:
   max_steps: 6           # max tool-call rounds per request
 
 history_turns: 8         # how many previous exchanges the model sees
+idle_summary_minutes: 10 # after this idle time the conversation is summarized into memory
 
 voice:
   enabled: true          # false = text only (or start with --text)
