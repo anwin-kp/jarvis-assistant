@@ -26,7 +26,9 @@ CLAIMS_ACTION = re.compile(
     rf"(?:\bI(?:'ve| have| just| also)?\b|\bdone\b[,.!: -]+(?:I've |I )?)\s*{_FILLER}{{0,2}}{_DONE}\b"
     rf"|\b(?:has|have) (?:now |just |successfully )?been {_DONE}\b"
     rf"|\b(?:is|are) now (?:\w+ )?{_DONE}\b"
-    rf"|\bsuccessfully {_DONE}\b",
+    rf"|\bsuccessfully {_DONE}\b"
+    # reporting what an app/screen shows without having looked ("The display shows 84")
+    rf"|\b(?:the )?(?:display|screen|window|app|calculator|page) (?:now )?(?:shows|says|displays|reads)\b",
     re.IGNORECASE,
 )
 NUDGE = (
