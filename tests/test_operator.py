@@ -71,3 +71,20 @@ def test_text_first_and_look_escalates_to_the_screenshot():
     targets = [Target(f"btn: {i}", "ui", (0, 0, 1, 1)) for i in range(20)]
     assert op._decide("t", [], None, targets) == ("look", {})
     assert op._decide("t", [], Image.new("RGB", (50, 50)), targets) == ("click", {"target": 0})
+
+
+def test_text_model_rejection_falls_back_to_the_screenshot_model():
+    import requests
+
+    class Rejecting(FakeHTTP):
+        def post(self, url, **kw):
+            if kw["json"]["model"] == "openai/gpt-oss-120b":
+                r = type("R", (), {"status_code": 400, "text": "tool_use_failed", "headers": {}})()
+                r.raise_for_status = lambda: (_ for _ in ()).throw(requests.HTTPError("400"))
+                return r
+            return super().post(url, **kw)
+
+    op = Operator("key", http=Rejecting([("click", {"target": 0})]))
+    targets = [Target(f"btn: {i}", "ui", (0, 0, 1, 1)) for i in range(20)]
+    assert op._decide("t", [], None, targets) is None  # -> run() asks the vision model with the screenshot
+    assert op._decide("t", [], Image.new("RGB", (50, 50)), targets) == ("click", {"target": 0})

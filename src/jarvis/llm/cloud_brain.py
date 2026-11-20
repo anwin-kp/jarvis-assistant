@@ -61,7 +61,7 @@ class CloudBrain:
             calls = msg.get("tool_calls") or []
             if not calls:
                 reply = (msg.get("content") or "").strip()
-                nudge = unbacked_claim(reply) if tools and not self.last_tool_calls and not nudged else None
+                nudge = unbacked_claim(reply, bool(self.last_tool_calls)) if tools and not nudged else None
                 if nudge:
                     nudged = True
                     msgs += [{"role": "assistant", "content": reply}, {"role": "user", "content": nudge}]

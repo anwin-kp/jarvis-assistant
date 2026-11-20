@@ -4,6 +4,7 @@ import ctypes
 
 import psutil
 
+from jarvis.agent.uia import on_uia_thread
 from jarvis.tools.registry import Risk, ToolRegistry
 
 # Processes JARVIS must never terminate.
@@ -102,6 +103,7 @@ def register(reg: ToolRegistry) -> None:
         return "Screen locked."
 
     @reg.tool("get_volume", "Get the current speaker volume and mute state.", {}, group="system", read_only=True)
+    @on_uia_thread  # pycaw uses COM: same thread as all other COM automation
     def get_volume():
         vol = _speakers_volume()
         return {"percent": round(vol.GetMasterVolumeLevelScalar() * 100), "muted": bool(vol.GetMute())}
@@ -112,6 +114,7 @@ def register(reg: ToolRegistry) -> None:
         {"percent": {"type": "integer"}},
         group="system",
     )
+    @on_uia_thread  # pycaw uses COM: same thread as all other COM automation
     def set_volume(percent: int):
         percent = max(0, min(int(percent), 100))
         vol = _speakers_volume()
@@ -126,6 +129,7 @@ def register(reg: ToolRegistry) -> None:
         {"muted": {"type": "boolean"}},
         group="system",
     )
+    @on_uia_thread  # pycaw uses COM: same thread as all other COM automation
     def set_mute(muted: bool):
         _speakers_volume().SetMute(1 if muted else 0, None)
         return "Muted." if muted else "Unmuted."

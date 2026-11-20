@@ -289,6 +289,8 @@ class Operator:
         while True:
             r = self.http.post(GROQ, timeout=60, headers={"Authorization": f"Bearer {self.key}"}, json=body)
             if getattr(r, "status_code", 200) != 429 or waited > 90:
+                if getattr(r, "status_code", 200) >= 400:
+                    logger.warning("Operator: Groq {} {}", r.status_code, getattr(r, "text", "")[:300])
                 r.raise_for_status()
                 return r.json()
             delay = min(30.0, float(r.headers.get("retry-after") or 5) + 0.5)
@@ -327,7 +329,12 @@ class Operator:
         if marked is None and self.text_model:
             body.update(model=self.text_model, max_tokens=600, reasoning_effort="low")
             body["messages"][0]["content"] = prompt
-        data = self._post(body)
+            try:
+                data = self._post(body)
+            except requests.HTTPError:
+                return None  # e.g. 400 tool_use_failed (malformed tool call): the vision model decides this step
+        else:
+            data = self._post(body)
         calls = data["choices"][0]["message"].get("tool_calls") or []
         if not calls:
             return None

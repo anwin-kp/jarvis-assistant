@@ -1,6 +1,7 @@
 """Acting in any app: read a window's buttons, lists, menus and fields through Windows UI Automation and
 click or type into them. Clicking and typing always ask first."""
 
+from jarvis.agent.uia import on_uia_thread
 from jarvis.tools.registry import Risk, ToolRegistry
 
 INTERESTING = {"Button", "MenuItem", "ListItem", "TabItem", "Hyperlink", "CheckBox", "RadioButton", "TreeItem",
@@ -62,6 +63,7 @@ def register(reg: ToolRegistry) -> None:
     @reg.tool("list_ui_elements", "List the clickable/readable items (buttons, list items, menus, fields) in a window. "
               "window: app or title, empty = the window the user is working in.",
               {"window": {"type": "string"}}, required=[], group="screen", read_only=True)
+    @on_uia_thread  # pywinauto needs its own COM thread (jarvis/agent/uia.py)
     def list_ui_elements(window: str = ""):
         els = elements(_window(window or None))
         return describe(els) or "No accessible items found in that window."
@@ -70,11 +72,17 @@ def register(reg: ToolRegistry) -> None:
               "double=true to open/play list items.",
               {"name": {"type": "string"}, "window": {"type": "string"}, "double": {"type": "boolean"}},
               required=["name"], risk=Risk.CONFIRM, group="screen")
+    @on_uia_thread  # pywinauto needs its own COM thread (jarvis/agent/uia.py)
     def click_ui_element(name: str, window: str = "", double: bool = False):
         win = _window(window or None)
         el = find(elements(win), name)
         if el is None:
             return f"ERROR: no item named '{name}'. Use list_ui_elements to see what's there."
+        from jarvis.agent.operator import RISKY
+
+        label = el.element_info.name or name
+        if RISKY.search(label) and not reg.ask(f"click '{label}'"):
+            return f"Not clicked: '{label}' needs your approval and you didn't give it."
         win.set_focus()
         if double:
             el.click_input(double=True)
@@ -89,6 +97,7 @@ def register(reg: ToolRegistry) -> None:
               {"field": {"type": "string"}, "text": {"type": "string"}, "window": {"type": "string"},
                "enter": {"type": "boolean"}},
               required=["field", "text"], risk=Risk.CONFIRM, group="screen")
+    @on_uia_thread  # pywinauto needs its own COM thread (jarvis/agent/uia.py)
     def type_into_ui_field(field: str, text: str, window: str = "", enter: bool = False):
         win = _window(window or None)
         el = find([e for e in elements(win) if e.element_info.control_type in ("Edit", "ComboBox")], field)

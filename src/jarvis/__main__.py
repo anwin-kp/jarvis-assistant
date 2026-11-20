@@ -695,6 +695,8 @@ class App:
                 if event[0] == "quit":
                     self.q.put(event)
                     return False
+                if event[0] == "answer":  # HUD Approve / Deny button
+                    return bool(event[1])
                 if event[0] == "text":
                     return event[1].lower() in ({"yes"} if need == "yes" else {"y", "yes"})
         finally:
@@ -903,6 +905,8 @@ class App:
                     self._say(event[1])
                 elif event[0] == "remote":
                     self.handle_remote(event[1], event[2])
+                elif event[0] == "answer":
+                    quiet = True  # a late or double Approve/Deny click: nothing is waiting for it
                 elif event[0] == "notice":
                     print(f"\n{YELLOW}{event[1]}{RESET}")
                     self._publish("notice", text=event[1])

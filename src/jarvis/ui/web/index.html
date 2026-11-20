@@ -312,7 +312,7 @@ function confirmCard(e) {
   d.append(h, pre, yes, no); $("log").appendChild(d); $("log").scrollTop = 1e9; pendingConfirm = d;
 }
 function answer(card, ok, risk) {
-  send("text", ok ? (risk === "danger" ? "yes" : "y") : "no");
+  send(ok ? "approve" : "deny");  // an answer, never a chat message: a late/double click can't cut in
   card.querySelectorAll("button").forEach((b) => b.remove());
   const r = document.createElement("i"); r.textContent = ok ? "APPROVED" : "DENIED"; card.appendChild(r); pendingConfirm = null;
 }
