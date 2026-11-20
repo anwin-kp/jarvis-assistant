@@ -24,8 +24,12 @@ dependencies = [
     "loguru>=0.8.0",
     "numpy>=2.5.5",
     "ollama>=0.6.3",
+    "openwakeword>=0.6",
+    "pillow>=13.0.0",
+    "piper-tts>=1.8.0",
     "psutil>=7.2.2",
     "pycaw>=20260927",
+    "pystray>=0.19.5",
     "pyttsx3>=2.99",
     "pywin32>=312",
     "pyyaml>=6.0.3",
@@ -47,6 +51,8 @@ jarvis = "jarvis.__main__:main"
 [tool.uv]
 # Smart App Control blocks uv's unsigned Python builds; use the signed python.org install.
 python-preference = "only-system"
+# Windows-only project: resolve dependencies for Windows only.
+environments = ["sys_platform == 'win32'"]
 # GPU speech recognition libraries (~1 GB) are installed by default; CI skips them.
 default-groups = ["dev", "gpu"]
 

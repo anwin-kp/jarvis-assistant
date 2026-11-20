@@ -36,6 +36,13 @@ class OllamaBrain:
         """Free the GPU memory immediately (e.g. before gaming)."""
         self.client.generate(model=self.model, prompt="", keep_alive=0)
 
+    def set_cpu_only(self, cpu_only: bool) -> None:
+        """Gaming mode: run the model on the CPU so the GPU stays free (slower replies)."""
+        if cpu_only:
+            self.options["num_gpu"] = 0
+        else:
+            self.options.pop("num_gpu", None)
+
     def complete(self, messages: list[dict]) -> str:
         """Plain completion without tools (summaries etc.)."""
         resp = self.client.chat(model=self.model, messages=messages, think=False,
