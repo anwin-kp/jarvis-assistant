@@ -956,6 +956,23 @@ class App:
         os._exit(0)  # the input thread is blocked in input(); exit immediately
 
 
+_INSTANCE_LOCK = None
+
+
+def single_instance(name: str = "Local\\JARVIS-assistant-instance") -> bool:
+    """One JARVIS per user session: a named mutex held for the life of the process (released by Windows
+    when it exits, even on a crash). False if another JARVIS already holds it."""
+    global _INSTANCE_LOCK
+    if sys.platform != "win32":
+        return True
+    import win32api
+    import win32event
+    import winerror
+
+    _INSTANCE_LOCK = win32event.CreateMutex(None, False, name)
+    return win32api.GetLastError() != winerror.ERROR_ALREADY_EXISTS
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="jarvis")
     parser.add_argument("--debug", action="store_true", help="print debug logs to the console")
@@ -965,6 +982,10 @@ def main() -> None:
                         help="no console: use the HUD/voice; output goes to data/logs/console.log")
     args = parser.parse_args()
 
+    if not single_instance():
+        # two launches at once (shortcut + autostart...) gave two JARVIS: both on the mic, one without the HUD
+        print("JARVIS is already running.", file=sys.stderr)
+        sys.exit(0)
     ensure_data_dirs()
     from jarvis.agent.operator import make_dpi_aware
 
