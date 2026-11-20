@@ -16,25 +16,20 @@
   * { box-sizing:border-box; }
   html, body { margin:0; height:100%; overflow:hidden; background:var(--bg0); color:var(--text); font:15px/1.4 var(--body); }
   body { background:
+      repeating-linear-gradient(0deg, rgba(255,255,255,.022) 0 1px, transparent 1px 3px),
       radial-gradient(1200px 700px at 50% 45%, rgba(0,120,255,.16), transparent 60%),
       radial-gradient(800px 500px at 85% 0%, rgba(0,216,255,.08), transparent 60%),
       linear-gradient(180deg, var(--bg1), var(--bg0)); }
   /* hex grid + scanlines */
   #hex { position:fixed; inset:0; opacity:.22; pointer-events:none;
     background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='98' viewBox='0 0 56 98'%3E%3Cpath d='M28 66L0 50V16L28 0l28 16v34L28 66zm0 32L0 82V66l28 16 28-16v16L28 98z' fill='none' stroke='%2300d8ff' stroke-opacity='.35' stroke-width='1'/%3E%3C/svg%3E");
-    mask-image:radial-gradient(circle at 50% 45%, #000 0%, transparent 75%); animation:drift 60s linear infinite; }
-  @keyframes drift { to { background-position:56px 98px; } }
-  #scan { position:fixed; inset:0; pointer-events:none; opacity:.08;
-    background:repeating-linear-gradient(0deg, #fff 0 1px, transparent 1px 3px); }
-  #sweep { position:fixed; left:0; right:0; height:120px; pointer-events:none; opacity:.06;
-    background:linear-gradient(180deg, transparent, var(--c), transparent); animation:sweep 7s linear infinite; }
-  @keyframes sweep { from { top:-120px; } to { top:100%; } }
+    mask-image:radial-gradient(circle at 50% 45%, #000 0%, transparent 75%); }
 
   .app { position:relative; display:grid; height:100%; padding:14px 18px;
          grid-template-columns:300px 1fr 400px; grid-template-rows:auto 1fr auto; gap:14px;
          grid-template-areas:"top top top" "left center right" "left bottom right"; }
   /* panels with cut corners + corner brackets */
-  .panel { position:relative; background:var(--panel); border:1px solid var(--line); backdrop-filter:blur(8px);
+  .panel { position:relative; background:rgba(6,22,40,.82); border:1px solid var(--line); contain:paint;
            clip-path:polygon(14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px);
            box-shadow:inset 0 0 40px rgba(0,216,255,.05); }
   .panel::before, .panel::after { content:""; position:absolute; width:16px; height:16px; border:2px solid var(--c); opacity:.8; }
@@ -86,7 +81,7 @@
   #reactor { width:min(56vh, 100%); aspect-ratio:1; }
   .status { margin-top:-6px; text-align:center; }
   .status .s { font:700 15px var(--hdr); letter-spacing:.55em; color:var(--accent); text-shadow:0 0 14px var(--accent);
-               text-transform:uppercase; transition:color .3s; }
+               text-transform:uppercase; transition:color .45s ease, text-shadow .45s ease; }
   .status .m { margin-top:6px; font:500 10px var(--hdr); letter-spacing:.35em; color:var(--dim); text-transform:uppercase; }
   .wave { width:min(46vh, 90%); height:46px; margin-top:12px; }
 
@@ -132,7 +127,7 @@
 </style>
 </head>
 <body>
-<div id="hex"></div><div id="scan"></div><div id="sweep"></div>
+<div id="hex"></div>
 <div class="app">
   <header class="top">
     <div class="brand">J.A.R.V.I.S.<span>JUST A RATHER VERY INTELLIGENT SYSTEM</span></div>
@@ -298,94 +293,155 @@ $("b-kill").onclick = () => { if (confirm("Shut down JARVIS completely (kill swi
 $("talk").onclick = () => send("talk");
 connect();
 
-/* ---------- reactor ---------- */
-const cv = $("reactor"), cx = cv.getContext("2d"), W = cv.width, C = W / 2;
-const particles = Array.from({ length: 70 }, () => ({ a: Math.random() * 6.283, r: 250 + Math.random() * 170, s: (Math.random() - .5) * .004, z: Math.random() }));
-const history = new Array(140).fill(0);
-function hexToRgba(h, a) { const n = parseInt(h.slice(1), 16); return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`; }
-
-function arcSeg(r, a0, a1, w, col, alpha) {
-  cx.beginPath(); cx.arc(C, C, r, a0, a1); cx.lineWidth = w; cx.strokeStyle = hexToRgba(col, alpha); cx.stroke();
-}
-function draw(t) {
-  const s = shownState(), col = STATE_COLOR[s] || "#00d8ff", sec = t / 1000;
-  level += (levelTarget - level) * 0.25; levelTarget *= 0.92;
-  history.push(level); history.shift();
-  const speed = { booting: 4.5, thinking: 3.2, speaking: 1.7, listening: 1.4, sleeping: 0.15 }[s] || 0.55;
-  const breathe = s === "sleeping" ? 0.5 + 0.5 * Math.sin(sec * 1.2) : 1;
-  const pulse = 1 + (s === "speaking" ? 0.05 * Math.sin(sec * 9) : 0) + level * 0.18;
-  cx.clearRect(0, 0, W, W);
-  cx.save(); cx.globalCompositeOperation = "lighter"; cx.shadowColor = col; cx.shadowBlur = 24;
-
-  // outer tick ring
-  cx.save(); cx.translate(C, C); cx.rotate(sec * 0.05 * speed);
-  for (let i = 0; i < 120; i++) {
-    const long = i % 10 === 0, a = (i / 120) * Math.PI * 2;
-    cx.strokeStyle = hexToRgba(col, long ? 0.9 * breathe : 0.35 * breathe); cx.lineWidth = long ? 3 : 1.5;
-    cx.beginPath(); cx.moveTo(Math.cos(a) * 418, Math.sin(a) * 418); cx.lineTo(Math.cos(a) * (long ? 396 : 406), Math.sin(a) * (long ? 396 : 406)); cx.stroke();
-  }
-  cx.restore();
-
-  // segmented rotating rings
-  const rings = [[372, 10, 0.55, 8, 0.85], [330, 4, -0.9, 14, 0.6], [292, 16, 0.35, 3, 0.9], [250, 3, -1.6, 24, 0.5]];
-  rings.forEach(([r, w, sp, segs, al], k) => {
-    const rot = sec * sp * speed * 0.5;
-    for (let i = 0; i < segs; i++) {
-      const a0 = rot + (i / segs) * Math.PI * 2, gap = k === 0 ? 0.5 : 0.35;
-      arcSeg(r * (k === 0 ? pulse : 1), a0, a0 + (Math.PI * 2 / segs) * (1 - gap), w, col, al * breathe);
-    }
-  });
-
-  // radial voice spectrum
-  cx.save(); cx.translate(C, C);
-  for (let i = 0; i < 96; i++) {
-    const a = (i / 96) * Math.PI * 2 + sec * 0.2;
-    const h = 6 + history[(i * 7) % history.length] * 120 * (0.6 + 0.4 * Math.sin(i * 1.7 + sec * 4)) +
-              (s === "thinking" ? 10 * (0.5 + 0.5 * Math.sin(i + sec * 10)) : 0) + (s === "speaking" ? 14 * Math.abs(Math.sin(i * .9 + sec * 7)) : 0);
-    cx.strokeStyle = hexToRgba(col, 0.75 * breathe); cx.lineWidth = 3;
-    cx.beginPath(); cx.moveTo(Math.cos(a) * 200, Math.sin(a) * 200); cx.lineTo(Math.cos(a) * (200 + h), Math.sin(a) * (200 + h)); cx.stroke();
-  }
-  cx.restore();
-
-  // orbiting particles
-  particles.forEach((p) => { p.a += p.s * speed * 2;
-    const x = C + Math.cos(p.a) * p.r, y = C + Math.sin(p.a) * p.r * 0.98;
-    cx.fillStyle = hexToRgba(col, (0.25 + p.z * 0.6) * breathe); cx.beginPath(); cx.arc(x, y, 1 + p.z * 2.2, 0, 6.283); cx.fill(); });
-
-  // core: triangle-ish arc reactor
-  cx.save(); cx.translate(C, C); cx.rotate(-sec * 0.3 * speed);
-  for (let i = 0; i < 3; i++) { const a = i * 2.094;
-    cx.strokeStyle = hexToRgba(col, 0.8 * breathe); cx.lineWidth = 10;
-    cx.beginPath(); cx.arc(0, 0, 150 * pulse, a + 0.25, a + 1.85); cx.stroke(); }
-  cx.restore();
-  const g = cx.createRadialGradient(C, C, 0, C, C, 135 * pulse);
-  g.addColorStop(0, hexToRgba("#ffffff", 0.95 * breathe)); g.addColorStop(0.22, hexToRgba(col, 0.9 * breathe));
-  g.addColorStop(0.6, hexToRgba(col, 0.18 * breathe)); g.addColorStop(1, "rgba(0,0,0,0)");
-  cx.fillStyle = g; cx.beginPath(); cx.arc(C, C, 135 * pulse, 0, 6.283); cx.fill();
-  arcSeg(108 * pulse, 0, 6.283, 2, "#ffffff", 0.35 * breathe);
-  cx.restore();
-
-  drawWave(col, sec, s);
-  requestAnimationFrame(draw);
-}
-
-/* ---------- waveform strip ---------- */
+/* ---------- reactor: glow pre-rendered once per colour, then only rotated/blitted each frame ---------- */
+const cv = $("reactor"), cx = cv.getContext("2d");
 const wv = $("wave"), wx = wv.getContext("2d");
-function drawWave(col, sec, s) {
+const RINGS = [[372, 10, 0.55, 8, 0.85, 0.5], [330, 4, -0.9, 14, 0.6, 0.35], [292, 16, 0.35, 3, 0.9, 0.35], [250, 3, -1.6, 24, 0.5, 0.35]];
+const SPEED = { booting: 4.5, thinking: 3.2, speaking: 1.7, listening: 1.4, sleeping: 0.15 };
+const layerCache = new Map();
+let W = 0, C = 0, S = 1;
+
+function resize() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 1.25);
+  const size = Math.max(200, Math.round(cv.getBoundingClientRect().width * dpr));
+  if (size !== W) { W = cv.width = cv.height = size; C = W / 2; S = W / 900; layerCache.clear(); }
+  const ww = Math.round(wv.getBoundingClientRect().width * dpr), wh = Math.round(46 * dpr);
+  if (wv.width !== ww || wv.height !== wh) { wv.width = ww; wv.height = wh; }
+}
+window.addEventListener("resize", resize);
+
+function rgb(h) { const n = parseInt(h.slice(1), 16); return [n >> 16, (n >> 8) & 255, n & 255]; }
+function rgba(c, a) { return `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a})`; }
+
+function makeLayer(draw, col, radius) {
+  const half = Math.ceil((radius + 40) * S), c = document.createElement("canvas");  // just big enough for the ring + glow
+  c.width = c.height = half * 2;
+  const g = c.getContext("2d");
+  g.translate(half, half); g.scale(S, S); g.shadowColor = col; g.shadowBlur = 22 * S; g.lineCap = "butt";
+  draw(g, rgb(col)); return c;
+}
+const drawTicks = (g, c) => {
+  for (let i = 0; i < 120; i++) {
+    const long = i % 10 === 0, a = (i / 120) * Math.PI * 2, r1 = long ? 396 : 406;
+    g.strokeStyle = rgba(c, long ? 0.9 : 0.35); g.lineWidth = long ? 3 : 1.5;
+    g.beginPath(); g.moveTo(Math.cos(a) * 418, Math.sin(a) * 418); g.lineTo(Math.cos(a) * r1, Math.sin(a) * r1); g.stroke();
+  }
+};
+const drawRing = ([r, w, , segs, al, gap]) => (g, c) => {
+  g.strokeStyle = rgba(c, al); g.lineWidth = w;
+  for (let i = 0; i < segs; i++) {
+    const a0 = (i / segs) * Math.PI * 2;
+    g.beginPath(); g.arc(0, 0, r, a0, a0 + (Math.PI * 2 / segs) * (1 - gap)); g.stroke();
+  }
+};
+const drawCoreArcs = (g, c) => {
+  g.strokeStyle = rgba(c, 0.8); g.lineWidth = 10;
+  for (let i = 0; i < 3; i++) { const a = i * 2.094; g.beginPath(); g.arc(0, 0, 150, a + 0.25, a + 1.85); g.stroke(); }
+};
+function layers(col) {
+  if (!layerCache.has(col)) {
+    layerCache.set(col, { ticks: makeLayer(drawTicks, col, 418), rings: RINGS.map((r) => makeLayer(drawRing(r), col, r[0] + r[1])),
+                          core: makeLayer(drawCoreArcs, col, 160) });
+  }
+  return layerCache.get(col);
+}
+function blit(img, rot, alpha, scale = 1) {
+  if (alpha <= 0.004) return;
+  cx.save(); cx.globalAlpha = alpha; cx.translate(C, C); cx.rotate(rot);
+  if (scale !== 1) cx.scale(scale, scale);
+  cx.drawImage(img, -img.width / 2, -img.height / 2); cx.restore();
+}
+
+// animation state: everything eases, nothing jumps
+const particles = Array.from({ length: 64 }, () => ({ a: Math.random() * 6.283, r: 250 + Math.random() * 170,
+                                                     s: (Math.random() - 0.5) * 0.25, z: Math.random() }));
+const hist = new Float32Array(96);
+let last = 0, speedNow = 0.55, sleepMix = 0, colFrom = "#00d8ff", colTo = "#00d8ff", colMix = 1;
+let phTicks = 0, phCore = 0, phSpec = 0, sec = 0;
+const phRings = RINGS.map(() => 0);
+
+function frame(now) {
+  const dt = Math.min(0.05, last ? (now - last) / 1000 : 0.016); last = now; sec += dt;
+  resize();
+  const s = shownState(), target = STATE_COLOR[s] || "#00d8ff";
+  if (target !== colTo) { colFrom = colMix < 1 ? colTo : colTo; colTo = target; colMix = 0; }
+  colMix = Math.min(1, colMix + dt / 0.45);
+  const cFrom = rgb(colFrom), cTo = rgb(colTo), e = colMix * colMix * (3 - 2 * colMix);
+  const col = cFrom.map((v, i) => v + (cTo[i] - v) * e);
+
+  const k = (rate) => 1 - Math.exp(-dt * rate);           // frame-rate independent easing
+  speedNow += ((SPEED[s] || 0.55) - speedNow) * k(2.5);
+  sleepMix += ((s === "sleeping" ? 1 : 0) - sleepMix) * k(2);
+  level += (levelTarget - level) * k(14); levelTarget *= Math.exp(-dt * 3.5);
+  const breathe = 1 - sleepMix * (0.5 - 0.5 * Math.sin(sec * 1.2));
+  const pulse = 1 + level * 0.16 + (s === "speaking" ? 0.035 * Math.sin(sec * 9) : 0);
+
+  phTicks += dt * 0.05 * speedNow; phCore -= dt * 0.3 * speedNow; phSpec += dt * 0.2;
+  RINGS.forEach((r, i) => { phRings[i] += dt * r[2] * speedNow * 0.5; });
+  hist.copyWithin(0, 1); hist[hist.length - 1] = level;
+
+  cx.clearRect(0, 0, W, W);
+  cx.globalCompositeOperation = "lighter";
+  for (const [c, a] of [[colFrom, 1 - e], [colTo, e]]) {     // cross-fade between state colours
+    if (a <= 0.004) continue;
+    const L = layers(c), al = a * breathe;
+    blit(L.ticks, phTicks, al);
+    L.rings.forEach((img, i) => blit(img, phRings[i], al, i === 0 ? pulse : 1));
+    blit(L.core, phCore, al, pulse);
+  }
+
+  // voice spectrum: one batched path, glow by a wide faint stroke + a thin bright one
+  cx.save(); cx.translate(C, C); cx.scale(S, S); cx.beginPath();
+  for (let i = 0; i < 96; i++) {
+    const a = (i / 96) * Math.PI * 2 + phSpec;
+    const h = 6 + hist[(i * 7) % 96] * 120 * (0.6 + 0.4 * Math.sin(i * 1.7 + sec * 4)) +
+              (s === "thinking" ? 10 * (0.5 + 0.5 * Math.sin(i + sec * 10)) : 0) +
+              (s === "speaking" ? 14 * Math.abs(Math.sin(i * 0.9 + sec * 7)) : 0);
+    cx.moveTo(Math.cos(a) * 200, Math.sin(a) * 200); cx.lineTo(Math.cos(a) * (200 + h), Math.sin(a) * (200 + h));
+  }
+  cx.lineCap = "round";
+  cx.strokeStyle = rgba(col, 0.16 * breathe); cx.lineWidth = 9; cx.stroke();
+  cx.strokeStyle = rgba(col, 0.8 * breathe); cx.lineWidth = 3; cx.stroke();
+
+  // particles: one path
+  cx.beginPath();
+  for (const p of particles) {
+    p.a += p.s * dt * speedNow;
+    const x = Math.cos(p.a) * p.r, y = Math.sin(p.a) * p.r, rad = 1 + p.z * 2.2;
+    cx.moveTo(x + rad, y); cx.arc(x, y, rad, 0, 6.283);
+  }
+  cx.fillStyle = rgba(col, 0.55 * breathe); cx.fill();
+
+  // core glow
+  const g = cx.createRadialGradient(0, 0, 0, 0, 0, 135 * pulse);
+  g.addColorStop(0, `rgba(255,255,255,${0.95 * breathe})`); g.addColorStop(0.22, rgba(col, 0.9 * breathe));
+  g.addColorStop(0.6, rgba(col, 0.18 * breathe)); g.addColorStop(1, "rgba(0,0,0,0)");
+  cx.fillStyle = g; cx.beginPath(); cx.arc(0, 0, 135 * pulse, 0, 6.283); cx.fill();
+  cx.strokeStyle = `rgba(255,255,255,${0.3 * breathe})`; cx.lineWidth = 2;
+  cx.beginPath(); cx.arc(0, 0, 108 * pulse, 0, 6.283); cx.stroke();
+  cx.restore();
+  cx.globalCompositeOperation = "source-over";
+
+  drawWave(col, s);
+  requestAnimationFrame(frame);
+}
+
+function drawWave(col, s) {
   const w = wv.width, h = wv.height, mid = h / 2;
-  wx.clearRect(0, 0, w, h); wx.shadowColor = col; wx.shadowBlur = 12;
+  wx.clearRect(0, 0, w, h); wx.lineCap = "round";
   for (let line = 0; line < 3; line++) {
     wx.beginPath();
-    for (let x = 0; x <= w; x += 6) {
-      const k = x / w, env = Math.sin(k * Math.PI);
-      const amp = (3 + level * 70 + (s === "speaking" ? 16 : 0) + (s === "thinking" ? 6 : 0)) * env;
-      const y = mid + Math.sin(k * (14 + line * 5) + sec * (3 + line * 1.3)) * amp * (1 - line * 0.28);
+    for (let x = 0; x <= w; x += 4) {
+      const kx = x / w, env = Math.sin(kx * Math.PI);
+      const amp = (h / 92) * (3 + level * 70 + (s === "speaking" ? 16 : 0) + (s === "thinking" ? 6 : 0)) * env;
+      const y = mid + Math.sin(kx * (14 + line * 5) + sec * (3 + line * 1.3)) * amp * (1 - line * 0.28);
       x ? wx.lineTo(x, y) : wx.moveTo(x, y);
     }
-    wx.strokeStyle = hexToRgba(col, 0.7 - line * 0.2); wx.lineWidth = 2.2 - line * 0.5; wx.stroke();
+    if (line === 0) { wx.strokeStyle = rgba(col, 0.15); wx.lineWidth = 7; wx.stroke(); }
+    wx.strokeStyle = rgba(col, 0.75 - line * 0.2); wx.lineWidth = 2.2 - line * 0.5; wx.stroke();
   }
 }
-requestAnimationFrame(draw);
+requestAnimationFrame(frame);
 </script>
 </body>
 </html>
