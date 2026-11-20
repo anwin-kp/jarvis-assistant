@@ -1,0 +1,65 @@
+[project]
+name = "jarvis"
+version = "0.1.0"
+description = "A free, local-first JARVIS-style personal AI assistant for Windows, powered by Ollama."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+    { name = "Anwin K P" }
+]
+requires-python = ">=3.12"
+keywords = ["assistant", "jarvis", "ollama", "llm", "windows", "voice-assistant", "local-ai"]
+classifiers = [
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "comtypes>=1.5.0",
+    "ddgs>=9.16.1",
+    "feedparser>=6.0.14",
+    "keyring>=25.7.0",
+    "loguru>=0.8.0",
+    "ollama>=0.6.3",
+    "psutil>=7.2.2",
+    "pycaw>=20260927",
+    "pywin32>=312",
+    "pyyaml>=6.0.3",
+    "requests>=2.34.2",
+    "screen-brightness-control>=0.27.2",
+    "send2trash>=2.2.0",
+    "trafilatura>=2.3.1",
+]
+
+[project.urls]
+Homepage = "https://github.com/anwin-kp/jarvis-assistant"
+Issues = "https://github.com/anwin-kp/jarvis-assistant/issues"
+
+[project.scripts]
+jarvis = "jarvis.__main__:main"
+
+[tool.uv]
+# Smart App Control blocks uv's unsigned Python builds; use the signed python.org install.
+python-preference = "only-system"
+
+[tool.ruff]
+line-length = 120
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = ["E731"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[build-system]
+requires = ["uv_build>=0.13.9,<0.14.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+    "ruff>=0.17.6",
+]
