@@ -16,6 +16,7 @@ from jarvis.app import build
 from jarvis.core import gaming as gaming_mod
 from jarvis.core.config import DATA, ensure_data_dirs
 from jarvis.llm.ollama_brain import BrainUnavailable
+from jarvis.scheduler import reminders as reminders_mod
 from jarvis.tools.registry import Risk, Tool
 
 CYAN, YELLOW, RED, DIM, RESET = "\033[96m", "\033[93m", "\033[91m", "\033[2m", "\033[0m"
@@ -28,6 +29,7 @@ HELP = """Commands:
   /export   save everything JARVIS knows (facts, summaries, history) to a JSON file
   /tools    list available tools
   /unload   free the GPU memory now
+  /briefing your daily briefing now
   /gaming   toggle gaming mode (GPU freed, slower CPU replies)
   /wake     toggle the wake word
   /mute     stop speaking replies (/unmute to resume)
@@ -101,6 +103,11 @@ class App:
                                             on_change=self._gaming_changed)
         gaming_mod.register(self.reg, self.gaming)
 
+        bcfg = self.cfg.get("briefing", {})
+        self.reminders = reminders_mod.Reminders(
+            self.memory, self._reminder_fired, bcfg.get("time") if bcfg.get("enabled", True) else None)
+        reminders_mod.register(self.reg, self.reminders)
+
     # ------------------------------------------------------------ setup
     def start(self) -> None:
         try:
@@ -149,6 +156,7 @@ class App:
                 logger.exception("Tray failed")
 
         self.gaming.start_watcher()
+        self.reminders.start()
         threading.Thread(target=self._input_loop, daemon=True, name="input").start()
         if self.voice:
             self._say(f"{self.name} online.")
@@ -193,6 +201,19 @@ class App:
         print(f"\n{YELLOW}{msg}{RESET}")
         if self.tray:
             self.tray.notify(msg)
+
+    def _reminder_fired(self, kind: str, text: str) -> None:
+        """Called from the scheduler thread: toast immediately, speak via the main loop."""
+        if kind == "reminder":
+            reminders_mod.toast("JARVIS reminder", text)
+        self.q.put((kind, text))
+
+    def briefing_prompt(self) -> str:
+        city = self.cfg.get("briefing", {}).get("city")
+        parts = [f"the weather in {city}" if city else None, "my open tasks", "my pending reminders",
+                 "the top 3 news headlines"]
+        return ("Give me my daily briefing in a few short spoken sentences: "
+                + ", ".join(p for p in parts if p) + ". Start with a short greeting.")
 
     def _prompt(self) -> None:
         print("\nYou: ", end="", flush=True)
@@ -282,6 +303,8 @@ class App:
             on = not self.gaming.active
             self.gaming.manual = on
             self.gaming.set(on)
+        elif cmd == "/briefing":
+            self.handle(self.briefing_prompt())
         elif cmd == "/wake":
             if not self.wake:
                 print(f"{DIM}Wake word isn't available (voice off or disabled in config).{RESET}")
@@ -306,6 +329,12 @@ class App:
                     break
                 if event[0] == "wake":
                     self.listen_and_handle()
+                elif event[0] == "reminder":
+                    print(f"\n{YELLOW}⏰ Reminder: {event[1]}{RESET}")
+                    self._say(f"Reminder: {event[1]}")
+                elif event[0] == "briefing":
+                    print(f"\n{CYAN}☀  Daily briefing{RESET}")
+                    self.handle(self.briefing_prompt())
                 elif event[0] == "text":
                     text = event[1]
                     if not text:
@@ -326,6 +355,7 @@ class App:
     def shutdown(self) -> None:
         self.quit.set()
         self.gaming.stop()
+        self.reminders.stop()
         print(f"\n{DIM}Saving conversation summary…{RESET}")
         self.orch.summarize_session()
         if self.tray:

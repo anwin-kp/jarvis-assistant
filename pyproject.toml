@@ -39,6 +39,7 @@ dependencies = [
     "sounddevice>=0.5.6",
     "trafilatura>=2.3.1",
     "webrtcvad-wheels>=2.0.14.post1",
+    "win11toast>=0.36.3",
 ]
 
 [project.urls]
