@@ -1,6 +1,8 @@
 """Pick which tool groups to send per request. Small local models choose tools more
 reliably when they see ~10 relevant tools instead of every tool."""
 
+import re
+
 KEYWORDS: dict[str, list[str]] = {
     "system": [
         "volume", "mute", "sound", "brightness", "lock", "process", "cpu", "ram", "memory usage",
@@ -53,9 +55,17 @@ def add_keywords(group: str, words: list[str]) -> None:
 ALWAYS = {"core", "memory"}
 
 
+def _mentions(text: str, word: str) -> bool:
+    """Keyword at the start of a word ('remind' matches 'reminder', 'event' does NOT match 'prevent');
+    short keywords (<= 3 letters, e.g. 'ac', 'tv') must be whole words."""
+    w = word.strip()
+    pattern = r"(?<![a-z0-9])" + re.escape(w) + (r"(?![a-z0-9])" if len(w) <= 3 else "")
+    return re.search(pattern, text) is not None
+
+
 def pick_groups(text: str) -> set[str]:
     t = text.lower()
-    groups = set(ALWAYS) | {g for g, words in KEYWORDS.items() if any(w in t for w in words)}
+    groups = set(ALWAYS) | {g for g, words in KEYWORDS.items() if any(_mentions(t, w) for w in words)}
     if groups == ALWAYS:
         groups.add("web")  # general questions often need a search
     return groups
