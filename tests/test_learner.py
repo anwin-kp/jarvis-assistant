@@ -73,3 +73,19 @@ def test_profile_keeps_core_and_adds_relevant(tmp_path):
         mem.remember(f"[music] Song fact {i}.")
     prof = mem.profile("", core=5, relevant=5)
     assert "[identity] Is called Anwin." in prof and len(prof.splitlines()) <= 10
+
+
+def test_a_correction_becomes_a_lesson(tmp_path):
+    mem = Memory(tmp_path / "m.db")
+    mem.log_turn("check my email", "You have 5 unread emails. 1. Google Security Alert ...")
+    mem.log_turn("No, next time when I say check my email you need to list only the important ones", "Got it.")
+
+    def chat(prompt):
+        assert "LESSONS" in prompt
+        return json.dumps({"add": [{"fact": "[lessons] When Anwin says 'check my email', list only the important ones.",
+                                    "evidence": "next time when I say check my email you need to list only the "
+                                                "important ones"}]})
+
+    Learner(mem, chat, lambda: False).step()
+    assert mem.list_facts()[0]["fact"].startswith("[lessons]")
+    assert "[lessons]" in mem.profile("anything", core=1, relevant=0)

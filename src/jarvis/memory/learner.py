@@ -13,7 +13,7 @@ from collections.abc import Callable
 from loguru import logger
 
 CATEGORIES = ("identity", "people", "places", "work", "routine", "preferences", "music", "food", "tech", "goals",
-              "dates", "other")
+              "dates", "lessons", "other")
 
 PROMPT = """You keep a profile of the user of a personal assistant called JARVIS.
 From the conversation below, extract NEW lasting facts about the user: who they are, people in their life (name +
@@ -26,8 +26,13 @@ Rules:
   preference (asked for the same artist repeatedly, says "my favourite...", "I always...").
 - Requests to JARVIS are not facts about the user: never write "asks for...", "has a habit of asking...",
   "wanted to know...". Test phrases and questions about documents are not facts either.
+- LESSONS: when the user corrects JARVIS or says how it should behave ("no, I meant X", "next time when I say
+  check my email, list the unread ones", "don't answer in Swedish"), add a lesson: "[lessons] When Anwin says
+  'check my email', list the unread emails." Write it as a rule JARVIS can follow next time.
 - Asking about something is not a fact about the user: weather in a city is not where they live, a song they
   asked for once is not their taste. They must say it ("I live in...", "I love...", "my sister...").
+- Speech recognition misspells names ("Anwen", "Mixup Mesh"): never add another spelling of a name or title that
+  is already known; it is the same thing.
 - Skip passwords, card numbers, email addresses, phone numbers, health conditions and other secrets.
 - Each fact: one short third-person sentence starting with a category in brackets, e.g.
   "[music] Likes Yuvan Shankar Raja's songs." Categories: {cats}.

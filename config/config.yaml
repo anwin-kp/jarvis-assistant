@@ -9,7 +9,7 @@ llm:
   think: false           # Qwen3 "thinking" mode; false = faster replies
   keep_alive: -1         # keep the model loaded while JARVIS runs (instant replies); gaming mode / Free GPU unload it
   semantic_tools: true   # choose tools by meaning (small local embedding model on the CPU)
-  max_steps: 6           # max tool-call rounds per request
+  max_steps: 8           # max tool-call rounds per request (multi-step tasks)
   mode: smart            # smart = local, but hard questions use the free cloud model if a key is set | local | cloud_first
   cloud:                 # optional free tier; needs a key: .\jarvis.ps1 set-key groq
     provider: groq       # groq | gemini | openrouter
