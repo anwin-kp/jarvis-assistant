@@ -37,6 +37,9 @@ def build(dry_run: bool = False):
     from jarvis.llm.cloud_brain import Router
 
     brain = Router(local, cloud, reg, cfg["llm"].get("mode", "local"), ccfg.get("use_in_gaming_mode", True))
-    orch = Orchestrator(brain, reg, memory, load_persona(), cfg.get("history_turns", 8),
+    from jarvis.integrations import home_assistant
+
+    home_assistant.register(reg, cfg.get("home_assistant") or {})
+    orch = Orchestrator(brain, reg, memory, load_persona(cfg.get("persona")), cfg.get("history_turns", 8),
                         cfg.get("idle_summary_minutes", 10))
     return cfg, orch, brain, reg, memory, roots

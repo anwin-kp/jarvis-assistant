@@ -1,4 +1,5 @@
 assistant_name: JARVIS
+persona: default        # default | butler | casual | terse (config/personas/*.md)
 
 llm:
   ollama_host: http://127.0.0.1:11434
@@ -35,6 +36,15 @@ voice:
   follow_up_seconds: 4   # after a spoken reply, keep listening this long without the wake word
 
 tray: true               # system-tray icon
+
+proactive:              # JARVIS speaks up on its own
+  enabled: true
+  battery_percent: 15    # warn when unplugged and at or below this
+  disk_free_gb: 10       # warn when drive C has less free space
+
+home_assistant:         # optional smart home; token: .\jarvis.ps1 set-key home_assistant
+  url: null             # e.g. http://homeassistant.local:8123
+  domains: [light, switch, fan, media_player, climate, scene]   # locks/alarms/doors are never allowed
 
 hud:
   enabled: true          # futuristic window (local only: 127.0.0.1 + secret token)

@@ -14,7 +14,8 @@ from loguru import logger
 
 from jarvis.app import build
 from jarvis.core import gaming as gaming_mod
-from jarvis.core.config import DATA, ensure_data_dirs
+from jarvis.core.config import DATA, ensure_data_dirs, list_personas, load_persona
+from jarvis.core.proactive import Proactive
 from jarvis.llm.ollama_brain import BrainUnavailable
 from jarvis.scheduler import reminders as reminders_mod
 from jarvis.tools.registry import Risk, Tool
@@ -33,6 +34,7 @@ HELP = """Commands:
   /gaming   toggle gaming mode (GPU freed, slower CPU replies)
   /hud      open the HUD window
   /private  toggle private mode (never use the cloud model)
+  /persona  switch personality, e.g. /persona butler
   /wake     toggle the wake word
   /mute     stop speaking replies (/unmute to resume)
   /quit     exit"""
@@ -111,6 +113,10 @@ class App:
             self.memory, self._reminder_fired, bcfg.get("time") if bcfg.get("enabled", True) else None)
         reminders_mod.register(self.reg, self.reminders)
 
+        pcfg = self.cfg.get("proactive", {})
+        self.proactive = Proactive(lambda m: self.q.put(("alert", m)), pcfg.get("battery_percent", 15),
+                                   pcfg.get("disk_free_gb", 10)) if pcfg.get("enabled", True) else None
+
     # ------------------------------------------------------------ setup
     def start(self) -> None:
         hcfg = self.cfg.get("hud", {})
@@ -171,6 +177,8 @@ class App:
 
         self.gaming.start_watcher()
         self.reminders.start()
+        if self.proactive:
+            self.proactive.start()
         threading.Thread(target=self._input_loop, daemon=True, name="input").start()
         if self.hud:
             self._flags()
@@ -345,6 +353,14 @@ class App:
             self.gaming.set(on)
         elif cmd == "/briefing":
             self.handle(self.briefing_prompt(), show=False)
+        elif cmd.startswith("/persona"):
+            parts = cmd.split()
+            names = list_personas()
+            if len(parts) == 2 and parts[1] in names:
+                self.orch.persona = load_persona(parts[1])
+                print(f"{DIM}Personality: {parts[1]}.{RESET}")
+            else:
+                print(f"{DIM}Usage: /persona <name>. Available: {', '.join(names)}{RESET}")
         elif cmd == "/private":
             self.brain.private = not self.brain.private
             print(f"{DIM}Private mode {'on: everything stays on this PC' if self.brain.private else 'off'}.{RESET}")
@@ -382,6 +398,11 @@ class App:
                     print(f"\n{YELLOW}⏰ Reminder: {event[1]}{RESET}")
                     self._publish("notice", text=f"⏰ Reminder: {event[1]}")
                     self._say(f"Reminder: {event[1]}")
+                elif event[0] == "alert":
+                    print(f"\n{YELLOW}⚡ {event[1]}{RESET}")
+                    self._publish("notice", text=event[1])
+                    reminders_mod.toast("JARVIS", event[1])
+                    self._say(event[1])
                 elif event[0] == "briefing":
                     print(f"\n{CYAN}☀  Daily briefing{RESET}")
                     self.handle(self.briefing_prompt(), show=False)

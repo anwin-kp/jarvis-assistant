@@ -24,6 +24,10 @@ KEYWORDS: dict[str, list[str]] = {
         "email", "e-mail", "mail", "inbox", "gmail", "unread", "draft", "reply", "send", "calendar",
         "meeting", "event", "appointment", "schedule", "agenda", "busy", "free on",
     ],
+    "home": [
+        "light", "lamp", "fan", "switch", "plug", "tv", "ac", "air conditioner", "thermostat", "scene",
+        "smart home", "device", "bedroom", "living room", "kitchen",
+    ],
     "memory": ["remember", "forget", "recall", "my name", "my favorite", "do you know", "facts", "about me"],
 }
 
