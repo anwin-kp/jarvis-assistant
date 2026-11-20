@@ -91,7 +91,8 @@ def build(dry_run: bool = False):
         steps = cfg["llm"].get("max_steps", 6)
         chain = [CloudBrain(reg, ccfg["provider"], ccfg.get("model", ""), steps)]
         for fb in ccfg.get("fallbacks") or []:  # e.g. Gemini when Groq's free limit is reached
-            chain.append(CloudBrain(reg, fb["provider"], fb.get("model", ""), steps))
+            extra = {k: v for k, v in fb.items() if k not in ("provider", "model")}
+            chain.append(CloudBrain(reg, fb["provider"], fb.get("model", ""), steps, extra=extra))
         cloud = CloudChain(chain)
     from jarvis.llm.cloud_brain import Router
 
