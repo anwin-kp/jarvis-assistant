@@ -14,7 +14,7 @@ from loguru import logger
 
 from jarvis.app import build
 from jarvis.core import gaming as gaming_mod
-from jarvis.core.commands import is_kill_command, run_kill_switch
+from jarvis.core.commands import is_kill_command, is_sleep_command, run_kill_switch
 from jarvis.core.config import DATA, ensure_data_dirs, list_personas, load_persona
 from jarvis.core.proactive import Proactive
 from jarvis.llm.ollama_brain import BrainUnavailable
@@ -36,7 +36,8 @@ HELP = """Commands:
   /hud      open the HUD window
   /private  toggle private mode (never use the cloud model)
   /persona  switch personality, e.g. /persona butler
-  /wake     toggle the wake word
+  /listen   cycle listening mode: always listening -> wake word -> push-to-talk
+  /sleep    pause listening until \"Hey Jarvis\" (or say \"Jarvis, go to sleep\")
   /mute     stop speaking replies (/unmute to resume)
   /quit     exit (saves a conversation summary)
   /kill     kill switch: stop JARVIS, HUD, model and Ollama (or say \"Jarvis, shut down\")"""
@@ -62,7 +63,8 @@ class Voice:
 
         self.cfg = vcfg
         self.stt = WhisperSTT(vcfg.get("stt_model", "small"), vcfg.get("stt_device", "cuda"),
-                              vcfg.get("stt_compute_type", "float16"), download_root=str(DATA / "models"))
+                              vcfg.get("stt_compute_type", "float16"), download_root=str(DATA / "models"),
+                              vocabulary=vcfg.get("vocabulary"))
         self.tts = None
         if vcfg.get("tts_engine", "piper") == "piper":
             try:
@@ -102,7 +104,8 @@ class App:
         self.quit = threading.Event()
         self.voice = self.wake = self.tray = None
         self.speech_on = False
-        self.wake_on = False
+        self.listen_mode = "push"  # always | wake_word | push
+        self.sleeping = False  # always-mode paused until 'Hey Jarvis'
         self.args = args
 
         gcfg = self.cfg.get("gaming", {})
@@ -147,13 +150,18 @@ class App:
             try:
                 self.voice = Voice(vcfg)
                 self.speech_on = True
-                if vcfg.get("wake_word", True):
-                    from jarvis.audio.wakeword import WakeWord
+                mode = vcfg.get("listen_mode", "always")
+                if vcfg.get("wake_word", True) or mode == "wake_word":
+                    try:
+                        from jarvis.audio.wakeword import WakeWord
 
-                    self.wake = WakeWord(vcfg.get("wake_threshold", 0.5))
-                    self.wake_on = True
-                    threading.Thread(target=self._wake_loop, daemon=True, name="wake").start()
-                hint = 'say "Hey Jarvis", press Enter to talk, or type' if self.wake else "press Enter to talk, or type"
+                        self.wake = WakeWord(vcfg.get("wake_threshold", 0.5))
+                    except Exception:
+                        logger.exception("Wake word unavailable")
+                self.listen_mode = mode if mode in ("always", "push") or self.wake else "push"
+                threading.Thread(target=self._listen_loop, daemon=True, name="listen").start()
+                hint = {"always": "just talk, I'm always listening (say 'Jarvis, go to sleep' to pause)",
+                        "wake_word": 'say "Hey Jarvis"', "push": "press Enter to talk"}[self.listen_mode]
                 print(f"{DIM}Voice ready (speech recognition on {self.voice.stt.device}): {hint}.{RESET}")
             except Exception as e:
                 logger.exception("Voice init failed")
@@ -165,13 +173,14 @@ class App:
                 from jarvis.ui.tray import Tray
 
                 self.tray = Tray({
-                    "toggle_wake": lambda: self.q.put(("text", "/wake")),
+                    "toggle_wake": lambda: self.q.put(("text", "/listen")),
                     "toggle_speech": lambda: self.q.put(("text", "/unmute" if not self.speech_on else "/mute")),
                     "gaming": lambda: self.q.put(("text", "/gaming")),
                     "free_gpu": lambda: self.q.put(("text", "/unload")),
                     "quit": lambda: self.q.put(("quit",)),
                     "open_hud": lambda: self.hud.open() if self.hud else None,
-                    "state": lambda: {"wake": self.wake_on, "speech": self.speech_on, "gaming": self.gaming.active},
+                    "state": lambda: {"wake": self.listen_mode != "push" and not self.sleeping,
+                                      "speech": self.speech_on, "gaming": self.gaming.active},
                 })
                 self.tray.start()
             except Exception:
@@ -182,6 +191,8 @@ class App:
         if self.proactive:
             self.proactive.start()
         threading.Thread(target=self._input_loop, daemon=True, name="input").start()
+        if self.hud:
+            threading.Thread(target=self._stats_loop, daemon=True, name="stats").start()
         if self.hud:
             self._flags()
             self._publish("notice", text=f"{self.name} online")
@@ -201,18 +212,61 @@ class App:
                 return
             self.q.put(("text", line.strip().lstrip("﻿")))
 
-    def _wake_loop(self) -> None:
+    def _listen_loop(self) -> None:
+        """Hands-free listening. always: record whenever someone speaks; wake_word: wait for 'Hey Jarvis'.
+        Paused (via self.busy) while JARVIS thinks or speaks, so it never hears itself."""
+        from jarvis.audio.mic import record_until_silence
+
+        v = self.cfg.get("voice", {})
         while not self.quit.is_set():
-            if not self.wake_on or self.busy.is_set():
+            mode = "wake_word" if self.sleeping else self.listen_mode
+            if self.busy.is_set() or mode == "push" or (mode == "wake_word" and not self.wake):
                 time.sleep(0.2)
                 continue
             try:
-                if self.wake.wait(self.busy):
+                if mode == "wake_word":
+                    if self.wake.wait(self.busy):
+                        self.busy.set()
+                        self.q.put(("wake",))
+                    continue
+                time.sleep(0.4)  # let the room go quiet after JARVIS spoke
+                if self.busy.is_set():
+                    continue
+                self._state("ready")
+                audio = record_until_silence(v.get("max_seconds", 15), v.get("silence_ms", 800), start_timeout=None,
+                                             stop=self.busy, on_level=self._level,
+                                             min_speech_ms=v.get("min_speech_ms", 400))
+                if audio.size and not self.busy.is_set():
                     self.busy.set()
-                    self.q.put(("wake",))
+                    self.q.put(("audio", audio))
             except Exception:
-                logger.exception("Wake-word listener error")
+                logger.exception("Listener error")
                 time.sleep(2)
+
+    def _level(self, value: float) -> None:
+        if self.hud:
+            self.hud.publish("level", v=round(value, 3))
+
+    def _stats_loop(self) -> None:
+        import subprocess
+
+        import psutil
+
+        while not self.quit.wait(3):
+            try:
+                gpu = None
+                r = subprocess.run(["nvidia-smi", "--query-gpu=utilization.gpu,memory.used,memory.total",
+                                    "--format=csv,noheader,nounits"], capture_output=True, text=True, timeout=3,
+                                   creationflags=subprocess.CREATE_NO_WINDOW)
+                if r.returncode == 0:
+                    util, used, total = (float(x) for x in r.stdout.strip().split(",")[:3])
+                    gpu = {"util": util, "used": used, "total": total}
+                bat = psutil.sensors_battery()
+                self._publish("stats", cpu=psutil.cpu_percent(), ram=psutil.virtual_memory().percent, gpu=gpu,
+                              battery=bat.percent if bat else None, plugged=bat.power_plugged if bat else None,
+                              model=self.brain.model)
+            except Exception:
+                logger.debug("stats failed")
 
     # ------------------------------------------------------------ helpers
     def _publish(self, type_: str, **data) -> None:
@@ -220,7 +274,8 @@ class App:
             self.hud.publish(type_, **data)
 
     def _flags(self) -> None:
-        self._publish("flags", wake=self.wake_on, mute=not self.speech_on, gaming=self.gaming.active)
+        self._publish("flags", mode=self.listen_mode, sleeping=self.sleeping, mute=not self.speech_on,
+                      gaming=self.gaming.active, voice=self.voice is not None)
 
     def _on_tool(self, name: str, args: dict, status: str) -> None:
         show_tool_call(name, args, status)
@@ -296,14 +351,50 @@ class App:
             return
         if not text:
             print(f"{DIM}(didn't catch that){RESET}")
+            self._state("idle")
             return
         print(f"You said: {text}")
-        if is_kill_command(text, after_wake=after_wake):
-            self.kill()
-        if self.handle(text) and self.voice:
+        if self.voice_turn(text, after_wake) and self.listen_mode == "wake_word" and not self.sleeping:
             follow = self.cfg.get("voice", {}).get("follow_up_seconds", 4)
             if follow:
                 self.listen_and_handle(start_timeout=follow)
+
+    def handle_audio(self, audio) -> bool:
+        """Speech captured by always-listening. Returns False if it was just noise (nothing printed)."""
+        self._state("thinking")
+        text, _ = self.voice.stt.transcribe(audio, self.cfg.get("voice", {}).get("language"))
+        if not text:
+            self._state("idle")
+            return False
+        print(f"\nYou said: {text}")
+        self.voice_turn(text, after_wake=False)
+        return True
+
+    def voice_turn(self, text: str, after_wake: bool) -> bool:
+        if is_kill_command(text, after_wake=after_wake):
+            self.kill()
+        if is_sleep_command(text):
+            self.go_to_sleep()
+            return False
+        return self.handle(text)
+
+    def go_to_sleep(self) -> None:
+        self._publish("user", text="(go to sleep)")
+        if self.wake:
+            self.sleeping = True
+            msg = 'Going to sleep. Say "Hey Jarvis" to wake me.'
+        else:
+            self.listen_mode = "push"
+            msg = "I've stopped listening. Press Enter or Talk to speak to me."
+        print(f"{DIM}{msg}{RESET}")
+        self._publish("reply", text=msg)
+        self._say(msg)
+        self._flags()
+        self._state("idle")
+
+    def wake_up(self) -> None:
+        self.sleeping = False
+        self._flags()
 
     def handle(self, text: str, show: bool = True) -> bool:
         """Run one turn. Returns True if a reply was produced."""
@@ -389,12 +480,20 @@ class App:
                 self.hud.open()
             else:
                 print(f"{DIM}HUD is disabled in config.{RESET}")
-        elif cmd == "/wake":
-            if not self.wake:
-                print(f"{DIM}Wake word isn't available (voice off or disabled in config).{RESET}")
+        elif cmd in ("/listen", "/wake"):
+            if not self.voice:
+                print(f"{DIM}Voice is off.{RESET}")
             else:
-                self.wake_on = not self.wake_on
-                print(f"{DIM}Wake word {'on' if self.wake_on else 'off'}.{RESET}")
+                order = ["always", "wake_word", "push"] if self.wake else ["always", "push"]
+                self.sleeping = False
+                self.listen_mode = order[(order.index(self.listen_mode) + 1) % len(order)]
+                desc = {"always": "always listening", "wake_word": 'wake word ("Hey Jarvis")', "push": "push-to-talk"}
+                print(f"{DIM}Listening mode: {desc[self.listen_mode]}.{RESET}")
+        elif cmd == "/sleep":
+            self.go_to_sleep()
+        elif cmd == "/wakeup":
+            self.wake_up()
+            print(f"{DIM}Awake and listening.{RESET}")
         elif cmd in ("/mute", "/unmute"):
             self.speech_on = cmd == "/unmute" and self.voice is not None
             print(f"{DIM}Speech {'on' if self.speech_on else 'off'}.{RESET}")
@@ -409,10 +508,15 @@ class App:
         while True:
             event = self.q.get()
             self.busy.set()
+            quiet = False
             try:
                 if event[0] == "quit":
                     break
-                if event[0] == "wake":
+                if event[0] == "audio":
+                    quiet = not self.handle_audio(event[1])
+                elif event[0] == "wake":
+                    if self.sleeping:
+                        self.wake_up()
                     self.listen_and_handle(after_wake=True)
                 elif event[0] == "reminder":
                     print(f"\n{YELLOW}⏰ Reminder: {event[1]}{RESET}")
@@ -440,7 +544,8 @@ class App:
                 print(f"{YELLOW}Cancelled.{RESET}")
             finally:
                 self.busy.clear()
-            self._prompt()
+            if not quiet:
+                self._prompt()
         self.shutdown()
 
     def shutdown(self) -> None:

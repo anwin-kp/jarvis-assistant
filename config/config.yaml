@@ -24,6 +24,7 @@ voice:
   stt_device: cuda       # cuda | cpu (falls back to cpu automatically)
   stt_compute_type: float16
   language: null         # null = auto-detect, or e.g. "en", "hi", "ml"
+  vocabulary: "Jarvis, Kochi, Kerala"   # names/places you say often (helps recognition)
   silence_ms: 800        # stop recording after this much silence
   max_seconds: 15
   tts_engine: piper      # piper (natural, offline) | sapi (built-in Windows voices)
@@ -31,7 +32,9 @@ voice:
   tts_speed: 1.0
   tts_rate: 185          # SAPI speaking speed
   tts_voice: null        # SAPI: part of a Windows voice name, e.g. "David" or "Zira"
-  wake_word: true        # say "Hey Jarvis" to talk hands-free
+  listen_mode: always    # always = just talk (no button, no wake word) | wake_word = say "Hey Jarvis" | push
+  min_speech_ms: 400     # always mode: ignore sounds shorter than this (coughs, clicks)
+  wake_word: true        # also load "Hey Jarvis" (wake_word mode, and waking up after "go to sleep")
   wake_threshold: 0.5    # 0.3 = more sensitive, 0.7 = fewer false wakes
   follow_up_seconds: 4   # after a spoken reply, keep listening this long without the wake word
 

@@ -19,7 +19,8 @@ def _add_cuda_dlls() -> None:
 
 class WhisperSTT:
     def __init__(self, model: str = "small", device: str = "cuda", compute_type: str = "float16",
-                 download_root: str | None = None):
+                 download_root: str | None = None, vocabulary: str | None = None):
+        self.vocabulary = vocabulary  # names/places to help recognition, e.g. "Jarvis, Kochi"
         if device == "cuda":
             _add_cuda_dlls()
         from faster_whisper import WhisperModel
@@ -44,6 +45,24 @@ class WhisperSTT:
         """audio: float32 16 kHz numpy array or a file path. Returns (text, language)."""
         if hasattr(audio, "size") and audio.size < 16000 * 0.3:
             return "", ""
-        segments, info = self.model.transcribe(audio, language=language, beam_size=1, vad_filter=True)
-        text = " ".join(s.text.strip() for s in segments).strip()
+        segments, info = self.model.transcribe(audio, language=language, beam_size=1, vad_filter=True,
+                                                initial_prompt=self.vocabulary or None)
+        # Drop segments Whisper itself thinks are not speech or is very unsure about (noise, TV murmur).
+        kept = [s.text.strip() for s in segments if s.no_speech_prob < 0.6 and s.avg_logprob > -1.0]
+        text = " ".join(kept).strip()
+        if is_hallucination(text):
+            return "", info.language
         return text, info.language
+
+
+# Phrases Whisper typically "hears" in silence or background noise.
+_HALLUCINATIONS = {
+    "", "you", "thank you", "thanks", "thank you very much", "thanks for watching", "thank you for watching",
+    "bye", "bye bye", "okay", "ok", "uh", "um", "hmm", "mm", "oh", "so", "yeah", "please subscribe",
+    "subtitles by the amara.org community",
+}
+
+
+def is_hallucination(text: str) -> bool:
+    t = "".join(ch for ch in text.lower() if ch.isalnum() or ch in " .").strip(" .")
+    return t in _HALLUCINATIONS or len(t) < 2
