@@ -94,6 +94,12 @@ security:
     vs code: code
     spotify: "spotify:"
 
+documents:              # "ask your documents" (local semantic search)
+  enabled: true
+  folders: [documents]   # known names or full paths; PDFs, Word, .txt and .md are indexed
+  index_on_start: true   # re-scan in the background at startup (only changed files are processed)
+  model: nomic-embed-text  # small local embedding model (~270 MB, downloaded automatically)
+
 notes:
   folder: null           # null = Documents\JARVIS Notes
 

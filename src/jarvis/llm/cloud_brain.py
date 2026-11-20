@@ -13,7 +13,7 @@ PROVIDERS = {  # base URL, keyring entry name
     "gemini": ("https://generativelanguage.googleapis.com/v1beta/openai", "gemini_api_key"),
     "openrouter": ("https://openrouter.ai/api/v1", "openrouter_api_key"),
 }
-PRIVATE_GROUPS = {"files", "email"}  # never sent to the cloud
+PRIVATE_GROUPS = {"files", "email", "docs", "screen", "clipboard", "notes"}  # never sent to the cloud
 
 
 class CloudUnavailable(RuntimeError):
