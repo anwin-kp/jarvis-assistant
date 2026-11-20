@@ -4,7 +4,8 @@ The same HUD page, in overlay mode (?overlay=1): no background, reactor in a cor
 Two modes, like game overlays:
   passive  - mouse clicks go through to your apps; replies appear and fade
   active   - the overlay takes clicks and keys: text box, buttons, approvals
-Ctrl+Alt+J toggles active/passive, Esc returns to passive, Ctrl+Alt+H hides/shows it. It turns active by itself when
+Ctrl+Alt+J toggles active/passive, Esc returns to passive, Ctrl+Alt+H hides/shows it, Ctrl+Alt+D moves it to the
+next display (remembered). It turns active by itself when
 JARVIS needs an approval. Qt (signed DLLs) works with Smart App Control, unlike an unsigned packed .exe."""
 
 import ctypes
@@ -12,7 +13,26 @@ import sys
 import threading
 from ctypes import wintypes
 
-HOTKEY_ACTIVE, HOTKEY_HIDE = 1, 2
+HOTKEY_ACTIVE, HOTKEY_HIDE, HOTKEY_MOVE = 1, 2, 3
+STATE_FILE = __import__("pathlib").Path(__file__).resolve().parents[3] / "data" / "overlay.json"
+
+
+def saved_screen() -> str | None:
+    import json
+
+    try:
+        return json.loads(STATE_FILE.read_text(encoding="utf-8")).get("screen")
+    except (OSError, ValueError):
+        return None
+
+
+def save_screen(name: str) -> None:
+    import json
+
+    try:
+        STATE_FILE.write_text(json.dumps({"screen": name}), encoding="utf-8")
+    except OSError:
+        pass
 MOD_ALT, MOD_CONTROL, MOD_NOREPEAT = 0x1, 0x2, 0x4000
 GWL_EXSTYLE, WS_EX_TRANSPARENT, WS_EX_LAYERED = -20, 0x20, 0x80000
 TITLE = "J.A.R.V.I.S. overlay"
@@ -42,6 +62,9 @@ def click_through(hwnd: int, on: bool) -> None:
 def main(url: str, owner_pid: int | None = None) -> int:
     if not single_instance():
         return 0
+    if sys.stderr is None:  # pythonw: keep errors (Qt slot exceptions included) in data/logs/overlay.log
+        log = STATE_FILE.parent / "logs" / "overlay.log"
+        sys.stdout = sys.stderr = open(log, "w", encoding="utf-8", buffering=1)  # noqa: SIM115
     from PySide6.QtCore import QObject, Qt, QTimer, QUrl, Signal
     from PySide6.QtGui import QColor
     from PySide6.QtWebEngineCore import QWebEngineProfile
@@ -64,7 +87,21 @@ def main(url: str, owner_pid: int | None = None) -> int:
                         | Qt.WindowType.Tool)  # Tool: no taskbar button, like an overlay
     view.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
     view.setStyleSheet("background: transparent")
-    view.setGeometry(app.primaryScreen().availableGeometry())
+    # which display: the one chosen last time (Ctrl+Alt+D), else the primary one
+    # Which display: the one chosen last time (Ctrl+Alt+D), else the primary one. Displays can have different
+    # scaling (laptop 200%, monitor 100%): move onto the display first, size it once Qt uses that display's scale,
+    # otherwise the size comes out doubled.
+    screens = app.screens()
+    names = [sc.name() for sc in screens]
+    current = names.index(saved_screen()) if saved_screen() in names else screens.index(app.primaryScreen())
+
+    def place(i: int) -> None:
+        sc = screens[i]
+        view.setScreen(sc)
+        view.move(sc.availableGeometry().topLeft())
+        QTimer.singleShot(250, lambda: view.setGeometry(sc.availableGeometry()))
+
+    place(current)
     state = {"active": False}
 
     def set_active(on: bool) -> None:
@@ -77,6 +114,12 @@ def main(url: str, owner_pid: int | None = None) -> int:
             ctypes.windll.user32.SetForegroundWindow(int(view.winId()))
 
     def on_hotkey(which: int) -> None:
+        if which == HOTKEY_MOVE:  # next display, remembered for next time
+            nonlocal current
+            current = (current + 1) % len(screens)
+            place(current)
+            save_screen(screens[current].name())
+            return
         if which == HOTKEY_HIDE:
             view.setVisible(not view.isVisible())
             if view.isVisible():
@@ -102,8 +145,9 @@ def main(url: str, owner_pid: int | None = None) -> int:
     def hotkeys() -> None:
         """Global hotkeys need a message loop on the thread that registered them."""
         user32 = ctypes.windll.user32
-        user32.RegisterHotKey(None, HOTKEY_ACTIVE, MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, ord("J"))
-        user32.RegisterHotKey(None, HOTKEY_HIDE, MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, ord("H"))
+        for hid, key in ((HOTKEY_ACTIVE, "J"), (HOTKEY_HIDE, "H"), (HOTKEY_MOVE, "D")):
+            if not user32.RegisterHotKey(None, hid, MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, ord(key)):
+                print(f"Ctrl+Alt+{key} is already used by another app; that overlay hotkey is unavailable", flush=True)
         msg = wintypes.MSG()
         while user32.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
             if msg.message == 0x0312:  # WM_HOTKEY
