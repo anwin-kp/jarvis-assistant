@@ -86,9 +86,13 @@ def build(dry_run: bool = False):
     ccfg = cfg["llm"].get("cloud") or {}
     cloud = None
     if ccfg.get("provider"):
-        from jarvis.llm.cloud_brain import CloudBrain
+        from jarvis.llm.cloud_brain import CloudBrain, CloudChain
 
-        cloud = CloudBrain(reg, ccfg["provider"], ccfg.get("model", ""), cfg["llm"].get("max_steps", 6))
+        steps = cfg["llm"].get("max_steps", 6)
+        chain = [CloudBrain(reg, ccfg["provider"], ccfg.get("model", ""), steps)]
+        for fb in ccfg.get("fallbacks") or []:  # e.g. Gemini when Groq's free limit is reached
+            chain.append(CloudBrain(reg, fb["provider"], fb.get("model", ""), steps))
+        cloud = CloudChain(chain)
     from jarvis.llm.cloud_brain import Router
 
     brain = Router(local, cloud, reg, cfg["llm"].get("mode", "local"), ccfg.get("use_in_gaming_mode", True))

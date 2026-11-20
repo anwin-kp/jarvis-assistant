@@ -161,6 +161,9 @@ class Orchestrator:
             from jarvis.llm.cloud_brain import PRIVATE_GROUPS
 
             kw["private"] = private or bool(asked & PRIVATE_GROUPS)
+            from jarvis.llm.cloud_brain import ACTION_GROUPS
+
+            kw["action"] = bool(asked & ACTION_GROUPS)
         reply = strip_filler(self.brain.respond(messages, tools, confirm, **kw) or "(no reply)")
 
         # Safety net: small models sometimes say "remembered" without calling the tool.
