@@ -20,6 +20,7 @@ class Hud:
         self.q = app_queue
         self.on_stop = None  # called immediately (not queued) when you press Stop / type "stop" while JARVIS talks
         self.on_input = None  # called immediately for buttons and typed messages: they cut in on JARVIS talking
+        self.memory_api = None  # (action, msg) -> facts list: the Memory panel (list / forget / teach)
         self.port = port
         self.token = secrets.token_urlsafe(24)
         self.clients: set = set()
@@ -101,6 +102,11 @@ class Hud:
                     msg = await ws.receive_json()
                     text = str(msg.get("text", ""))[:2000]
                     action = msg.get("action")
+                    if action in ("facts", "forget", "teach"):  # Memory panel: no turn, no cut-in
+                        if self.memory_api:
+                            facts = await asyncio.to_thread(self.memory_api, action, msg)
+                            await ws.send_json({"type": "facts", "facts": facts})
+                        continue
                     if action == "stop" or (self.on_stop and action == "text" and self.on_stop(text)):
                         if action == "stop" and self.on_stop:
                             self.on_stop("stop")

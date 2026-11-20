@@ -64,6 +64,11 @@ proactive:              # JARVIS speaks up on its own
   break_reminder_minutes: 120   # suggest a break after this much continuous work (0 = off)
   meeting_reminder_minutes: 10  # announce calendar events this long before (needs Google login)
 
+memory:                 # getting to know you (all local; see the Memory panel in the HUD)
+  learn: true           # learn lasting facts about you from conversations, while JARVIS is idle
+  learn_idle_seconds: 15
+  share_with_cloud: false  # include what JARVIS knows about you when a question goes to the cloud model
+
 location:               # where you are: weather / "near me" without naming a place
   home: null            # optional exact place, e.g. "Panaji, Goa" (overrides Windows location)
   in_prompt: true       # tell the AI your approximate city (city only, never coordinates)

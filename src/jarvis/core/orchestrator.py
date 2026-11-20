@@ -2,6 +2,7 @@
 
 import datetime as dt
 import re
+import threading
 import time
 
 from loguru import logger
@@ -15,6 +16,20 @@ _REMEMBER = re.compile(
     r"^(?:(?:hey\s+)?jarvis[,\s]+)?(?:please\s+)?(?:can you\s+|could you\s+)?remember\s+(?:that\s+)?(?P<fact>.+)$",
     re.IGNORECASE,
 )
+
+
+PERSONAL_START, PERSONAL_END = "<<personal>>", "<</personal>>"
+INTERVIEW = """GET-TO-KNOW-YOU MODE is on: you are getting to know the user so you can help them better.
+- Ask ONE short, friendly question at a time about something not already in what you know about them. Topics, in
+  order: what to call them; where they live and work or study; their job or studies; their daily routine (wake,
+  work, sleep times); important people (family, partner, friends, colleagues: names); music and artists they like;
+  food they like or avoid; apps and tools they use most; hobbies; current goals or projects; how they want you
+  to talk (short or detailed, formal or casual); anything else they want you to know.
+- After each answer: call remember with one clear fact in third person starting with a category in brackets
+  (e.g. "[people] Has a sister named Anu."), react in a few words, then ask the next question.
+- Skip a topic when the user doesn't want to answer. Never ask for passwords, card numbers or health details.
+- When the user says stop / that's enough, or the topics are done: thank them, say in one sentence what you
+  learned, and call end_interview."""
 
 
 _FILLER = re.compile(
@@ -54,19 +69,40 @@ class Orchestrator:
         self.last_think = False
         self.idle_seconds = idle_summary_minutes * 60
         self.last_activity = time.monotonic()
+        self.interview = False  # "get to know me" mode
+        self.lock = threading.RLock()  # a turn and the idle summary never touch the history at the same time
 
-    def system_prompt(self) -> str:
-        prompt = self.persona
+    def system_prompt(self, query: str = "") -> str:
+        """Persona + what JARVIS knows about the user. The personal part is wrapped in PERSONAL markers so
+        the router can leave it out of anything sent to the cloud (memory.share_with_cloud)."""
+        personal = []
         if self.location_fn and (where := self.location_fn()):
-            prompt += f"\n\nThe user is currently in or near: {where} (approximate)."
-        if facts := self.memory.profile():
-            prompt += f"\n\nKnown facts about the user:\n{facts}"
+            personal.append(f"The user is currently in or near: {where} (approximate).")
+        if facts := self.memory.profile(query):
+            personal.append("What you know about the user (use it naturally, without being asked; categories "
+                            f"in brackets):\n{facts}")
         if sums := self.memory.recent_summaries():
-            prompt += "\n\nSummaries of recent earlier conversations:\n" + "\n".join(f"- {s}" for s in sums)
+            personal.append("Summaries of recent earlier conversations:\n" + "\n".join(f"- {s}" for s in sums))
+        prompt = self.persona
+        if personal and hasattr(self.brain, "cloud"):  # router: it strips or unwraps the block
+            prompt += f"\n\n{PERSONAL_START}\n" + "\n\n".join(personal) + f"\n{PERSONAL_END}"
+        elif personal:
+            prompt += "\n\n" + "\n\n".join(personal)
+        if self.interview:
+            prompt += "\n\n" + INTERVIEW
         return prompt
 
     def summarize_session(self) -> None:
         """Condense the current conversation into a stored summary, then start fresh."""
+        with self.lock:
+            self._summarize()
+
+    def summarize_if_idle(self) -> None:
+        """Called by the learner when JARVIS has been quiet: keeps the summary even if JARVIS restarts later."""
+        if self.history and time.monotonic() - self.last_activity > self.idle_seconds:
+            self.summarize_session()
+
+    def _summarize(self) -> None:
         if len(self.history) < 4:  # under two exchanges: not worth keeping
             self.history.clear()
             return
@@ -99,15 +135,21 @@ class Orchestrator:
                private: bool = False) -> str:
         """route_text: the user's own words, when text also carries attachment content - tools, thinking and
         privacy are judged from what the user asked, not from what's inside a file. private: keep it local."""
+        with self.lock:
+            return self._handle(text, confirm, on_sentence, route_text, private)
+
+    def _handle(self, text, confirm, on_sentence, route_text, private) -> str:
         if self.history and time.monotonic() - self.last_activity > self.idle_seconds:
-            self.summarize_session()
+            self._summarize()
         self.last_activity = time.monotonic()
         now = dt.datetime.now().strftime("%A %d %B %Y, %H:%M")
         user_msg = {"role": "user", "content": f"[Local time: {now}] {text}"}
-        messages = [{"role": "system", "content": self.system_prompt()}, *self.history, user_msg]
         words = text if route_text is None else route_text
+        messages = [{"role": "system", "content": self.system_prompt(words)}, *self.history, user_msg]
         asked = pick_groups(words)  # what the words explicitly ask for
         groups = set(asked)
+        if self.interview:
+            groups.add("interview")  # end_interview stays available while getting to know the user
         if self.semantic and words:
             groups |= self.semantic.pick(words)
         tools = self.reg.schemas(groups)

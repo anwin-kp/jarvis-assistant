@@ -140,6 +140,21 @@
              outline:none; clip-path:polygon(10px 0, 100% 0, 100% 100%, 0 100%, 0 10px); }
   textarea:focus { border-color:var(--c); box-shadow:0 0 18px rgba(0,216,255,.25); }
   #attach { padding:10px 12px; font-size:15px; line-height:1; }
+  /* memory panel */
+  #mem { position:fixed; inset:0; z-index:8; display:none; place-items:center; background:rgba(2,6,13,.78); }
+  #mem.open { display:grid; }
+  #mem .panel { width:min(720px, 94vw); max-height:84vh; display:flex; flex-direction:column; }
+  #mem .body { overflow:auto; padding:4px 16px 12px; }
+  #mem h5 { margin:14px 0 6px; font:600 10px var(--hdr); letter-spacing:.3em; color:var(--c); text-transform:uppercase; }
+  #mem .fact { display:flex; gap:10px; align-items:flex-start; padding:7px 10px; margin:4px 0;
+               background:rgba(0,216,255,.05); border-left:2px solid var(--line2); }
+  #mem .fact span { flex:1; } #mem .fact b { cursor:pointer; color:var(--dim); padding:0 4px; }
+  #mem .fact b:hover { color:var(--red); }
+  #mem .empty { color:var(--dim); padding:18px 0; text-align:center; }
+  #mem form { padding:10px 16px 14px; border-top:1px solid var(--line); }
+  #mem input { flex:1; background:rgba(2,10,20,.8); color:var(--text); border:1px solid var(--line2);
+               padding:10px 12px; font:500 15px var(--body); outline:none; }
+  #mem .row { display:flex; gap:8px; padding:0 16px 14px; justify-content:flex-end; }
   #viewer { position:fixed; inset:0; z-index:9; display:none; place-items:center; background:rgba(2,6,13,.88);
             cursor:zoom-out; }
   #viewer img { max-width:92vw; max-height:92vh; border:1px solid var(--line2); }
@@ -196,6 +211,14 @@
     </div>
   </section>
   <div id="viewer"><img alt=""></div>
+  <div id="mem"><section class="panel">
+    <div class="ptitle">What I know about you <small id="mem-count"></small></div>
+    <div class="body" id="mem-list"></div>
+    <form id="mem-f"><input id="mem-t" placeholder="Teach me something about you, e.g. &quot;I'm vegetarian&quot;"
+      autocomplete="off"><button>Teach</button></form>
+    <div class="row"><button type="button" id="mem-interview" class="on">Get to know me</button>
+      <button type="button" id="mem-close">Close</button></div>
+  </section></div>
 
   <footer class="bottom">
     <div class="controls">
@@ -206,6 +229,7 @@
       <button id="b-gaming" data-cmd="/gaming">Gaming</button>
       <button data-cmd="/unload">Free GPU</button>
       <button data-cmd="/briefing">Briefing</button>
+      <button id="b-memory" title="What JARVIS knows about you">Memory</button>
       <button id="b-stop" class="warn hidden">■ Stop</button>
       <button id="b-kill" class="warn">Shut down</button>
     </div>
@@ -346,6 +370,7 @@ function connect() {
       case "user_cancel": userCancel(); break;
       case "reply": msg("jarvis", "JARVIS", e.text, true); break;
       case "notice": notice(e.text); break;
+      case "facts": showFacts(e.facts || []); break;
       case "tool": tool(e); break;
       case "confirm": confirmCard(e); break;
       case "flags": applyFlags(e); break;
@@ -407,6 +432,30 @@ document.addEventListener("drop", (ev) => {
   if (ev.dataTransfer?.files?.length) addFiles(ev.dataTransfer.files);
 });
 $("viewer").onclick = () => { $("viewer").style.display = "none"; };
+
+/* ---------- memory panel: what JARVIS knows about you ---------- */
+function memSend(action, extra = {}) { if (ws && ws.readyState === 1) ws.send(JSON.stringify({ action, ...extra })); }
+function showFacts(facts) {
+  const list = $("mem-list"); list.innerHTML = ""; $("mem-count").textContent = facts.length ? facts.length + " FACTS" : "";
+  if (!facts.length) { list.innerHTML = '<div class="empty">Nothing yet. Teach me below, or press "Get to know me".</div>'; return; }
+  const groups = {};
+  for (const f of facts) { const m = f.fact.match(/^\[(\w+)\]\s*(.*)$/); const cat = m ? m[1] : "other";
+                           (groups[cat] = groups[cat] || []).push({ id: f.id, text: m ? m[2] : f.fact }); }
+  for (const [cat, items] of Object.entries(groups)) {
+    const h = document.createElement("h5"); h.textContent = cat; list.appendChild(h);
+    for (const it of items) {
+      const d = document.createElement("div"); d.className = "fact";
+      d.innerHTML = '<span></span><b title="Forget this">×</b>'; d.firstChild.textContent = it.text;
+      d.lastChild.onclick = () => memSend("forget", { id: it.id }); list.appendChild(d);
+    }
+  }
+}
+$("b-memory").onclick = () => { $("mem").classList.add("open"); memSend("facts"); };
+$("mem-close").onclick = () => $("mem").classList.remove("open");
+$("mem").onclick = (ev) => { if (ev.target.id === "mem") $("mem").classList.remove("open"); };
+$("mem-f").onsubmit = (ev) => { ev.preventDefault(); const v = $("mem-t").value.trim(); if (!v) return;
+                                memSend("teach", { text: v }); $("mem-t").value = ""; };
+$("mem-interview").onclick = () => { $("mem").classList.remove("open"); send("text", "Get to know me"); };
 document.querySelectorAll("[data-cmd]").forEach((b) => b.onclick = () => send("command", b.dataset.cmd));
 $("b-sleep").onclick = () => send("command", flags.sleeping ? "/wakeup" : "/sleep");
 $("b-mute").onclick = () => send("command", flags.mute ? "/unmute" : "/mute");

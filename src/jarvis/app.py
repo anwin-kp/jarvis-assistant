@@ -105,6 +105,8 @@ def build(dry_run: bool = False):
     from jarvis.integrations import home_assistant
 
     home_assistant.register(reg, cfg.get("home_assistant") or {})
+    if hasattr(brain, "share_personal"):
+        brain.share_personal = bool((cfg.get("memory") or {}).get("share_with_cloud", False))
     orch = Orchestrator(brain, reg, memory, load_persona(cfg.get("persona")), cfg.get("history_turns", 8),
                         cfg.get("idle_summary_minutes", 10))
     if (cfg.get("location") or {}).get("in_prompt", True):
@@ -113,4 +115,5 @@ def build(dry_run: bool = False):
         from jarvis.llm.semantic import SemanticGroups
 
         orch.semantic = SemanticGroups(reg, embed)
+    memory_tools.register_interview(reg, orch)
     return cfg, orch, brain, reg, memory, roots

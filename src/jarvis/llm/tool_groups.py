@@ -50,6 +50,7 @@ KEYWORDS: dict[str, list[str]] = {
     "browser": ["website", "browser", "web page", "webpage", "site", "click", "fill", "form", "sign up", "log in",
                 "order", "book a", "on amazon", "on flipkart", "checkout"],
     "memory": ["remember", "forget", "recall", "my name", "my favorite", "do you know", "facts", "about me"],
+    "interview": ["know me", "get to know", "interview me", "about myself", "learn about me", "ask me about"],
 }
 
 def add_keywords(group: str, words: list[str]) -> None:
