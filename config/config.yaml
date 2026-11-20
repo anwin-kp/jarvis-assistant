@@ -11,6 +11,17 @@ llm:
 
 history_turns: 8         # how many previous exchanges the model sees
 
+voice:
+  enabled: true          # false = text only (or start with --text)
+  stt_model: small       # tiny | base | small | medium | large-v3 (bigger = more accurate, slower)
+  stt_device: cuda       # cuda | cpu (falls back to cpu automatically)
+  stt_compute_type: float16
+  language: null         # null = auto-detect, or e.g. "en", "hi", "ml"
+  silence_ms: 800        # stop recording after this much silence
+  max_seconds: 15
+  tts_rate: 185          # speaking speed
+  tts_voice: null        # part of a Windows voice name, e.g. "David" or "Zira"
+
 security:
   # Folders JARVIS may read/search. Known-folder names are resolved via Windows
   # (handles OneDrive redirection); you can also add full paths.

@@ -19,6 +19,7 @@ HELP = """Commands:
   /facts    list what JARVIS remembers about you
   /tools    list available tools
   /unload   free the GPU memory now (e.g. before gaming)
+  /mute     stop speaking replies (/unmute to resume)
   /quit     exit"""
 
 
@@ -46,6 +47,26 @@ def show_tool_call(name: str, args: dict, status: str) -> None:
     print(f"{DIM}  · {name}({arg_text}) {STATUS_MARK.get(status, status)}{RESET}")
 
 
+class Voice:
+    """Microphone + speech recognition + speech output."""
+
+    def __init__(self, vcfg: dict):
+        from jarvis.stt.whisper_stt import WhisperSTT
+        from jarvis.tts.sapi_tts import SapiTTS
+
+        self.cfg = vcfg
+        self.stt = WhisperSTT(vcfg.get("stt_model", "small"), vcfg.get("stt_device", "cuda"),
+                              vcfg.get("stt_compute_type", "float16"), download_root=str(DATA / "models"))
+        self.tts = SapiTTS(vcfg.get("tts_rate", 185), vcfg.get("tts_voice"))
+
+    def listen(self) -> str:
+        from jarvis.audio.mic import record_until_silence
+
+        audio = record_until_silence(self.cfg.get("max_seconds", 15), self.cfg.get("silence_ms", 800))
+        text, _ = self.stt.transcribe(audio, self.cfg.get("language"))
+        return text
+
+
 def setup_logging(debug: bool) -> None:
     logger.remove()
     logger.add(DATA / "logs" / "jarvis.log", rotation="5 MB", retention=5, level="DEBUG", encoding="utf-8")
@@ -57,6 +78,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(prog="jarvis")
     parser.add_argument("--debug", action="store_true", help="print debug logs to the console")
     parser.add_argument("--dry-run", action="store_true", help="don't actually run non-safe tools")
+    parser.add_argument("--text", action="store_true", help="text only (no microphone or speech)")
     args = parser.parse_args()
 
     if sys.platform == "win32":
@@ -82,13 +104,45 @@ def main() -> None:
     if args.dry_run:
         print(f"{YELLOW}Dry-run mode: actions that change things will only be simulated.{RESET}")
 
+    vcfg = cfg.get("voice", {})
+    voice = None
+    if vcfg.get("enabled", True) and not args.text:
+        print(f"{DIM}Loading speech recognition…{RESET}", end="\r", flush=True)
+        try:
+            voice = Voice(vcfg)
+            print(f"{DIM}Voice ready (speech recognition on {voice.stt.device}). "
+                  f"Press Enter on an empty line to talk, or type.{RESET}")
+            voice.tts.speak(f"{name} online.")
+        except Exception as e:
+            logger.exception("Voice init failed")
+            print(f"{YELLOW}Voice unavailable ({e}); continuing in text mode.{RESET}")
+            voice = None
+    speak = voice is not None
+
     while True:
         try:
-            text = input("\nYou: ").strip().lstrip("﻿")  # PowerShell pipes add a BOM
+            prompt = "\nYou (Enter = talk): " if voice else "\nYou: "
+            text = input(prompt).strip().lstrip("﻿")  # PowerShell pipes add a BOM
         except (EOFError, KeyboardInterrupt):
             print()
             break
+        if not text and voice:
+            print(f"{CYAN}🎙  listening…{RESET}", flush=True)
+            try:
+                text = voice.listen()
+            except Exception as e:
+                logger.exception("Listening failed")
+                print(f"{RED}Microphone problem: {e}{RESET}")
+                continue
+            if not text:
+                print(f"{DIM}(didn't catch that){RESET}")
+                continue
+            print(f"You said: {text}")
         if not text:
+            continue
+        if text.lower() in ("/mute", "/unmute") and voice:
+            speak = text.lower() == "/unmute"
+            print(f"{DIM}Speech {'on' if speak else 'off'}.{RESET}")
             continue
         if text.startswith("/"):
             cmd = text.lower()
@@ -126,6 +180,11 @@ def main() -> None:
             continue
         elapsed = time.perf_counter() - start
         print(f"{CYAN}{name}:{RESET} {reply}  {DIM}({elapsed:.1f}s){RESET}")
+        if speak:
+            try:
+                voice.tts.speak(reply)
+            except Exception:
+                logger.exception("TTS failed")
 
     print(f"{DIM}Goodbye.{RESET}")
 
