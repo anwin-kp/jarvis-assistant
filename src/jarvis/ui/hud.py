@@ -22,6 +22,7 @@ class Hud:
         self.on_input = None  # called immediately for buttons and typed messages: they cut in on JARVIS talking
         self.memory_api = None  # (action, msg) -> facts list: the Memory panel (list / forget / teach)
         self.port = port
+        self.mode = "window"  # hud.mode: window (Edge app window) | overlay (transparent desktop overlay)
         self.token = secrets.token_urlsafe(24)
         self.clients: set = set()
         self.history: deque = deque(maxlen=150)
@@ -153,7 +154,23 @@ class Hud:
             pass
 
     def open(self) -> None:
-        """Open as a standalone app window (Edge --app), falling back to the default browser."""
+        """Open the HUD: the transparent desktop overlay (hud.mode: overlay, needs PySide6) or a standalone
+        Edge app window, falling back to the default browser."""
+        if self.mode == "overlay":
+            from jarvis.ui.overlay import available
+
+            if available():
+                import sys
+
+                pyw = Path(sys.executable).with_name("pythonw.exe")
+                import os
+
+                subprocess.Popen([str(pyw if pyw.exists() else sys.executable), "-m", "jarvis.ui.overlay", self.url,
+                                  str(os.getpid())],
+                                 cwd=str(Path(__file__).resolve().parents[3]),
+                                 creationflags=subprocess.CREATE_NO_WINDOW)
+                return
+            logger.warning("Overlay needs PySide6 (pip install PySide6-Essentials PySide6-WebEngine); using a window")
         try:
             # Own Edge profile: a separate process that kill-jarvis.ps1 can close without touching your browser.
             profile = Path(__file__).resolve().parents[3] / "data" / "hud-profile"

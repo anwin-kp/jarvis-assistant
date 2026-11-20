@@ -159,6 +159,30 @@
             cursor:zoom-out; }
   #viewer img { max-width:92vw; max-height:92vh; border:1px solid var(--line2); }
   ::-webkit-scrollbar { width:6px; } ::-webkit-scrollbar-thumb { background:var(--line2); }
+  /* ---------- desktop overlay mode (?overlay=1, jarvis/ui/overlay.py): see-through, reactor in a corner ---------- */
+  body.overlay, body.overlay .app { background:transparent !important; }
+  body.overlay #hex, body.overlay .top, body.overlay .left, body.overlay .wave, body.overlay .status .m { display:none; }
+  body.overlay .app { display:block; padding:0; height:100%; }
+  body.overlay .center { position:fixed; right:14px; bottom:10px; width:230px; height:auto; }
+  body.overlay #reactor { width:210px; }
+  body.overlay .status { margin-top:-10px; }
+  body.overlay .status .s { font-size:11px; letter-spacing:.45em; }
+  body.overlay .right { position:fixed; right:250px; bottom:22px; width:min(460px, 42vw); height:72vh; background:transparent;
+                        border:0; box-shadow:none; clip-path:none; contain:none; }
+  body.overlay .right::before, body.overlay .right::after, body.overlay .right .ptitle { display:none; }
+  body.overlay #log { justify-content:flex-end; overflow:hidden; padding:0 4px; }
+  body.overlay .msg { background:rgba(4,16,30,.82); backdrop-filter:blur(8px); box-shadow:0 4px 24px rgba(0,0,0,.35); }
+  body.overlay:not(.ov-active) .msg { animation:rise .3s ease, ovfade 1.2s ease 16s forwards; }
+  body.overlay:not(.ov-active) .notice, body.overlay:not(.ov-active) .composer,
+  body.overlay:not(.ov-active) .bottom { display:none; }
+  @keyframes ovfade { to { opacity:0; visibility:hidden; } }
+  body.overlay.ov-active .right { background:rgba(2,8,16,.72); backdrop-filter:blur(10px); border:1px solid var(--line); }
+  body.overlay.ov-active #log { overflow:auto; padding:10px 14px; }
+  body.overlay.ov-active .bottom { position:fixed; right:250px; top:16px; width:auto; padding:10px; background:rgba(2,8,16,.72);
+                                   backdrop-filter:blur(10px); border:1px solid var(--line); }
+  body.overlay .ov-hint { position:fixed; right:22px; bottom:262px; font:500 9px var(--hdr); letter-spacing:.25em;
+                          color:var(--dim); text-shadow:0 0 6px #000; opacity:.8; }
+  body:not(.overlay) .ov-hint { display:none; }
 
   @media (max-width: 1150px) {
     .app { grid-template-columns:1fr 380px; grid-template-areas:"top top" "center right" "bottom right"; }
@@ -238,6 +262,21 @@
 
 <script>
 const token = new URLSearchParams(location.search).get("token");
+/* ---------- desktop overlay mode: the Qt window watches document.title to switch click-through on/off ---------- */
+const OVERLAY = new URLSearchParams(location.search).get("overlay") === "1";
+let ovSeq = 0;
+function overlayRequest(mode) { if (OVERLAY) document.title = `JARVIS:${++ovSeq}:${mode}`; }
+window.overlayActive = (on) => {
+  document.body.classList.toggle("ov-active", on);
+  if (on) setTimeout(() => $("t").focus(), 60); else document.activeElement && document.activeElement.blur();
+};
+if (OVERLAY) {
+  document.body.classList.add("overlay");
+  document.documentElement.style.background = "transparent";  // <html> has the dark page colour too
+  const hint = document.createElement("div"); hint.className = "ov-hint"; hint.textContent = "CTRL+ALT+J";
+  document.body.appendChild(hint);
+  document.addEventListener("keydown", (ev) => { if (ev.key === "Escape") overlayRequest("passive"); });
+}
 const $ = (id) => document.getElementById(id);
 let ws, state = "idle", flags = {}, level = 0, levelTarget = 0, pendingConfirm = null, count = 0;
 
@@ -312,7 +351,8 @@ function confirmCard(e) {
   d.append(h, pre, yes, no); $("log").appendChild(d); $("log").scrollTop = 1e9; pendingConfirm = d;
 }
 function answer(card, ok, risk) {
-  send(ok ? "approve" : "deny");  // an answer, never a chat message: a late/double click can't cut in
+  send(ok ? "approve" : "deny");
+  overlayRequest("passive");  // an answer, never a chat message: a late/double click can't cut in
   card.querySelectorAll("button").forEach((b) => b.remove());
   const r = document.createElement("i"); r.textContent = ok ? "APPROVED" : "DENIED"; card.appendChild(r); pendingConfirm = null;
 }
@@ -372,7 +412,7 @@ function connect() {
       case "notice": notice(e.text); break;
       case "facts": showFacts(e.facts || []); break;
       case "tool": tool(e); break;
-      case "confirm": confirmCard(e); break;
+      case "confirm": confirmCard(e); overlayRequest("active"); break;  // approvals need clicks
       case "flags": applyFlags(e); break;
       case "stats": stats(e); break;
       case "timing": $("timing").textContent = (e.path === "instant" ? "⚡ INSTANT · " : "") +
@@ -402,6 +442,7 @@ async function submit() {
   const v = $("t").value.trim();
   if (!v && !pending.length) return;
   $("t").value = ""; grow();
+  overlayRequest("passive");  // overlay: back to click-through, the reply floats in
   if (pending.length) {
     const batch = pending; pending = []; $("chips").innerHTML = "";
     await Promise.all(batch.map((p) => p.done));

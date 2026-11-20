@@ -252,6 +252,7 @@ class App:
                 from jarvis.ui.hud import Hud
 
                 self.hud = Hud(self.q, hcfg.get("port", 8765))
+                self.hud.mode = hcfg.get("mode", "window")
                 self.hud.on_stop = self.interrupt
                 self.hud.on_input = self.preempt
                 self.hud.memory_api = self._memory_api
