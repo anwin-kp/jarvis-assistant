@@ -23,6 +23,16 @@ def is_kill_command(text: str, after_wake: bool = False) -> bool:
     return any(p.match(t) for p in _KILL) or (after_wake and bool(_KILL_AFTER_WAKE.match(t)))
 
 
+_SLEEP = re.compile(
+    r"^\W*(hey\W+)?(jarvis\W*)?(please\W+)?(go\W+to\W+sleep|stop\W+listening|sleep(\W+mode)?|mute\W+(the\W+)?mic(rophone)?)"
+    r"(\W+jarvis)?\W*$", re.I)
+
+
+def is_sleep_command(text: str) -> bool:
+    """'Jarvis, go to sleep' / 'stop listening': pause always-listening until 'Hey Jarvis'."""
+    return bool(_SLEEP.match(text.strip()))
+
+
 def run_kill_switch() -> None:
     """Run kill-jarvis.cmd in its own window. It force-stops this process, so this never returns normally."""
     subprocess.Popen(["cmd", "/c", str(KILL_SCRIPT)], creationflags=subprocess.CREATE_NEW_CONSOLE,

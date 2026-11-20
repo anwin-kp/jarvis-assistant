@@ -21,13 +21,16 @@ class Hud:
         self.token = secrets.token_urlsafe(24)
         self.clients: set = set()
         self.history: deque = deque(maxlen=150)
+        self.latest: dict = {}  # last state/flags/stats, replayed to new windows
         self.loop: asyncio.AbstractEventLoop | None = None
         self.url = f"http://127.0.0.1:{port}/?token={self.token}"
 
     # ------------------------------------------------------------ publishing (any thread)
     def publish(self, type_: str, **data) -> None:
         event = {"type": type_, **data}
-        if type_ not in ("state",):
+        if type_ in ("state", "flags", "stats"):
+            self.latest[type_] = event
+        elif type_ != "level":
             self.history.append(event)
         if self.loop:
             self.loop.call_soon_threadsafe(self._broadcast, event)
@@ -63,7 +66,7 @@ class Hud:
                 return
             await ws.accept()
             self.clients.add(ws)
-            for event in list(self.history):
+            for event in [*self.history, *self.latest.values()]:
                 await ws.send_json(event)
             try:
                 while True:
