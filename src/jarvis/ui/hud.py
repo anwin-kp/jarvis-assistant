@@ -154,10 +154,28 @@ class Hud:
         try:
             # Own Edge profile: a separate process that kill-jarvis.ps1 can close without touching your browser.
             profile = Path(__file__).resolve().parents[3] / "data" / "hud-profile"
-            subprocess.Popen(["cmd", "/c", "start", "", "msedge", f"--app={self.url}", "--window-size=1100,760",
+            subprocess.Popen(["cmd", "/c", "start", "", "msedge", f"--app={self.url}", "--start-maximized",
                               f"--user-data-dir={profile}", "--no-first-run",
                               # no extensions (Edge syncs yours into new profiles: overlays like Blackbox)
                               "--disable-extensions", "--disable-sync"],
                              creationflags=subprocess.CREATE_NO_WINDOW)
+            # Edge restores the size it saved last time, overriding --start-maximized: maximize the window itself
+            threading.Thread(target=maximize_window, args=("J.A.R.V.I.S.",), daemon=True).start()
         except Exception:
             webbrowser.open(self.url)
+
+
+def maximize_window(title: str, wait: float = 15) -> bool:
+    import time
+
+    import win32con
+    import win32gui
+
+    end = time.time() + wait
+    while time.time() < end:
+        hwnd = win32gui.FindWindow(None, title)
+        if hwnd and win32gui.IsWindowVisible(hwnd):
+            win32gui.ShowWindow(hwnd, win32con.SW_MAXIMIZE)
+            return True
+        time.sleep(0.3)
+    return False
