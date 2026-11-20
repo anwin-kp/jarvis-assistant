@@ -28,6 +28,14 @@ KEYWORDS: dict[str, list[str]] = {
         "light", "lamp", "fan", "switch", "plug", "tv", "ac", "air conditioner", "thermostat", "scene",
         "smart home", "device", "bedroom", "living room", "kitchen",
     ],
+    "media": ["play", "pause", "resume", "song", "music", "track", "next", "previous", "skip", "youtube",
+              "spotify", "video", "playlist", "album", "listen to"],
+    "windows": ["window", "switch to", "focus", "minimize", "maximise", "maximize", "snap", "desktop",
+                "close the", "bring up", "go to"],
+    "clipboard": ["clipboard", "copied", "copy", "paste", "type ", "write this", "translate", "summarize this"],
+    "pc": ["dark mode", "light mode", "theme", "wifi", "wi-fi", "bluetooth", "screenshot", "screen shot",
+           "recycle bin", "settings", "airplane"],
+    "notes": ["note", "notes", "journal", "jot", "write down", "diary"],
     "memory": ["remember", "forget", "recall", "my name", "my favorite", "do you know", "facts", "about me"],
 }
 

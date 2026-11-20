@@ -106,6 +106,8 @@ class App:
         self.speech_on = False
         self.listen_mode = "push"  # always | wake_word | push
         self.sleeping = False  # always-mode paused until 'Hey Jarvis'
+        self._speech_q: queue.Queue = queue.Queue()
+        self._streamed: list[str] = []
         self.args = args
 
         gcfg = self.cfg.get("gaming", {})
@@ -153,6 +155,7 @@ class App:
             print(f"{DIM}Loading voice…{RESET}", end="\r", flush=True)
             try:
                 self.voice = Voice(vcfg)
+                threading.Thread(target=self._speaker_loop, daemon=True, name="speaker").start()
                 self.speech_on = True
                 mode = vcfg.get("listen_mode", "always")
                 if vcfg.get("wake_word", True) or mode == "wake_word":
@@ -289,18 +292,44 @@ class App:
             self.tray.set_state(s)
         self._publish("state", state=s)
 
+    def _speaker_loop(self) -> None:
+        while True:
+            text = self._speech_q.get()
+            try:
+                if self.speech_on:
+                    self.voice.tts.speak(text)
+            except Exception:
+                logger.exception("TTS failed")
+            finally:
+                self._speech_q.task_done()
+
+    def _speak_async(self, sentence: str) -> None:
+        """Streaming: speak each sentence as soon as the model finishes writing it."""
+        self._streamed.append(sentence)
+        self._state("speaking")
+        self._speech_q.put(sentence)
+
     def _say(self, text: str) -> None:
         if self.voice and self.speech_on:
             was_busy = self.busy.is_set()
             self.busy.set()  # pause the microphone while speaking, so JARVIS never hears itself
             try:
-                self.voice.tts.speak(text)
-            except Exception:
-                logger.exception("TTS failed")
+                if text.strip():
+                    self._speech_q.put(text)
+                self._speech_q.join()
             finally:
                 if not was_busy:
                     time.sleep(0.4)  # let the echo die down
                     self.busy.clear()
+
+    def _finish_speech(self, reply: str) -> None:
+        """Speak whatever part of the reply wasn't already streamed, then wait until speech ends."""
+        rest = reply
+        for s in self._streamed:
+            rest = rest.replace(s, "", 1)
+        self._streamed = []
+        rest = rest.strip()
+        self._say(rest if len(rest.strip(" .,!?")) > 1 else "")
 
     def _gaming_changed(self, active: bool, reason: str) -> None:
         msg = f"Gaming mode {'on' if active else 'off'} ({reason})."
@@ -416,7 +445,8 @@ class App:
         start = time.perf_counter()
         print(f"{DIM}thinking…{RESET}", end="\r", flush=True)
         try:
-            reply = self.orch.handle(text, self.confirm)
+            stream = self._speak_async if (self.voice and self.speech_on) else None
+            reply = self.orch.handle(text, self.confirm, on_sentence=stream)
         except Exception as e:
             logger.exception("Turn failed")
             print(f"{RED}Something went wrong: {e}. Details in data/logs/jarvis.log{RESET}")
@@ -427,7 +457,7 @@ class App:
         print(f"{CYAN}{self.name}:{RESET} {reply}  {DIM}({time.perf_counter() - start:.1f}s{where}){RESET}")
         self._publish("reply", text=reply)
         self._state("speaking")
-        self._say(reply)
+        self._finish_speech(reply)
         self._state("idle")
         return True
 

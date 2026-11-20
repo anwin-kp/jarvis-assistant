@@ -80,7 +80,7 @@ class Orchestrator:
     def reset(self) -> None:
         self.history.clear()
 
-    def handle(self, text: str, confirm: ConfirmFn) -> str:
+    def handle(self, text: str, confirm: ConfirmFn, on_sentence=None) -> str:
         if self.history and time.monotonic() - self.last_activity > self.idle_seconds:
             self.summarize_session()
         self.last_activity = time.monotonic()
@@ -88,7 +88,8 @@ class Orchestrator:
         user_msg = {"role": "user", "content": f"[Local time: {now}] {text}"}
         messages = [{"role": "system", "content": self.system_prompt()}, *self.history, user_msg]
         tools = self.reg.schemas(pick_groups(text))
-        reply = strip_filler(self.brain.respond(messages, tools, confirm) or "(no reply)")
+        kw = {"on_sentence": on_sentence} if on_sentence else {}
+        reply = strip_filler(self.brain.respond(messages, tools, confirm, **kw) or "(no reply)")
 
         # Safety net: small models sometimes say "remembered" without calling the tool.
         fact = explicit_remember_request(text)

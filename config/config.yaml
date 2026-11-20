@@ -94,6 +94,9 @@ security:
     vs code: code
     spotify: "spotify:"
 
+notes:
+  folder: null           # null = Documents\JARVIS Notes
+
 web:
   rss_feeds:
     - https://feeds.bbci.co.uk/news/world/rss.xml
