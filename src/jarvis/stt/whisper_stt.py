@@ -27,14 +27,22 @@ class WhisperSTT:
             _add_cuda_dlls()
         from faster_whisper import WhisperModel
 
-        try:
-            self.model = WhisperModel(model, device=device, compute_type=compute_type, download_root=download_root)
-            self.device = device
-            self._warmup()
-        except Exception as e:
-            logger.warning("Whisper on {} failed ({}); using CPU", device, e)
+        self.model = None
+        if device == "cuda":
+            # some modes (e.g. int8 on new GPU generations) aren't supported: try float16 before the CPU
+            for ct in dict.fromkeys([compute_type, "float16"]):
+                try:
+                    self.model = WhisperModel(model, device="cuda", compute_type=ct, download_root=download_root)
+                    self._warmup()
+                    self.device, self.compute_type = "cuda", ct
+                    break
+                except Exception as e:
+                    logger.warning("Whisper on cuda/{} failed ({})", ct, e)
+                    self.model = None
+        if self.model is None:
+            logger.warning("Whisper using the CPU (slower)")
             self.model = WhisperModel(model, device="cpu", compute_type="int8", download_root=download_root)
-            self.device = "cpu"
+            self.device, self.compute_type = "cpu", "int8"
         logger.info("Whisper {} loaded on {}", model, self.device)
 
     def _warmup(self) -> None:

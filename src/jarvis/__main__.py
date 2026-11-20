@@ -292,10 +292,15 @@ class App:
                 self._state("ready")
                 audio = record_until_silence(v.get("max_seconds", 15), v.get("silence_ms", 800), start_timeout=None,
                                              stop=self.busy, on_level=self._level,
-                                             min_speech_ms=v.get("min_speech_ms", 400))
+                                             min_speech_ms=v.get("min_speech_ms", 400),
+                                             on_start=lambda: self._state("listening"))
                 if audio.size and not self.busy.is_set():
                     self.busy.set()
+                    self._state("thinking")
+                    self._publish("user_pending")  # bubble appears now, text fills in after recognition
                     self.q.put(("audio", audio))
+                elif not self.busy.is_set():
+                    self._state("ready")  # it was only noise
             except Exception:
                 logger.exception("Listener error")
                 time.sleep(2)
@@ -550,6 +555,7 @@ class App:
         text = self.voice.transcribe(audio)
         self._stt_time = time.perf_counter() - t
         if not text:
+            self._publish("user_cancel")
             self._state("idle")
             return False
         print(f"\nYou said: {text}")
