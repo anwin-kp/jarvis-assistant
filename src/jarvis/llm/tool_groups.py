@@ -36,6 +36,9 @@ KEYWORDS: dict[str, list[str]] = {
     "pc": ["dark mode", "light mode", "theme", "wifi", "wi-fi", "bluetooth", "screenshot", "screen shot",
            "recycle bin", "settings", "airplane"],
     "notes": ["note", "notes", "journal", "jot", "write down", "diary"],
+    "screen": ["screen", "error", "this window", "what am i looking at", "read this", "on my monitor"],
+    "docs": ["document", "documents", "pdf", "agreement", "contract", "invoice", "report", "resume", "cv",
+             "according to", "my files", "policy", "manual", "in my notes"],
     "memory": ["remember", "forget", "recall", "my name", "my favorite", "do you know", "facts", "about me"],
 }
 

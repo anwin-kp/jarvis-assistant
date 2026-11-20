@@ -195,6 +195,8 @@ class App:
 
         self.gaming.start_watcher()
         self.reminders.start()
+        if getattr(self.reg, "doc_index", None) and self.cfg.get("documents", {}).get("index_on_start", True):
+            self.reg.doc_index.start_background()
         if self.proactive:
             self.proactive.start()
         if not self.args.background:

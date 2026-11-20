@@ -29,6 +29,20 @@ def build(dry_run: bool = False):
     window_tools.register(reg)
     clipboard_tools.register(reg)
     pc_tools.register(reg)
+    from jarvis.tools import screen_tools
+
+    screen_tools.register(reg)
+    dcfg = cfg.get("documents", {})
+    if dcfg.get("enabled", True):
+        import ollama
+
+        from jarvis.docs.index import DocIndex, ollama_embedder
+        from jarvis.docs.index import register as register_docs
+
+        folders = [file_tools.resolve_root(f) for f in dcfg.get("folders", ["documents"])]
+        embed = ollama_embedder(ollama.Client(host=cfg["llm"]["ollama_host"]), dcfg.get("model", "nomic-embed-text"))
+        reg.doc_index = DocIndex(memory, [f for f in folders if f.exists()], embed)
+        register_docs(reg, reg.doc_index)
     notes_dir = cfg.get("notes", {}).get("folder") or str(file_tools.resolve_root("documents") / "JARVIS Notes")
     notes_tools.register(reg, Path(notes_dir).expanduser())
     memory_tools.register(reg, memory)
