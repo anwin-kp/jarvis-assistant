@@ -18,6 +18,7 @@ URL_FILE = Path(__file__).resolve().parents[3] / "data" / "hud-url.txt"
 class Hud:
     def __init__(self, app_queue, port: int = 8765):
         self.q = app_queue
+        self.on_stop = None  # called immediately (not queued) when you press Stop / type "stop" while JARVIS talks
         self.port = port
         self.token = secrets.token_urlsafe(24)
         self.clients: set = set()
@@ -73,7 +74,11 @@ class Hud:
                 while True:
                     msg = await ws.receive_json()
                     text = str(msg.get("text", ""))[:2000]
-                    if msg.get("action") in ("text", "command"):
+                    if msg.get("action") == "stop" or (self.on_stop and msg.get("action") == "text"
+                                                        and self.on_stop(text)):
+                        if msg.get("action") == "stop" and self.on_stop:
+                            self.on_stop("stop")
+                    elif msg.get("action") in ("text", "command"):
                         self.q.put(("text", text))
                     elif msg.get("action") == "talk":
                         self.q.put(("text", ""))
@@ -113,7 +118,9 @@ class Hud:
             # Own Edge profile: a separate process that kill-jarvis.ps1 can close without touching your browser.
             profile = Path(__file__).resolve().parents[3] / "data" / "hud-profile"
             subprocess.Popen(["cmd", "/c", "start", "", "msedge", f"--app={self.url}", "--window-size=1100,760",
-                              f"--user-data-dir={profile}", "--no-first-run"],
+                              f"--user-data-dir={profile}", "--no-first-run",
+                              # no extensions (Edge syncs yours into new profiles: overlays like Blackbox)
+                              "--disable-extensions", "--disable-sync"],
                              creationflags=subprocess.CREATE_NO_WINDOW)
         except Exception:
             webbrowser.open(self.url)

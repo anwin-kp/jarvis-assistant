@@ -33,6 +33,15 @@ def is_sleep_command(text: str) -> bool:
     return bool(_SLEEP.match(text.strip()))
 
 
+_STOP = re.compile(r"^\W*(?:(?:hey\W+)?jarvis\W*)?(?:ok(?:ay)?\W+)?(stop|stop it|stop talking|cancel|enough|"
+                   r"shut up|be quiet|quiet|silence|that's enough|thats enough|never ?mind|wait)(\W+jarvis)?\W*$", re.I)
+
+
+def is_stop_command(text: str) -> bool:
+    """'stop' / 'cancel' / 'enough' while JARVIS is talking = stop talking (not 'pause the music')."""
+    return bool(_STOP.match(text.strip()))
+
+
 def run_kill_switch(visible: bool = True) -> None:
     """Run the kill switch (in its own window, or silently). It force-stops this process."""
     if visible:

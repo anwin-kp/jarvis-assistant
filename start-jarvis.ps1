@@ -53,7 +53,7 @@ if ($running.Count -gt 0) {
     if (Test-Path $HudUrl) {  # bring the HUD back
         $url = (Get-Content $HudUrl -Raw).Trim()
         $prof = Join-Path $Root 'data\hud-profile'
-        Start-Process msedge -ArgumentList "--app=$url", '--window-size=1440,900', "--user-data-dir=`"$prof`"", '--no-first-run'
+        Start-Process msedge -ArgumentList "--app=$url", '--window-size=1440,900', "--user-data-dir=`"$prof`"", '--no-first-run', '--disable-extensions', '--disable-sync'
         Write-Ok 'HUD opened'
     }
     Write-Host ''

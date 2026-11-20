@@ -1,6 +1,7 @@
 """Local LLM brain using Ollama's tool calling."""
 
 import re
+import threading
 
 import ollama
 from loguru import logger
@@ -66,6 +67,7 @@ class OllamaBrain:
         self.keep_alive = cfg.get("keep_alive", "10m")
         self.options = {"num_ctx": cfg.get("num_ctx", 8192), "temperature": cfg.get("temperature", 0.3)}
         self.max_steps = cfg.get("max_steps", 6)
+        self.cancel = threading.Event()  # set when you interrupt: stop generating
 
     def check(self) -> None:
         """Raise BrainUnavailable with a helpful message if Ollama or the model is missing."""
@@ -102,6 +104,8 @@ class OllamaBrain:
         stream = SentenceStream(on_sentence, lambda: bool(self.last_tool_calls))
         for chunk in self.client.chat(model=self.model, messages=msgs, tools=tools or None, think=think,
                                       keep_alive=self.keep_alive, options=self.options, stream=True):
+            if self.cancel.is_set():
+                break
             m = chunk.message
             if m.tool_calls:
                 calls.extend(m.tool_calls)
@@ -123,6 +127,7 @@ class OllamaBrain:
         """messages: plain [{"role", "content"}] dicts. Tool calls live only inside this turn."""
         msgs = list(messages)
         self.last_tool_calls: list[str] = []
+        self.cancel.clear()
         nudged = False
         for step in range(self.max_steps):
             think_now = self.think or nudged or think  # think harder on complex requests / the retry

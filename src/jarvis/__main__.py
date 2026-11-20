@@ -13,7 +13,7 @@ from datetime import datetime
 from loguru import logger
 
 from jarvis.app import build
-from jarvis.core.commands import is_kill_command, is_sleep_command, run_kill_switch
+from jarvis.core.commands import is_kill_command, is_sleep_command, is_stop_command, run_kill_switch
 from jarvis.core.config import DATA, ensure_data_dirs, list_personas, load_persona
 from jarvis.core.fast_intents import FastIntents
 from jarvis.core.proactive import Proactive
@@ -62,9 +62,23 @@ class Voice:
         from jarvis.tts.sapi_tts import SapiTTS
 
         self.cfg = vcfg
-        self.stt = WhisperSTT(vcfg.get("stt_model", "small"), vcfg.get("stt_device", "cuda"),
-                              vcfg.get("stt_compute_type", "float16"), download_root=str(DATA / "models"),
-                              vocabulary=vcfg.get("vocabulary"), languages=vcfg.get("languages"))
+        self.local_stt = WhisperSTT(vcfg.get("stt_model", "small"), vcfg.get("stt_device", "cuda"),
+                                    vcfg.get("stt_compute_type", "float16"), download_root=str(DATA / "models"),
+                                    vocabulary=vcfg.get("vocabulary"), languages=vcfg.get("languages"))
+        self.stt = self.local_stt
+        if vcfg.get("stt_engine", "groq") == "groq":
+            from jarvis.core.config import get_secret
+
+            if key := get_secret("groq_api_key"):
+                from jarvis.stt.groq_stt import GroqSTT
+
+                self.stt = GroqSTT(key, vcfg.get("groq_stt_model", "whisper-large-v3-turbo"),
+                                   vcfg.get("vocabulary"), vcfg.get("languages"))
+            else:
+                logger.info("stt_engine groq needs a Groq key (set-key groq); using local Whisper")
+        self.last_engine = self.stt.device
+        self.keep_recordings = int(vcfg.get("keep_recordings", 50))
+        self.jarvis_print = None  # JARVIS's own voice fingerprint, to ignore echo when you interrupt
         self.last_lang: str | None = None
         self.voices = {k.lower(): v for k, v in (vcfg.get("voices") or {}).items()}
         self._tts_cache: dict = {}
@@ -115,16 +129,68 @@ class Voice:
     def transcribe(self, audio) -> str:
         if not audio.size or not self.is_owner(audio):
             return ""
-        text, lang = self.stt.transcribe(audio, self.cfg.get("language"))
+        try:
+            text, lang = self.stt.transcribe(audio, self.cfg.get("language"))
+            self.last_engine = self.stt.device
+        except Exception as e:  # offline / rate-limited: local Whisper
+            logger.warning("{} recognition failed ({}); using local Whisper", self.stt.device, e)
+            text, lang = self.local_stt.transcribe(audio, self.cfg.get("language"))
+            self.last_engine = self.local_stt.device
         self.last_lang = lang if text else self.last_lang
+        self._save(audio, text, lang)
         return text
 
-    def listen(self, start_timeout: float = 6) -> str:
-        from jarvis.audio.mic import record_until_silence
+    def _save(self, audio, text: str, lang: str) -> None:
+        """Keep your last N utterances locally (data/voice-log) so recognition can be measured on YOUR voice."""
+        if self.keep_recordings <= 0:
+            return
+        try:
+            import json
 
-        audio = record_until_silence(self.cfg.get("max_seconds", 15), self.cfg.get("silence_ms", 800),
-                                     start_timeout=start_timeout)
-        return self.transcribe(audio)
+            from jarvis.stt.groq_stt import to_wav
+
+            folder = DATA / "voice-log"
+            folder.mkdir(parents=True, exist_ok=True)
+            stem = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+            (folder / f"{stem}.wav").write_bytes(to_wav(audio))
+            (folder / f"{stem}.json").write_text(json.dumps({"text": text, "lang": lang, "engine": self.last_engine}),
+                                                 encoding="utf-8")
+            for old in sorted(folder.glob("*.wav"))[:-self.keep_recordings]:
+                old.unlink(missing_ok=True)
+                old.with_suffix(".json").unlink(missing_ok=True)
+        except Exception:
+            logger.debug("Could not save recording")
+
+    def build_jarvis_print(self) -> None:
+        """Fingerprint JARVIS's own voice so the interrupt detector can ignore it (echo from speakers)."""
+        try:
+            import numpy as np
+
+            from jarvis.audio.voiceid import VoiceID
+
+            vid = VoiceID(DATA / "models" / "voiceid")
+            v = getattr(self.tts, "voice", None)
+            if v is None:
+                return
+            clips = []
+            for text in ("Good evening. All systems are online.", "The weather today is clear with light winds.",
+                         "I have added that to your reminders."):
+                a = np.concatenate([c.audio_float_array for c in v.synthesize(text)])
+                rate = v.config.sample_rate
+                clips.append(np.interp(np.arange(0, len(a), rate / 16000), np.arange(len(a)), a).astype(np.float32))
+            embs = np.array([vid.embed(c) for c in clips])
+            self.jarvis_print = embs.mean(0) / np.linalg.norm(embs.mean(0))
+            self._vid = vid
+            logger.info("JARVIS voice fingerprint ready (echo rejection for interrupts)")
+        except Exception as e:
+            logger.warning("Echo rejection unavailable: {}", e)
+
+    def sounds_like_jarvis(self, audio) -> bool:
+        if self.jarvis_print is None or audio.size < 16000 * 0.6:
+            return False
+        score = float(self._vid.embed(audio) @ self.jarvis_print)
+        logger.debug("Voice fingerprint vs JARVIS: {:.2f}", score)
+        return score > self.cfg.get("echo_voice_threshold", 0.55)
 
 
 def setup_logging(debug: bool) -> None:
@@ -148,7 +214,11 @@ class App:
         self.listen_mode = "push"  # always | wake_word | push
         self.sleeping = False  # always-mode paused until 'Hey Jarvis'
         self._speech_q: queue.Queue = queue.Queue()
-        self._barged = False
+        self._barged = False  # you interrupted: drop the rest of the current reply
+        self.engine = None  # AudioEngine: the only owner of the microphone
+        self._current_tts = None  # the voice speaking right now (so interrupt stops exactly that one)
+        self._spoke_at = 0.0  # when JARVIS last finished speaking
+        self._stt_q: queue.Queue = queue.Queue()  # utterances waiting for speech recognition
         self._streamed: list[str] = []
         self.args = args
 
@@ -179,6 +249,7 @@ class App:
                 from jarvis.ui.hud import Hud
 
                 self.hud = Hud(self.q, hcfg.get("port", 8765))
+                self.hud.on_stop = self.interrupt
                 self.hud.start()
                 self._publish("state", state="booting")
                 if hcfg.get("open_on_start", True):
@@ -204,6 +275,8 @@ class App:
             try:
                 self.voice = Voice(vcfg)
                 threading.Thread(target=self._speaker_loop, daemon=True, name="speaker").start()
+                if vcfg.get("barge_in", True):
+                    threading.Thread(target=self.voice.build_jarvis_print, daemon=True, name="voiceprint").start()
                 self.speech_on = True
                 mode = vcfg.get("listen_mode", "always")
                 if vcfg.get("wake_word", True) or mode == "wake_word":
@@ -214,7 +287,7 @@ class App:
                     except Exception:
                         logger.exception("Wake word unavailable")
                 self.listen_mode = mode if mode in ("always", "push") or self.wake else "push"
-                threading.Thread(target=self._listen_loop, daemon=True, name="listen").start()
+                self._start_engine(vcfg)
                 hint = {"always": "just talk, I'm always listening (say 'Jarvis, go to sleep' to pause)",
                         "wake_word": 'say "Hey Jarvis"', "push": "press Enter to talk"}[self.listen_mode]
                 print(f"{DIM}Voice ready (speech recognition on {self.voice.stt.device}): {hint}.{RESET}")
@@ -260,6 +333,111 @@ class App:
         logger.info("JARVIS ready (pid {})", os.getpid())  # start-jarvis.ps1 waits for this line
 
     # ------------------------------------------------------------ background threads
+    @property
+    def speaking(self) -> bool:
+        return self._speech_q.unfinished_tasks > 0
+
+    def interrupt(self, text: str = "stop", force: bool = False) -> bool:
+        """Stop talking right now: HUD Stop button, 'stop' typed or said while JARVIS talks or thinks,
+        or talking over JARVIS (force). Stops the voice, the rest of the reply and the AI's generation."""
+        if not force and (not (self.speaking or self.busy.is_set()) or not is_stop_command(text)):
+            return False
+        self._barged = True
+        while True:  # drop sentences still waiting to be spoken
+            try:
+                self._speech_q.get_nowait()
+                self._speech_q.task_done()
+            except queue.Empty:
+                break
+        tts = self._current_tts  # the voice that is talking right now
+        if tts is not None and hasattr(tts, "stop"):
+            tts.stop()
+        brain = getattr(self.brain, "local", self.brain)
+        if hasattr(brain, "cancel"):
+            brain.cancel.set()
+        logger.info("Interrupted ({})", "you talked over JARVIS" if force else text)
+        return True
+
+    # ------------------------------------------------------------ audio engine (the only mic owner)
+    def _engine_mode(self) -> str:
+        if self.sleeping:
+            return "wake" if self.wake else "push"
+        return {"always": "always", "wake_word": "wake", "push": "push"}[self.listen_mode]
+
+    def _start_engine(self, vcfg: dict) -> None:
+        from jarvis.audio.engine import AudioEngine
+
+        self.engine = AudioEngine(
+            self._on_audio_event, silence_ms=vcfg.get("silence_ms", 750), min_speech_ms=vcfg.get("min_speech_ms", 400),
+            max_seconds=vcfg.get("max_seconds", 15), barge_floor=vcfg.get("barge_in_rms", 0.02),
+            echo_tail_ms=vcfg.get("echo_tail_ms", 700),
+            sounds_like_jarvis=self.voice.sounds_like_jarvis,
+            wake_detector=self.wake.process if self.wake else None)
+        self.engine.set_mode(self._engine_mode())
+        self.engine.start()
+        threading.Thread(target=self._stt_worker, daemon=True, name="recognition").start()
+
+    def _sync_engine(self) -> None:
+        if self.engine:
+            self.engine.set_mode(self._engine_mode())
+
+    def _on_audio_event(self, kind: str, data) -> None:
+        """Runs on the audio-engine thread: keep it quick."""
+        if kind == "level":
+            self._level(data)
+        elif kind == "speech_start":
+            self._state("listening")
+        elif kind == "barge":
+            if self.cfg.get("voice", {}).get("barge_in", True):
+                self.interrupt(force=True)
+                self._publish("user_pending")  # show the interrupt in the chat right away
+        elif kind == "wake":
+            if self.sleeping:
+                self.wake_up()
+            self._publish("notice", text="listening")
+        elif kind in ("noise", "capture_timeout"):
+            if kind == "noise" and data:  # a very short interrupt: that was a "stop"
+                self._publish("user", text="(stop)")
+            if not self.busy.is_set():
+                self._state("ready")
+        elif kind == "utterance":
+            self._state("thinking")
+            if not data.barge:  # (an interrupt already showed its bubble)
+                self._publish("user_pending")  # the bubble appears now; text fills in after recognition
+            self._stt_q.put(data)
+
+    def _stt_worker(self) -> None:
+        """Speech recognition runs here, not in the main loop, so 'stop' works even while JARVIS is busy."""
+        while not self.quit.is_set():
+            utt = self._stt_q.get()
+            if utt.barge and utt.voiced_ms < 600:  # a short burst over JARVIS's voice means "stop"
+                self.interrupt(force=True)
+                self._publish("user", text="(stop)")
+                self._state("ready")
+                continue
+            t = time.perf_counter()
+            try:
+                text = self.voice.transcribe(utt.audio)
+            except Exception:
+                logger.exception("Recognition failed")
+                text = ""
+            took = time.perf_counter() - t
+            if not text:
+                self._publish("user_cancel")
+                if not self.busy.is_set():
+                    self._state("ready")
+                continue
+            # 1-2 words over JARVIS that aren't a known command ("He's moved" for a mumbled "stop") = stop
+            short_interrupt = utt.barge and len(text.split()) <= 2 and not self.fast.matches(text)
+            just_spoke = time.monotonic() - self._spoke_at < 5  # "stop" right after JARVIS talked
+            if short_interrupt or (is_stop_command(text) and (utt.barge or self.speaking or self.busy.is_set()
+                                                              or just_spoke)):
+                self.interrupt(text, force=True)  # "stop" is for JARVIS's voice, not your music
+                self._publish("user", text=text)
+                self._state("ready")
+                continue
+            self.q.put(("heard", text, utt.after_wake, took))
+
     def _input_loop(self) -> None:
         while True:
             try:
@@ -268,42 +446,6 @@ class App:
                 self.q.put(("quit",))
                 return
             self.q.put(("text", line.strip().lstrip("﻿")))
-
-    def _listen_loop(self) -> None:
-        """Hands-free listening. always: record whenever someone speaks; wake_word: wait for 'Hey Jarvis'.
-        Paused (via self.busy) while JARVIS thinks or speaks, so it never hears itself."""
-        from jarvis.audio.mic import record_until_silence
-
-        v = self.cfg.get("voice", {})
-        while not self.quit.is_set():
-            mode = "wake_word" if self.sleeping else self.listen_mode
-            if self.busy.is_set() or mode == "push" or (mode == "wake_word" and not self.wake):
-                time.sleep(0.2)
-                continue
-            try:
-                if mode == "wake_word":
-                    if self.wake.wait(self.busy):
-                        self.busy.set()
-                        self.q.put(("wake",))
-                    continue
-                time.sleep(0.4)  # let the room go quiet after JARVIS spoke
-                if self.busy.is_set():
-                    continue
-                self._state("ready")
-                audio = record_until_silence(v.get("max_seconds", 15), v.get("silence_ms", 800), start_timeout=None,
-                                             stop=self.busy, on_level=self._level,
-                                             min_speech_ms=v.get("min_speech_ms", 400),
-                                             on_start=lambda: self._state("listening"))
-                if audio.size and not self.busy.is_set():
-                    self.busy.set()
-                    self._state("thinking")
-                    self._publish("user_pending")  # bubble appears now, text fills in after recognition
-                    self.q.put(("audio", audio))
-                elif not self.busy.is_set():
-                    self._state("ready")  # it was only noise
-            except Exception:
-                logger.exception("Listener error")
-                time.sleep(2)
 
     def _level(self, value: float) -> None:
         if self.hud:
@@ -354,39 +496,20 @@ class App:
             try:
                 if self.speech_on and not self._barged:
                     tts = self.voice.tts_for(self.voice.last_lang)
-                    stop = threading.Event()
-                    if self.cfg.get("voice", {}).get("barge_in") and hasattr(tts, "stop"):
-                        threading.Thread(target=self._barge_monitor, args=(stop, tts), daemon=True).start()
+                    self._current_tts = tts
+                    if self.engine:
+                        self.engine.set_speaking(True)  # mic now only accepts you talking over JARVIS
                     try:
-                        tts.speak(text)
+                        tts.speak(text, should_stop=lambda: self._barged)
                     finally:
-                        stop.set()
+                        self._current_tts = None
+                        self._spoke_at = time.monotonic()
+                        if self.engine and self._speech_q.unfinished_tasks <= 1:  # no more sentences waiting
+                            self.engine.set_speaking(False)
             except Exception:
                 logger.exception("TTS failed")
             finally:
                 self._speech_q.task_done()
-
-    def _barge_monitor(self, stop: threading.Event, tts) -> None:
-        """Interrupt JARVIS by talking over it (best with a headset: speakers can echo into the mic)."""
-        import numpy as np
-        import sounddevice as sd
-        import webrtcvad
-
-        vad, run = webrtcvad.Vad(3), 0
-        threshold = self.cfg.get("voice", {}).get("barge_in_rms", 0.03)
-        try:
-            with sd.InputStream(samplerate=16000, channels=1, dtype="int16", blocksize=480) as s:
-                while not stop.is_set():
-                    block, _ = s.read(480)
-                    rms = float(np.sqrt(np.mean((block.astype(np.float32) / 32768.0) ** 2)))
-                    run = run + 1 if rms >= threshold and vad.is_speech(block.tobytes(), 16000) else 0
-                    if run >= 8:  # ~0.25 s of clear speech
-                        self._barged = True
-                        tts.stop()
-                        logger.info("Barge-in: stopped speaking")
-                        return
-        except Exception:
-            logger.exception("Barge-in monitor failed")
 
     def _warmup(self) -> None:
         """Load the AI into the GPU and pre-fill its prompt cache, so the first question is fast too."""
@@ -421,18 +544,11 @@ class App:
         self._speech_q.put(sentence)
 
     def _say(self, text: str) -> None:
+        """Speak and wait until done (the audio engine ignores JARVIS's own voice and its echo)."""
         if self.voice and self.speech_on:
-            was_busy = self.busy.is_set()
-            self.busy.set()  # pause the microphone while speaking, so JARVIS never hears itself
-            try:
-                if text.strip():
-                    self._speech_q.put(text)
-                self._speech_q.join()
-            finally:
-                if not was_busy:
-                    if not self._barged:
-                        time.sleep(0.4)  # let the echo die down
-                    self.busy.clear()
+            if text.strip() and not self._barged:
+                self._speech_q.put(text)
+            self._speech_q.join()
 
     def _finish_speech(self, reply: str) -> None:
         """Speak whatever part of the reply wasn't already streamed, then wait until speech ends."""
@@ -528,40 +644,6 @@ class App:
                 return event[1].lower() in ({"yes"} if need == "yes" else {"y", "yes"})
 
     # ------------------------------------------------------------ turns
-    def listen_and_handle(self, start_timeout: float = 6, after_wake: bool = False) -> None:
-        self._state("listening")
-        print(f"\n{CYAN}🎙  listening…{RESET}", flush=True)
-        time.sleep(0.15)  # let the wake-word stream release the mic
-        try:
-            text = self.voice.listen(start_timeout)
-        except Exception as e:
-            logger.exception("Listening failed")
-            print(f"{RED}Microphone problem: {e}{RESET}")
-            return
-        if not text:
-            print(f"{DIM}(didn't catch that){RESET}")
-            self._state("idle")
-            return
-        print(f"You said: {text}")
-        if self.voice_turn(text, after_wake) and self.listen_mode == "wake_word" and not self.sleeping:
-            follow = self.cfg.get("voice", {}).get("follow_up_seconds", 4)
-            if follow:
-                self.listen_and_handle(start_timeout=follow)
-
-    def handle_audio(self, audio) -> bool:
-        """Speech captured by always-listening. Returns False if it was just noise (nothing printed)."""
-        self._state("thinking")
-        t = time.perf_counter()
-        text = self.voice.transcribe(audio)
-        self._stt_time = time.perf_counter() - t
-        if not text:
-            self._publish("user_cancel")
-            self._state("idle")
-            return False
-        print(f"\nYou said: {text}")
-        self.voice_turn(text, after_wake=False)
-        return True
-
     def voice_turn(self, text: str, after_wake: bool) -> bool:
         if is_kill_command(text, after_wake=after_wake):
             self.kill()
@@ -578,6 +660,7 @@ class App:
         else:
             self.listen_mode = "push"
             msg = "I've stopped listening. Press Enter or Talk to speak to me."
+        self._sync_engine()
         print(f"{DIM}{msg}{RESET}")
         self._publish("reply", text=msg)
         self._say(msg)
@@ -586,6 +669,7 @@ class App:
 
     def wake_up(self) -> None:
         self.sleeping = False
+        self._sync_engine()
         self._flags()
 
     def handle(self, text: str, show: bool = True) -> bool:
@@ -694,6 +778,7 @@ class App:
                 order = ["always", "wake_word", "push"] if self.wake else ["always", "push"]
                 self.sleeping = False
                 self.listen_mode = order[(order.index(self.listen_mode) + 1) % len(order)]
+                self._sync_engine()
                 desc = {"always": "always listening", "wake_word": 'wake word ("Hey Jarvis")', "push": "push-to-talk"}
                 print(f"{DIM}Listening mode: {desc[self.listen_mode]}.{RESET}")
         elif cmd == "/sleep":
@@ -715,16 +800,20 @@ class App:
         while True:
             event = self.q.get()
             self.busy.set()
+            self._barged = False  # each event starts fresh (an old interrupt never silences later speech)
             quiet = False
             try:
                 if event[0] == "quit":
                     break
-                if event[0] == "audio":
-                    quiet = not self.handle_audio(event[1])
-                elif event[0] == "wake":
-                    if self.sleeping:
-                        self.wake_up()
-                    self.listen_and_handle(after_wake=True)
+                if event[0] == "heard":
+                    _, text, after_wake, took = event
+                    self._stt_time = took
+                    print(f"\nYou said: {text}")
+                    if self.voice_turn(text, after_wake) and self.engine and self._engine_mode() == "wake":
+                        follow = self.cfg.get("voice", {}).get("follow_up_seconds", 4)
+                        if follow:  # wake-word mode: keep listening briefly for a follow-up
+                            self.engine.request_capture(follow, after_wake=True)
+                    self._state("ready")  # turn finished: back to listening
                 elif event[0] == "reminder":
                     print(f"\n{YELLOW}⏰ Reminder: {event[1]}{RESET}")
                     self._publish("notice", text=f"⏰ Reminder: {event[1]}")
@@ -747,8 +836,9 @@ class App:
                     if self.voice and text and not text.startswith("/"):
                         self.voice.last_lang = None  # typed: answer in the default voice
                     if not text:
-                        if self.voice:
-                            self.listen_and_handle()
+                        if self.engine:  # Enter / HUD Talk: push-to-talk
+                            self._state("listening")
+                            self.engine.request_capture(6)
                     elif text.startswith("/"):
                         if not self.command(text):
                             break
@@ -764,6 +854,8 @@ class App:
 
     def shutdown(self) -> None:
         self.quit.set()
+        if self.engine:
+            self.engine.stop()
         self.gaming.stop()
         self.reminders.stop()
         if self.telegram:
