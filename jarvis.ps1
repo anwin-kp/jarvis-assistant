@@ -235,7 +235,10 @@ switch ($Command) {
     'enroll-voice'  { Push-Location $Root; try { & $Python -W ignore -m jarvis.audio.voiceid } finally { Pop-Location } }
     'set-key'       {
         if ($Name -notin 'groq', 'gemini', 'openrouter', 'home_assistant', 'telegram', 'spotify_client_id') { throw 'Usage: .\jarvis.ps1 set-key groq|gemini|openrouter|home_assistant|telegram|spotify_client_id' }
-        if ($FromClipboard) {
+        if ($Name -eq 'spotify_client_id' -and -not $FromClipboard) {
+            # not a secret: a normal (visible) prompt, where pasting always works
+            $plain = (Read-Host "Paste your Spotify Client ID (from the app's Settings page)").Trim()
+        } elseif ($FromClipboard) {
             $plain = "$(Get-Clipboard -Raw)".Trim()   # copy the key first; avoids paste problems in hidden prompts
             Set-Clipboard -Value ' '                  # don't leave the key on the clipboard
         } else {
@@ -244,6 +247,7 @@ switch ($Command) {
             try { $plain = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr).Trim() }
             finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
         }
+        if ($Name -eq 'spotify_client_id' -and $plain -match '(?<![0-9a-fA-F])([0-9a-fA-F]{32})(?![0-9a-fA-F])') { $plain = $Matches[1].ToLower() }  # extra text pasted along: keep just the ID
         if ($plain.Length -lt 16) { throw "That key is only $($plain.Length) characters - it looks incomplete. Nothing was saved. Tip: copy the key, then run: .\jarvis.ps1 set-key $Name -FromClipboard" }
         # check the format, so a wrong clipboard can't be saved by mistake
         $formats = @{ groq = '^gsk_\S{20,}$'; spotify_client_id = '^[0-9a-f]{32}$' }
