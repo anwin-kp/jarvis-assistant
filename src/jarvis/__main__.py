@@ -187,6 +187,7 @@ class App:
                 self.hud.open()
         if self.voice:
             self._say(f"{self.name} online.")
+        logger.info("JARVIS ready (pid {})", os.getpid())  # start-jarvis.ps1 waits for this line
 
     # ------------------------------------------------------------ background threads
     def _input_loop(self) -> None:

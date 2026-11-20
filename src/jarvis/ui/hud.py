@@ -100,7 +100,10 @@ class Hud:
     def open(self) -> None:
         """Open as a standalone app window (Edge --app), falling back to the default browser."""
         try:
-            subprocess.Popen(["cmd", "/c", "start", "", "msedge", f"--app={self.url}", "--window-size=1100,760"],
+            # Own Edge profile: a separate process that kill-jarvis.ps1 can close without touching your browser.
+            profile = Path(__file__).resolve().parents[3] / "data" / "hud-profile"
+            subprocess.Popen(["cmd", "/c", "start", "", "msedge", f"--app={self.url}", "--window-size=1100,760",
+                              f"--user-data-dir={profile}", "--no-first-run"],
                              creationflags=subprocess.CREATE_NO_WINDOW)
         except Exception:
             webbrowser.open(self.url)

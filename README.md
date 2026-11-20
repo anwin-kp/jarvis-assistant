@@ -38,11 +38,23 @@ winget install Python.Python.3.12 astral-sh.uv Ollama.Ollama
 git clone https://github.com/anwin-kp/jarvis-assistant.git
 cd jarvis-assistant
 uv sync
-ollama pull qwen3:8b
-.\jarvis.ps1 start
+ollama pull qwen3:8b        # optional: start-jarvis downloads it if missing
+.\start-jarvis.ps1
 ```
 
 The first start downloads the speech models (~550 MB) and voice (~60 MB).
+
+## Start and stop
+
+| | Double-click | Or run |
+|---|---|---|
+| **Start** | `start-jarvis.cmd` | `.\start-jarvis.ps1 [-DryRun] [-Text] [-Minimized]` |
+| **Kill** (emergency stop) | `kill-jarvis.cmd` | `.\kill-jarvis.ps1` |
+
+**start-jarvis** starts Ollama if needed, downloads the AI model if it's missing, opens JARVIS in its own
+window and waits until JARVIS reports it's ready (it tells you if startup fails, and the JARVIS window stays
+open to show the error). **kill-jarvis** immediately force-stops JARVIS, its window, the HUD, the AI model in
+GPU memory and Ollama, then verifies nothing is left. It's self-contained and logged to `data/logs/kill-jarvis.log`.
 
 ## Use
 
@@ -56,7 +68,7 @@ Console commands: `/help`, `/briefing`, `/gaming`, `/persona <name>`, `/private`
 ## Control: `jarvis.ps1`
 
 ```powershell
-.\jarvis.ps1 start [-DryRun] [-Text] [-Minimized]   # start (Ollama is started if needed)
+.\jarvis.ps1 start [-DryRun] [-Text] [-Minimized]   # same as start-jarvis.ps1
 .\jarvis.ps1 status            # JARVIS / Ollama / model / GPU memory
 .\jarvis.ps1 free              # unload the AI model from the GPU
 .\jarvis.ps1 stop | restart | stop-all
@@ -66,9 +78,6 @@ Console commands: `/help`, `/briefing`, `/gaming`, `/persona <name>`, `/private`
 .\jarvis.ps1 google-login                             # connect Gmail/Calendar
 .\jarvis.ps1 set-key groq|gemini|openrouter|home_assistant
 ```
-
-**Emergency stop:** double-click **`kill-switch.cmd`** (or run `.\kill-switch.ps1`). It force-kills JARVIS
-and Ollama and frees GPU memory. It is self-contained and logged to `data/logs/killswitch.log`.
 
 ## Optional setup
 
@@ -122,8 +131,9 @@ src/jarvis/
   integrations/    Google (Gmail/Calendar), Home Assistant
   ui/              HUD (FastAPI + web page), tray icon
 tests/
-jarvis.ps1         control script
-kill-switch.ps1    emergency stop
+start-jarvis.ps1   start script (+ start-jarvis.cmd for double-click)
+kill-jarvis.ps1    emergency stop (+ kill-jarvis.cmd)
+jarvis.ps1         all other control commands
 ```
 
 ## Development
