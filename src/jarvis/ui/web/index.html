@@ -118,11 +118,31 @@
   button.warn { border-color:rgba(255,77,94,.6); color:#ffb3ba; } button.warn:hover { background:rgba(255,77,94,.18); }
   button.ok { border-color:var(--green); color:var(--green); }
   button.hidden { display:none; }
-  form { display:flex; gap:8px; width:min(720px, 100%); }
-  input { flex:1; background:rgba(2,10,20,.8); color:var(--text); border:1px solid var(--line2); padding:12px 14px;
-          font:500 15px var(--body); letter-spacing:.03em; outline:none;
-          clip-path:polygon(10px 0, 100% 0, 100% 100%, 0 100%, 0 10px); }
-  input:focus { border-color:var(--c); box-shadow:0 0 18px rgba(0,216,255,.25); }
+  /* composer: lives at the bottom of the Communications panel */
+  .composer { border-top:1px solid var(--line); padding:10px 12px 12px; position:relative; }
+  .composer.drag::after { content:"DROP FILES TO ATTACH"; position:absolute; inset:0; display:grid; place-items:center;
+                          background:rgba(0,216,255,.12); border:1px dashed var(--c); color:var(--c2);
+                          font:600 11px var(--hdr); letter-spacing:.3em; }
+  #chips { display:flex; flex-wrap:wrap; gap:6px; }
+  #chips:not(:empty) { margin-bottom:8px; }
+  .chip { display:flex; align-items:center; gap:6px; max-width:100%; padding:4px 6px 4px 4px; font-size:12.5px;
+          background:rgba(0,216,255,.08); border:1px solid var(--line2); color:var(--text); }
+  .chip img, .chip .ic { width:34px; height:34px; object-fit:cover; flex:none; display:grid; place-items:center;
+                         background:rgba(0,216,255,.1); color:var(--c); font:700 9px var(--hdr); }
+  .chip span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:190px; }
+  .chip.up { opacity:.55; } .chip.err { border-color:var(--red); color:#ffb3ba; }
+  .chip b { cursor:pointer; color:var(--dim); padding:0 4px; font-size:15px; } .chip b:hover { color:var(--red); }
+  .msg .att { display:flex; flex-wrap:wrap; gap:6px; justify-content:flex-end; margin:2px 0 6px; }
+  .msg .att img { max-width:170px; max-height:120px; border:1px solid var(--line2); cursor:zoom-in; }
+  form { display:flex; gap:6px; align-items:flex-end; }
+  textarea { flex:1; resize:none; max-height:140px; background:rgba(2,10,20,.8); color:var(--text);
+             border:1px solid var(--line2); padding:10px 12px; font:500 15px/1.35 var(--body); letter-spacing:.03em;
+             outline:none; clip-path:polygon(10px 0, 100% 0, 100% 100%, 0 100%, 0 10px); }
+  textarea:focus { border-color:var(--c); box-shadow:0 0 18px rgba(0,216,255,.25); }
+  #attach { padding:10px 12px; font-size:15px; line-height:1; }
+  #viewer { position:fixed; inset:0; z-index:9; display:none; place-items:center; background:rgba(2,6,13,.88);
+            cursor:zoom-out; }
+  #viewer img { max-width:92vw; max-height:92vh; border:1px solid var(--line2); }
   ::-webkit-scrollbar { width:6px; } ::-webkit-scrollbar-thumb { background:var(--line2); }
 
   @media (max-width: 1150px) {
@@ -165,7 +185,17 @@
   <section class="panel right">
     <div class="ptitle">Communications <small id="count">0</small></div>
     <div id="log"></div>
+    <div class="composer" id="composer">
+      <div id="chips"></div>
+      <form id="f">
+        <button type="button" id="attach" title="Attach images or files (you can also paste or drop them)">＋</button>
+        <textarea id="t" rows="1" placeholder="Message JARVIS…" title="Enter to send · Shift+Enter for a new line · paste or drop images and files"></textarea>
+        <button>Send</button>
+      </form>
+      <input type="file" id="file" multiple hidden>
+    </div>
   </section>
+  <div id="viewer"><img alt=""></div>
 
   <footer class="bottom">
     <div class="controls">
@@ -179,7 +209,6 @@
       <button id="b-stop" class="warn hidden">■ Stop</button>
       <button id="b-kill" class="warn">Shut down</button>
     </div>
-    <form id="f"><input id="t" placeholder="Speak, or type a message / command…" autocomplete="off"><button>Send</button></form>
   </footer>
 </div>
 
@@ -214,7 +243,26 @@ function userPending() {
   pendingUser = msg("user pending", "YOU", "");
   pendingUser.lastChild.innerHTML = '<span class="dots"><i></i><i></i><i></i></span>';
 }
-function userText(text) {
+function ext(n) { const i = n.lastIndexOf("."); return i > 0 ? n.slice(i + 1, i + 5).toUpperCase() : "FILE"; }
+function attachRow(files) {
+  const row = document.createElement("div"); row.className = "att";
+  for (const f of files) {
+    if (f.image) {
+      const im = new Image(); im.src = `/file/${encodeURIComponent(f.id)}?token=${token}`; im.alt = f.name;
+      im.onclick = () => { $("viewer").firstChild.src = im.src; $("viewer").style.display = "grid"; };
+      row.appendChild(im);
+    } else {
+      const c = document.createElement("div"); c.className = "chip";
+      c.innerHTML = '<div class="ic"></div><span></span>';
+      c.firstChild.textContent = ext(f.name); c.lastChild.textContent = f.name; row.appendChild(c);
+    }
+  }
+  return row;
+}
+function userText(text, files) {
+  if (files && files.length) {
+    const d = msg("user", "YOU", text || ""); d.insertBefore(attachRow(files), d.lastChild); return;
+  }
   if (!pendingUser) { msg("user", "YOU", text); return; }
   pendingUser.classList.remove("pending"); pendingUser.lastChild.textContent = text; pendingUser = null;
   $("log").scrollTop = 1e9;
@@ -293,7 +341,7 @@ function connect() {
     switch (e.type) {
       case "state": setState(e.state); break;
       case "level": levelTarget = e.v; break;
-      case "user": userText(e.text); break;
+      case "user": userText(e.text, e.files); break;
       case "user_pending": userPending(); break;
       case "user_cancel": userCancel(); break;
       case "reply": msg("jarvis", "JARVIS", e.text, true); break;
@@ -308,9 +356,57 @@ function connect() {
     }
   };
 }
-$("f").onsubmit = (ev) => { ev.preventDefault(); const v = $("t").value.trim(); if (!v) return;
-  if (pendingConfirm) answer(pendingConfirm, /^(y|yes)$/i.test(v), "danger"); else send(v.startsWith("/") ? "command" : "text", v);
-  $("t").value = ""; };
+/* ---------- composer: text + attachments (paste / drop / button) ---------- */
+let pending = [];  // {name, image, id, chip, done: Promise}
+function addFiles(list) {
+  for (const file of list) {
+    const p = { name: file.name || "pasted-image.png", image: file.type.startsWith("image/") };
+    const c = document.createElement("div"); c.className = "chip up";
+    c.innerHTML = '<div class="ic"></div><span></span><b title="Remove">×</b>';
+    c.children[0].textContent = ext(p.name); c.children[1].textContent = p.name;
+    if (p.image) { const im = new Image(); im.src = URL.createObjectURL(file); c.replaceChild(im, c.children[0]); }
+    c.children[2].onclick = () => { pending = pending.filter((x) => x !== p); c.remove(); };
+    p.chip = c; $("chips").appendChild(c);
+    p.done = fetch(`/upload?token=${token}&name=${encodeURIComponent(p.name)}`, { method: "POST", body: file })
+      .then((r) => r.json()).then((j) => { if (j.error) throw new Error(j.error); p.id = j.id; c.classList.remove("up"); })
+      .catch((err) => { c.classList.remove("up"); c.classList.add("err"); c.title = String(err.message || err); });
+    pending.push(p);
+  }
+}
+async function submit() {
+  const v = $("t").value.trim();
+  if (!v && !pending.length) return;
+  $("t").value = ""; grow();
+  if (pending.length) {
+    const batch = pending; pending = []; $("chips").innerHTML = "";
+    await Promise.all(batch.map((p) => p.done));
+    const ids = batch.filter((p) => p.id).map((p) => p.id);
+    if (ids.length && ws && ws.readyState === 1) ws.send(JSON.stringify({ action: "text", text: v, files: ids }));
+    else if (v) send("text", v);
+  } else if (pendingConfirm) answer(pendingConfirm, /^(y|yes)$/i.test(v), "danger");
+  else send(v.startsWith("/") ? "command" : "text", v);
+}
+function grow() { const t = $("t"); t.style.height = "auto"; t.style.height = Math.min(140, t.scrollHeight) + "px"; }
+$("f").onsubmit = (ev) => { ev.preventDefault(); submit(); };
+$("t").addEventListener("keydown", (ev) => { if (ev.key === "Enter" && !ev.shiftKey) { ev.preventDefault(); submit(); } });
+$("t").addEventListener("input", grow);
+$("attach").onclick = () => $("file").click();
+$("file").onchange = () => { addFiles($("file").files); $("file").value = ""; $("t").focus(); };
+document.addEventListener("paste", (ev) => {
+  const files = [...(ev.clipboardData?.files || [])];
+  if (files.length) { ev.preventDefault(); addFiles(files); $("t").focus(); }
+});
+const comp = $("composer"); let dragDepth = 0;
+document.addEventListener("dragenter", (ev) => {
+  if (ev.dataTransfer?.types?.includes("Files")) { dragDepth++; comp.classList.add("drag"); }
+});
+document.addEventListener("dragleave", () => { if (--dragDepth <= 0) { dragDepth = 0; comp.classList.remove("drag"); } });
+document.addEventListener("dragover", (ev) => ev.preventDefault());
+document.addEventListener("drop", (ev) => {
+  ev.preventDefault(); dragDepth = 0; comp.classList.remove("drag");
+  if (ev.dataTransfer?.files?.length) addFiles(ev.dataTransfer.files);
+});
+$("viewer").onclick = () => { $("viewer").style.display = "none"; };
 document.querySelectorAll("[data-cmd]").forEach((b) => b.onclick = () => send("command", b.dataset.cmd));
 $("b-sleep").onclick = () => send("command", flags.sleeping ? "/wakeup" : "/sleep");
 $("b-mute").onclick = () => send("command", flags.mute ? "/unmute" : "/mute");

@@ -675,16 +675,35 @@ class App:
         self._sync_engine()
         self._flags()
 
-    def handle(self, text: str, show: bool = True) -> bool:
-        """Run one turn. Returns True if a reply was produced."""
-        if is_kill_command(text):
+    def handle_attachments(self, text: str, ids: list[str]) -> bool:
+        from jarvis.ui import attachments
+
+        paths = [p for p in (attachments.resolve(i) for i in ids) if p]
+        names = ", ".join(attachments.display_name(p) for p in paths)
+        self._publish("user", text=text, files=[{"id": p.name, "name": attachments.display_name(p),
+                                                 "image": p.suffix.lower() in attachments.IMAGE_EXT} for p in paths])
+        print(f"{DIM}[attached: {names}]{RESET} {text}")
+        self._state("thinking")
+        prompt = attachments.compose(text, paths, self.cfg)
+        idx = getattr(self.reg, "doc_index", None)
+        if idx:
+            idx.start_background()  # make them searchable later
+        # documents stay on this PC (like files); image descriptions already came from the cloud vision model
+        private = any(p.suffix.lower() not in attachments.IMAGE_EXT for p in paths)
+        return self.handle(prompt, show=False, route_text=text, private=private)
+
+    def handle(self, text: str, show: bool = True, route_text: str | None = None, private: bool = False) -> bool:
+        """Run one turn. Returns True if a reply was produced. With route_text (attachments), commands are
+        only taken from the user's own words, never from inside a file."""
+        words = text if route_text is None else route_text
+        if is_kill_command(words):
             self.kill()
             return False
         if show:
             self._publish("user", text=text)
         self._barged = False
         start = time.perf_counter()
-        quick = self.fast.try_handle(text, self.confirm)  # instant commands: no AI round-trip
+        quick = self.fast.try_handle(text, self.confirm) if route_text is None else None  # instant commands
         if quick is not None:
             print(f"{CYAN}{self.name}:{RESET} {quick}  {DIM}(instant){RESET}")
             self.orch.add_exchange(text, quick)
@@ -699,7 +718,7 @@ class App:
         print(f"{DIM}thinking…{RESET}", end="\r", flush=True)
         try:
             stream = self._speak_async if (self.voice and self.speech_on) else None
-            reply = self.orch.handle(text, self.confirm, on_sentence=stream)
+            reply = self.orch.handle(text, self.confirm, on_sentence=stream, route_text=route_text, private=private)
         except Exception as e:
             logger.exception("Turn failed")
             print(f"{RED}Something went wrong: {e}. Details in data/logs/jarvis.log{RESET}")
@@ -838,7 +857,9 @@ class App:
                     text = event[1]
                     if self.voice and text and not text.startswith("/"):
                         self.voice.last_lang = None  # typed: answer in the default voice
-                    if not text:
+                    if len(event) > 2 and event[2]:  # message with attachments from the HUD
+                        self.handle_attachments(text, event[2])
+                    elif not text:
                         if self.engine:  # Enter / HUD Talk: push-to-talk
                             self._state("listening")
                             self.engine.request_capture(6)

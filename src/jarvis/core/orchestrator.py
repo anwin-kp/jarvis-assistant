@@ -92,26 +92,30 @@ class Orchestrator:
     def reset(self) -> None:
         self.history.clear()
 
-    def handle(self, text: str, confirm: ConfirmFn, on_sentence=None) -> str:
+    def handle(self, text: str, confirm: ConfirmFn, on_sentence=None, route_text: str | None = None,
+               private: bool = False) -> str:
+        """route_text: the user's own words, when text also carries attachment content - tools, thinking and
+        privacy are judged from what the user asked, not from what's inside a file. private: keep it local."""
         if self.history and time.monotonic() - self.last_activity > self.idle_seconds:
             self.summarize_session()
         self.last_activity = time.monotonic()
         now = dt.datetime.now().strftime("%A %d %B %Y, %H:%M")
         user_msg = {"role": "user", "content": f"[Local time: {now}] {text}"}
         messages = [{"role": "system", "content": self.system_prompt()}, *self.history, user_msg]
-        asked = pick_groups(text)  # what the words explicitly ask for
+        words = text if route_text is None else route_text
+        asked = pick_groups(words)  # what the words explicitly ask for
         groups = set(asked)
-        if self.semantic:
-            groups |= self.semantic.pick(text)
+        if self.semantic and words:
+            groups |= self.semantic.pick(words)
         tools = self.reg.schemas(groups)
-        self.last_think = needs_thinking(text)
+        self.last_think = needs_thinking(words)
         kw = {"on_sentence": on_sentence} if on_sentence else {}
         if self.last_think:
             kw["think"] = True
         if hasattr(self.brain, "cloud"):  # router: privacy follows what you asked for, not tools added "just in case"
             from jarvis.llm.cloud_brain import PRIVATE_GROUPS
 
-            kw["private"] = bool(asked & PRIVATE_GROUPS)
+            kw["private"] = private or bool(asked & PRIVATE_GROUPS)
         reply = strip_filler(self.brain.respond(messages, tools, confirm, **kw) or "(no reply)")
 
         # Safety net: small models sometimes say "remembered" without calling the tool.
