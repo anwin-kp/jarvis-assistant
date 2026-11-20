@@ -138,6 +138,11 @@ vision:                 # "look at my screen": screenshot + question to a free v
   enabled: true          # false = never send screenshots; local text reading (OCR) only
   model: qwen/qwen3.8-27b
 
+operator:               # operate_app: multi-step tasks in any app (sees the window, clicks/types like a person)
+  enabled: true
+  model: qwen/qwen3.8-27b  # vision + tools model on Groq
+  max_steps: 15
+
 notes:
   folder: null           # null = Documents\JARVIS Notes
 

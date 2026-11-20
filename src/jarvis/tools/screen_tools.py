@@ -45,7 +45,9 @@ def read_screen_text(target: str = "screen") -> str:
     with tempfile.TemporaryDirectory() as d:
         path = Path(d) / "screen.png"
         img.save(path)
-        return asyncio.run(ocr_file(path))
+        from jarvis.agent.operator import run_isolated
+
+        return run_isolated(lambda: asyncio.run(ocr_file(path)))  # own thread: COM threading mode
 
 
 def register(reg: ToolRegistry) -> None:
