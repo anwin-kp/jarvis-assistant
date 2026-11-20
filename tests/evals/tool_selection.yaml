@@ -77,3 +77,13 @@
 - {say: "click the save button", expect: [list_ui_elements, click_ui_element]}
 - {say: "what buttons are in this window?", expect: [list_ui_elements, look_at_screen]}
 - {say: "in calculator press seven", expect: [click_ui_element, list_ui_elements, operate_app]}
+# --- from real use (jarvis.review, 2026-11-21) ---
+- {say: "Hey Jarvis, it's not playing", expect: [spotify_now_playing, spotify_control, spotify_play]}
+- {say: "Start playing", expect: [spotify_control, media_control]}
+- {say: "Open Spotify and play Mixup Mesh.", expect: [spotify_play]}
+- {say: "And now play the mixup match", expect: [spotify_play]}
+- {say: "Close Spotify.", expect: [close_app]}
+- {say: "What's the weather in my location?", expect: [get_weather]}
+- {say: "where am I right now?", expect: [get_my_location]}
+- {say: "who won the last cricket world cup", expect: [web_search]}
+- {say: "check my email", expect: [list_unread_emails]}

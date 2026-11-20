@@ -137,9 +137,18 @@ class Voice:
             logger.warning("{} recognition failed ({}); using local Whisper", self.stt.device, e)
             text, lang = self.local_stt.transcribe(audio, self.cfg.get("language"))
             self.last_engine = self.local_stt.device
+        text = normalize_heard(text)
         self.last_lang = lang if text else self.last_lang
         self._save(audio, text, lang)
         return text
+
+    def add_vocabulary(self, words: list[str]) -> None:
+        """Names JARVIS knows (people, places, playlists) help recognition ("Siemens Goa", not "Siemens Gore")."""
+        base = self.cfg.get("vocabulary") or ""
+        extra = ", ".join(w for w in dict.fromkeys(words) if w.lower() not in base.lower())
+        vocab = (base + (". " + extra if extra else ""))[:700]  # Whisper reads ~224 tokens of prompt
+        for engine in {id(self.stt): self.stt, id(self.local_stt): self.local_stt}.values():
+            engine.vocabulary = vocab
 
     def _save(self, audio, text: str, lang: str) -> None:
         """Keep your last N utterances locally (data/voice-log) so recognition can be measured on YOUR voice."""
@@ -221,6 +230,7 @@ class App:
         self.engine = None  # AudioEngine: the only owner of the microphone
         self._current_tts = None  # the voice speaking right now (so interrupt stops exactly that one)
         self._spoke_at = 0.0  # when JARVIS last finished speaking
+        self._last_heard = 0.0  # when JARVIS last accepted something you said
         self._stt_q: queue.Queue = queue.Queue()  # utterances waiting for speech recognition
         self._streamed: list[str] = []
         self.args = args
@@ -282,6 +292,7 @@ class App:
                 threading.Thread(target=self._speaker_loop, daemon=True, name="speaker").start()
                 if vcfg.get("barge_in", True):
                     threading.Thread(target=self.voice.build_jarvis_print, daemon=True, name="voiceprint").start()
+                threading.Thread(target=self._personal_vocabulary, daemon=True, name="vocabulary").start()
                 self.speech_on = True
                 mode = vcfg.get("listen_mode", "always")
                 if vcfg.get("wake_word", True) or mode == "wake_word":
@@ -459,6 +470,34 @@ class App:
                 self._publish("user_pending")  # the bubble appears now; text fills in after recognition
             self._stt_q.put(data)
 
+    def _personal_vocabulary(self) -> None:
+        """Teach speech recognition the names in your life: people/places/companies from what JARVIS knows about
+        you, and your Spotify playlists (so "Mix-Up Mash" isn't heard as "Mixup Mesh")."""
+        words: list[str] = []
+        for f in self.memory.list_facts():
+            body = re.sub(r"^\[\w+\]\s*", "", f["fact"])
+            words += [w for w in re.findall(r"\b[A-Z][\w'-]+(?:\s[A-Z][\w'-]+)*", body)
+                      if w not in COMMON_CAPS and len(w) > 2]
+        sp = getattr(self.reg, "spotify", None)
+        if sp:
+            try:
+                words += [pl["name"] for pl in sp.my_playlists()[:20]]
+            except Exception as e:
+                logger.debug("Playlists for vocabulary: {}", e)
+        if words and self.voice:
+            self.voice.add_vocabulary(words)
+            logger.info("Speech recognition vocabulary: +{} names", len(set(words)))
+
+    def _addressed(self, text: str, utt) -> bool:
+        """Always-listening hears everyone in the room. After a quiet minute it needs its name ("Jarvis, ...");
+        within the minute after a reply, follow-ups need no name. Wake word / push-to-talk are always for it."""
+        window = float(self.cfg.get("voice", {}).get("addressed_window_s", 60))
+        if self._engine_mode() != "always" or utt.after_wake or utt.barge or window <= 0:
+            return True
+        if time.monotonic() - max(self._spoke_at, self._last_heard) < window:
+            return True
+        return bool(NAME.search(text)) or self.fast.matches(text)
+
     def _stt_worker(self) -> None:
         """Speech recognition runs here, not in the main loop, so 'stop' works even while JARVIS is busy."""
         while not self.quit.is_set():
@@ -489,6 +528,13 @@ class App:
                 self._publish("user", text=text)
                 self._state("ready")
                 continue
+            if not self._addressed(text, utt):
+                logger.info("Not for me (no 'Jarvis' after a quiet minute): {}", text[:80])
+                self._publish("user_cancel")
+                if not self.busy.is_set():
+                    self._state("ready")
+                continue
+            self._last_heard = time.monotonic()
             self.q.put(("heard", text, utt.after_wake, took))
 
     def _input_loop(self) -> None:
@@ -975,6 +1021,16 @@ def single_instance(name: str = "Local\\JARVIS-assistant-instance") -> bool:
 
     _INSTANCE_LOCK = win32event.CreateMutex(None, False, name)
     return win32api.GetLastError() != winerror.ERROR_ALREADY_EXISTS
+
+
+COMMON_CAPS = {"Is", "Has", "Likes", "Works", "Lives", "Prefers", "From", "Uses", "Speaks", "Built", "Also",
+               "Since", "Earlier", "Personal", "Maintains", "Looking", "Building", "The", "And", "With", "For"}
+NAME = re.compile(r"\b(jarvis|jervis|javis|jarvi|jarves|jarvish)\b", re.I)
+
+
+def normalize_heard(text: str) -> str:
+    """Whisper writes "Hey" as Swedish "Hej" for some accents (and JARVIS then answered in Swedish)."""
+    return re.sub(r"^\s*hej\b", "Hey", text, flags=re.I)
 
 
 def main() -> None:
