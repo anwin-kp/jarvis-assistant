@@ -22,6 +22,7 @@ def record_until_silence(
     on_level: Callable[[float], None] | None = None,
     min_speech_ms: int = 0,
     min_rms: float = 0.006,
+    on_start: Callable[[], None] | None = None,
 ) -> np.ndarray:
     """Record from the default mic until `silence_ms` of silence after speech.
 
@@ -55,6 +56,8 @@ def record_until_silence(
                     started = True
                     frames.extend(pre_roll)
                     speech_frames = 1
+                    if on_start:
+                        on_start()
                 else:
                     waited += 1
                     if start_timeout is not None and waited * FRAME_MS > start_timeout * 1000:

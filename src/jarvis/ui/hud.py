@@ -31,7 +31,7 @@ class Hud:
         event = {"type": type_, **data}
         if type_ in ("state", "flags", "stats", "timing"):
             self.latest[type_] = event
-        elif type_ != "level":
+        elif type_ not in ("level", "user_pending", "user_cancel"):
             self.history.append(event)
         if self.loop:
             self.loop.call_soon_threadsafe(self._broadcast, event)
