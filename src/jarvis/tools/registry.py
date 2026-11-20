@@ -41,6 +41,22 @@ class ToolResult:
 
 
 ConfirmFn = Callable[[Tool, dict], bool]
+
+
+def wait_for(check: Callable[[], object], timeout: float = 4.0, every: float = 0.4):
+    """Poll until check() returns something truthy (returned) or time runs out (None). Action tools use it to
+    confirm the result really happened before JARVIS says so ("Checked: now playing ...")."""
+    import time
+
+    end = time.monotonic() + timeout
+    while True:
+        try:
+            got = check()
+        except Exception:
+            got = None
+        if got or time.monotonic() >= end:
+            return got or None
+        time.sleep(every)
 AuditFn = Callable[[str, dict, str, str], None]
 
 MAX_OUTPUT_CHARS = 3500  # more makes the model slower to answer

@@ -32,7 +32,12 @@ def register(reg: ToolRegistry, app_allowlist: dict[str, str]) -> None:
         if key not in apps:
             return f"ERROR: '{name}' is not in my app list. Known apps: {names}. The user can add it to config.yaml."
         _launch(apps[key])
-        return f"Opened {name}."
+        from jarvis.tools.registry import wait_for
+        from jarvis.tools.window_tools import find_window
+
+        if wait_for(lambda: find_window(name), timeout=6):
+            return f"Opened {name} (checked: its window is open)."
+        return f"Started {name}, but no window has appeared yet (checked for 6 s); it may still be loading."
 
     @reg.tool(
         "close_app",

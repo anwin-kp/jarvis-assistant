@@ -121,7 +121,10 @@ def register(reg: ToolRegistry) -> None:
         vol.SetMasterVolumeLevelScalar(percent / 100, None)
         if percent > 0 and vol.GetMute():
             vol.SetMute(0, None)
-        return f"Volume set to {percent}%."
+        now = round(vol.GetMasterVolumeLevelScalar() * 100)
+        if abs(now - percent) > 2:
+            return f"WARNING: asked for {percent}% but the volume is {now}%."
+        return f"Volume set to {percent}% (checked)."
 
     @reg.tool(
         "set_mute",
