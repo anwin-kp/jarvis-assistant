@@ -27,17 +27,9 @@ async def ocr_file(path: Path) -> str:
 
 def grab(target: str):
     """Screenshot of the whole screen or the active window (never the JARVIS HUD itself)."""
-    from PIL import ImageGrab
+    from jarvis.tools.vision_tools import capture
 
-    if target == "active_window":
-        import win32gui
-
-        hwnd = win32gui.GetForegroundWindow()
-        if hwnd and win32gui.GetWindowText(hwnd) != HUD_TITLE:
-            left, top, right, bottom = win32gui.GetWindowRect(hwnd)
-            if right - left > 50 and bottom - top > 50:
-                return ImageGrab.grab(bbox=(left, top, right, bottom), all_screens=True)
-    return ImageGrab.grab(all_screens=True)
+    return capture(target)[0]  # same rules as look_at_screen: never the HUD, the app behind it instead
 
 
 def read_screen_text(target: str = "screen") -> str:

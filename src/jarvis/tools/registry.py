@@ -54,6 +54,23 @@ class ToolRegistry:
         # Called after every tool request with (name, args, status); the UI uses it to show
         # what really happened, independent of what the model claims.
         self.on_call: Callable[[str, dict, str], None] | None = None
+        # security.no_approval: everyday CONFIRM tools that just run. DANGER tools always ask.
+        self.no_approval: set[str] = set()
+        self.confirm_fn: ConfirmFn | None = None  # the app's approval prompt, for tools that ask mid-way
+
+    def needs_approval(self, tool: Tool) -> bool:
+        if tool.risk is Risk.SAFE:
+            return False
+        return tool.risk is Risk.DANGER or tool.name not in self.no_approval
+
+    def ask(self, what: str) -> bool:
+        """Ask the user about one specific risky step inside an otherwise approval-free tool
+        (clicking 'Buy now', pressing Alt+F4). No approval prompt available = no."""
+        if not self.confirm_fn:
+            return False
+        step = Tool("risky_step", "A risky step", {"type": "object", "properties": {}, "required": []},
+                    Risk.DANGER, "screen", lambda: None)
+        return bool(self.confirm_fn(step, {"action": what}))
 
     def tool(
         self,
@@ -133,7 +150,7 @@ class ToolRegistry:
         if missing:
             return ToolResult(f"Missing required arguments: {missing}", error=True), args, "invalid"
 
-        if tool.risk is not Risk.SAFE and not confirm(tool, args):
+        if self.needs_approval(tool) and not confirm(tool, args):
             self._audit(name, args, tool.risk.value, "declined")
             return ToolResult("The user declined this action. Do not retry it.", error=True), args, "declined"
 

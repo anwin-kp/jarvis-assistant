@@ -49,3 +49,19 @@ def test_no_nudge_for_ordinary_answers(text):
     from jarvis.llm.ollama_brain import unbacked_claim
 
     assert unbacked_claim(text) is None
+
+
+def test_promise_after_a_tool_still_gets_a_nudge_but_a_true_claim_does_not():
+    from jarvis.llm.ollama_brain import NUDGE_PROMISE, unbacked_claim
+
+    assert unbacked_claim("I've opened Spotify. Let me play your playlist now. One moment, please.",
+                          tools_ran=True) == NUDGE_PROMISE
+    assert unbacked_claim("I've opened Spotify.", tools_ran=True) is None
+
+
+def test_website_addresses_offer_the_browser():
+    from jarvis.llm.tool_groups import pick_groups
+
+    assert "browser" in pick_groups("open amazon.in and search for a usb c cable")
+    assert "browser" in pick_groups("go to github.com/anwin-kp")
+    assert "browser" not in pick_groups("what's the weather like")

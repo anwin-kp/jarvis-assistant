@@ -60,6 +60,10 @@ def register(reg: ToolRegistry, profile_dir) -> Browser:
     @reg.tool("browser_click", "Click a link or button on the current page by its visible text.",
               {"text": {"type": "string"}}, risk=Risk.CONFIRM, group="browser")
     def browser_click(text: str):
+        from jarvis.agent.operator import RISKY
+
+        if RISKY.search(text) and not reg.ask(f"click '{text}' on the web page"):
+            return f"Not clicked: '{text}' needs your approval and you didn't give it."
         page = b._ensure()
         for loc in (page.get_by_role("button", name=text), page.get_by_role("link", name=text),
                     page.get_by_text(text)):

@@ -43,7 +43,9 @@ KEYWORDS: dict[str, list[str]] = {
     "notes": ["note", "notes", "journal", "jot", "write down", "diary"],
     "screen": ["screen", "error", "this window", "what am i looking at", "read this", "on my monitor", "look at",
                "see", "selected", "click", "button", "press the", "in the app", "type in", "fill in", "in spotify",
-               "in chrome", "in the browser", "go to", "navigate", "open the", "settings", "shortcut"],
+               "in chrome", "in the browser", "go to", "navigate", "open the", "settings", "shortcut",
+               "press ", " app and ", "in it ", "in calculator", "in notepad", "in paint", "in explorer",
+               "in file explorer", "in settings", "in the settings", "in vs code", "in word", "in excel"],
     "docs": ["document", "documents", "pdf", "agreement", "contract", "invoice", "report", "resume", "cv",
              "according to", "my files", "policy", "manual", "in my notes", "lease", "say about", "says about",
              "statement", "warranty"],
@@ -70,9 +72,14 @@ def _mentions(text: str, word: str) -> bool:
     return re.search(pattern, text) is not None
 
 
+DOMAIN = re.compile(r"\b[a-z0-9-]+\.(?:com|in|org|net|io|co|ai|dev|app|me|uk|gov|edu|info|tv)\b")
+
+
 def pick_groups(text: str) -> set[str]:
     t = text.lower()
     groups = set(ALWAYS) | {g for g, words in KEYWORDS.items() if any(_mentions(t, w) for w in words)}
+    if DOMAIN.search(t):  # "open amazon.in and search..." is a website task
+        groups.add("browser")
     if groups == ALWAYS:
         groups.add("web")  # general questions often need a search
     return groups

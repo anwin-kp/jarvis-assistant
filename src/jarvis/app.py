@@ -15,6 +15,7 @@ def build(dry_run: bool = False):
     cfg = load_config()
     memory = Memory(DATA / "jarvis.db")
     reg = ToolRegistry(audit=memory.audit, dry_run=dry_run)
+    reg.no_approval = set((cfg.get("security") or {}).get("no_approval") or [])
 
     system_tools.register(reg)
     system_tools.register_power(reg)

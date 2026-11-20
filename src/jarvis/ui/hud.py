@@ -102,6 +102,9 @@ class Hud:
                     msg = await ws.receive_json()
                     text = str(msg.get("text", ""))[:2000]
                     action = msg.get("action")
+                    if action in ("approve", "deny"):  # approval buttons: no cut-in, never a chat turn
+                        self.q.put(("answer", action == "approve"))
+                        continue
                     if action in ("facts", "forget", "teach"):  # Memory panel: no turn, no cut-in
                         if self.memory_api:
                             facts = await asyncio.to_thread(self.memory_api, action, msg)

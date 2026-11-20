@@ -29,9 +29,27 @@ def target_window():
     return None
 
 
+def hud_covers_screen() -> bool:
+    """The HUD (maximized by default) is open and covers most of its screen, so a full screenshot would mostly
+    show JARVIS itself (e.g. its "POWER 100%" gauge read back as an answer)."""
+    import win32api
+    import win32con
+    import win32gui
+
+    hwnd = win32gui.FindWindow(None, HUD_TITLE)
+    if not hwnd or not win32gui.IsWindowVisible(hwnd) or win32gui.IsIconic(hwnd):
+        return False
+    left, top, right, bottom = win32gui.GetWindowRect(hwnd)
+    mon = win32api.GetMonitorInfo(win32api.MonitorFromWindow(hwnd, win32con.MONITOR_DEFAULTTONEAREST))["Monitor"]
+    area = max(1, (mon[2] - mon[0]) * (mon[3] - mon[1]))
+    return (right - left) * (bottom - top) / area > 0.6
+
+
 def capture(target: str = "screen"):
     from PIL import ImageGrab
 
+    if target == "screen" and hud_covers_screen():
+        target = "active_window"  # the app behind the HUD is what the user means
     if target == "active_window":
         import win32gui
 

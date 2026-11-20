@@ -39,9 +39,10 @@ NUDGE_PROMISE = (
 )
 
 
-def unbacked_claim(reply: str) -> str | None:
-    """The nudge to send when a reply claims or promises an action that no tool call backs up."""
-    if CLAIMS_ACTION.search(reply):
+def unbacked_claim(reply: str, tools_ran: bool = False) -> str | None:
+    """The nudge to send when a reply claims or promises an action that no tool call backs up. After tools ran,
+    a claim may be true, but a promise ("Let me play it now. One moment") still means nothing more will happen."""
+    if not tools_ran and CLAIMS_ACTION.search(reply):
         return NUDGE
     if PROMISES.search(reply):
         return NUDGE_PROMISE
@@ -167,7 +168,7 @@ class OllamaBrain:
             if not msg.tool_calls:
                 reply = (msg.content or "").strip()
                 # Small models sometimes claim an action without calling a tool: push back once.
-                nudge = unbacked_claim(reply) if tools and not self.last_tool_calls and not nudged else None
+                nudge = unbacked_claim(reply, bool(self.last_tool_calls)) if tools and not nudged else None
                 if nudge:
                     nudged = True
                     logger.info("Reply claims/promises an action but no tool ran; nudging: {}", reply[:80])
