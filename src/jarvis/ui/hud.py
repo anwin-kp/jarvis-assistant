@@ -29,7 +29,7 @@ class Hud:
     # ------------------------------------------------------------ publishing (any thread)
     def publish(self, type_: str, **data) -> None:
         event = {"type": type_, **data}
-        if type_ in ("state", "flags", "stats"):
+        if type_ in ("state", "flags", "stats", "timing"):
             self.latest[type_] = event
         elif type_ != "level":
             self.history.append(event)

@@ -12,6 +12,7 @@
     .\jarvis.ps1 stop-all         # close JARVIS, free the GPU, and shut down Ollama
     .\jarvis.ps1 logs [-Follow]   # show the log file
     .\jarvis.ps1 test             # run unit tests and lint
+    .\jarvis.ps1 eval             # score how well JARVIS understands requests (local, ~3 min)
     .\jarvis.ps1 autostart-on     # start JARVIS (minimized) when you log in to Windows
     .\jarvis.ps1 autostart-off
     .\jarvis.ps1 shortcut         # add JARVIS (and Kill JARVIS) to the Desktop and Start menu
@@ -23,7 +24,7 @@
 #>
 param(
     [Parameter(Position = 0)]
-    [ValidateSet('start', 'stop', 'restart', 'status', 'free', 'stop-all', 'logs', 'test', 'autostart-on', 'autostart-off', 'google-login', 'set-key', 'shortcut', 'enroll-voice', 'help')]
+    [ValidateSet('start', 'stop', 'restart', 'status', 'free', 'stop-all', 'logs', 'test', 'autostart-on', 'autostart-off', 'google-login', 'set-key', 'shortcut', 'enroll-voice', 'eval', 'help')]
     [string]$Command = 'help',
     [switch]$DryRun,
     [switch]$Text,
@@ -227,6 +228,7 @@ switch ($Command) {
     'autostart-on'  { Set-Autostart $true }
     'autostart-off' { Set-Autostart $false }
     'shortcut'      { New-Shortcuts }
+    'eval'          { Push-Location $Root; try { $env:PYTHONIOENCODING = 'utf-8'; & $Python -W ignore -m jarvis.evals } finally { Pop-Location } }
     'enroll-voice'  { Push-Location $Root; try { & $Python -W ignore -m jarvis.audio.voiceid } finally { Pop-Location } }
     'set-key'       {
         if ($Name -notin 'groq', 'gemini', 'openrouter', 'home_assistant', 'telegram') { throw 'Usage: .\jarvis.ps1 set-key groq|gemini|openrouter|home_assistant|telegram' }

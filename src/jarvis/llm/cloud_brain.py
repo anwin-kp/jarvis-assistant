@@ -95,16 +95,19 @@ class Router:
             return f"{self.local.model} + {self.cloud.provider}:{self.cloud.model}"
         return self.local.model
 
-    def _use_cloud(self, tools: list[dict]) -> bool:
+    def _use_cloud(self, tools: list[dict], complex_: bool = False) -> bool:
         if not (self.cloud and self.cloud.available) or self.private:
             return False
         names = {t["function"]["name"] for t in tools or []}
         if any((tool := self.reg.get(n)) and tool.group in PRIVATE_GROUPS for n in names):
             return False  # files / email stay on this PC
+        if self.mode == "smart" and complex_:
+            return True  # hard questions go to the bigger free model
         return self.mode == "cloud_first" or (self.gaming and self.cloud_in_gaming)
 
-    def respond(self, messages: list[dict], tools: list[dict], confirm: ConfirmFn, on_sentence=None) -> str:
-        if self._use_cloud(tools):
+    def respond(self, messages: list[dict], tools: list[dict], confirm: ConfirmFn, on_sentence=None,
+                think: bool = False) -> str:
+        if self._use_cloud(tools, think):
             try:
                 reply = self.cloud.respond(messages, tools, confirm)
                 self.last_tool_calls, self.last_backend = self.cloud.last_tool_calls, "cloud"
@@ -115,12 +118,17 @@ class Router:
                     return "I lost the connection to the cloud model midway. Please check whether it finished."
                 logger.warning("Cloud unavailable ({}); using local model", e)
         kw = {"on_sentence": on_sentence} if on_sentence else {}
+        if think:
+            kw["think"] = True
         reply = self.local.respond(messages, tools, confirm, **kw)
         self.last_tool_calls, self.last_backend = self.local.last_tool_calls, "local"
         return reply
 
     def complete(self, messages: list[dict]) -> str:
-        return self.local.complete(messages)  # summaries contain personal history: keep local
+        return self.local.complete(messages)
+
+    def warmup(self, messages: list[dict], tools: list[dict]) -> None:
+        self.local.warmup(messages, tools)  # summaries contain personal history: keep local
 
     # pass-throughs to the local brain
     def check(self) -> None:

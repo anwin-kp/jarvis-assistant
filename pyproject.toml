@@ -83,6 +83,9 @@ src = ["src", "tests"]
 select = ["E", "F", "W", "I", "B", "UP"]
 ignore = ["E731"]
 
+[tool.ruff.lint.per-file-ignores]
+"src/jarvis/core/fast_intents.py" = ["E501"]  # regex rule table
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 

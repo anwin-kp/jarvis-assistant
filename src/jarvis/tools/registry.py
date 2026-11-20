@@ -43,7 +43,7 @@ class ToolResult:
 ConfirmFn = Callable[[Tool, dict], bool]
 AuditFn = Callable[[str, dict, str, str], None]
 
-MAX_OUTPUT_CHARS = 6000
+MAX_OUTPUT_CHARS = 3500  # more makes the model slower to answer
 
 
 class ToolRegistry:

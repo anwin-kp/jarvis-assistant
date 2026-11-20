@@ -80,6 +80,29 @@ class Memory:
             + [f"{ts} {role}: {text[:300]}" for ts, role, text in msgs]
         )
 
+    def semantic_recall(self, query: str, k: int = 5) -> list[str]:
+        """Facts and conversation summaries ranked by meaning (needs self.embed)."""
+        embed = getattr(self, "embed", None)
+        if embed is None:
+            return []
+        import numpy as np
+
+        with self.lock:
+            items = [f"fact: {r[0]}" for r in self.db.execute("SELECT fact FROM facts ORDER BY id DESC LIMIT 200")]
+            items += [f"summary {ts}: {s}" for ts, s in
+                      self.db.execute("SELECT ts, summary FROM summaries ORDER BY id DESC LIMIT 200")]
+        if not items:
+            return []
+        cache = self.__dict__.setdefault("_vec_cache", {})
+        new = [t for t in items if t not in cache]
+        if new:
+            for t, v in zip(new, embed([f"search_document: {t}" for t in new]), strict=True):
+                cache[t] = v / (np.linalg.norm(v) + 1e-9)
+        q = embed([f"search_query: {query}"])[0]
+        q = q / (np.linalg.norm(q) + 1e-9)
+        scored = sorted(items, key=lambda t: -float(cache[t] @ q))
+        return [t for t in scored[:k] if float(cache[t] @ q) > 0.5]
+
     def profile(self, limit: int = 30) -> str:
         with self.lock:
             rows = self.db.execute("SELECT fact FROM facts ORDER BY id LIMIT ?", (limit,)).fetchall()

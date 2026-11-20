@@ -82,6 +82,7 @@
   .status { margin-top:-6px; text-align:center; }
   .status .s { font:700 15px var(--hdr); letter-spacing:.55em; color:var(--accent); text-shadow:0 0 14px var(--accent);
                text-transform:uppercase; transition:color .45s ease, text-shadow .45s ease; }
+  .status .t { color:#3f6f8c; letter-spacing:.2em; min-height:14px; }
   .status .m { margin-top:6px; font:500 10px var(--hdr); letter-spacing:.35em; color:var(--dim); text-transform:uppercase; }
   .wave { width:min(46vh, 90%); height:46px; margin-top:12px; }
 
@@ -153,7 +154,7 @@
 
   <main class="center">
     <canvas id="reactor" width="900" height="900"></canvas>
-    <div class="status"><div class="s" id="state">standby</div><div class="m" id="mode">—</div></div>
+    <div class="status"><div class="s" id="state">standby</div><div class="m" id="mode">—</div><div class="m t" id="timing"></div></div>
     <canvas class="wave" id="wave" width="900" height="92"></canvas>
   </main>
 
@@ -280,6 +281,9 @@ function connect() {
       case "confirm": confirmCard(e); break;
       case "flags": applyFlags(e); break;
       case "stats": stats(e); break;
+      case "timing": $("timing").textContent = (e.path === "instant" ? "⚡ INSTANT · " : "") +
+        (e.stt ? `HEARD ${e.stt}s · ` : "") + `FIRST WORD ${e.first}s · TOTAL ${e.total}s` +
+        (e.path.includes("cloud") ? " · CLOUD" : "") + (e.path.includes("thinking") ? " · DEEP THINK" : ""); break;
     }
   };
 }

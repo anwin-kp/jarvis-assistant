@@ -1,0 +1,73 @@
+# Tool-selection eval: does JARVIS pick the right tool for what you say?
+# expect: list of acceptable first tools, or [none] when it should just answer.
+# Run: .\jarvis.ps1 eval   (local, free; non-read-only tools are only simulated)
+- {say: "how much battery do I have", expect: [get_system_info]}
+- {say: "my laptop feels slow, what's using all the memory?", expect: [list_processes, get_system_info]}
+- {say: "set the volume to 30", expect: [set_volume]}
+- {say: "it's way too loud", expect: [set_volume, media_control, get_volume]}
+- {say: "mute everything", expect: [set_mute, media_control]}
+- {say: "make the screen less bright", expect: [set_brightness]}
+- {say: "brightness 70 percent", expect: [set_brightness]}
+- {say: "lock my computer", expect: [lock_screen]}
+- {say: "shut the PC down in 5 minutes", expect: [shutdown_pc]}
+- {say: "never mind, don't shut down", expect: [cancel_shutdown]}
+- {say: "open notepad", expect: [open_app]}
+- {say: "launch vs code", expect: [open_app]}
+- {say: "close chrome", expect: [close_app, close_window]}
+- {say: "find my resume", expect: [search_files, search_documents, list_allowed_folders]}
+- {say: "what's in my downloads folder?", expect: [list_folder, list_allowed_folders]}
+- {say: "delete old.txt from my desktop", expect: [delete_file, search_files, list_allowed_folders]}
+- {say: "what's the weather in Kochi?", expect: [get_weather]}
+- {say: "do I need an umbrella in Bangalore today?", expect: [get_weather]}
+- {say: "who is the CEO of Nvidia?", expect: [web_search, wikipedia_summary]}
+- {say: "latest news", expect: [news_headlines, web_search]}
+- {say: "tell me about the Eiffel Tower", expect: [wikipedia_summary, web_search, none]}
+- {say: "what's the price of bitcoin right now?", expect: [web_search]}
+- {say: "remember that my car is a white Swift", expect: [remember]}
+- {say: "what do you know about me?", expect: [list_facts, recall]}
+- {say: "what did we talk about yesterday regarding the HUD?", expect: [recall, search_notes]}
+- {say: "remind me to drink water in 20 minutes", expect: [create_reminder]}
+- {say: "wake me up at 7 tomorrow", expect: [create_reminder]}
+- {say: "every weekday at 9am remind me to check email", expect: [create_reminder]}
+- {say: "what reminders do I have?", expect: [list_reminders]}
+- {say: "add buy groceries to my to-do list", expect: [add_task]}
+- {say: "what's on my to-do list?", expect: [list_tasks]}
+- {say: "do I have any new emails?", expect: [list_unread_emails]}
+- {say: "what's on my calendar tomorrow?", expect: [list_events]}
+- {say: "am I free on Friday afternoon?", expect: [list_events]}
+- {say: "schedule lunch with Sam on Friday at 1pm", expect: [create_event]}
+- {say: "pause the music", expect: [media_control]}
+- {say: "skip this song", expect: [media_control]}
+- {say: "play Believer by Imagine Dragons", expect: [play_youtube, search_spotify]}
+- {say: "put on some lofi music on youtube", expect: [play_youtube]}
+- {say: "find Arijit Singh on Spotify", expect: [search_spotify]}
+- {say: "switch to chrome", expect: [window_action]}
+- {say: "snap this window to the left", expect: [window_action, list_windows]}
+- {say: "what windows are open?", expect: [list_windows]}
+- {say: "minimize everything", expect: [show_desktop]}
+- {say: "what did I just copy?", expect: [read_clipboard]}
+- {say: "summarize what's in my clipboard", expect: [read_clipboard]}
+- {say: "type my email address anwin@example.com", expect: [type_text]}
+- {say: "turn on dark mode", expect: [set_dark_mode]}
+- {say: "my eyes hurt, make everything dark", expect: [set_dark_mode, set_brightness]}
+- {say: "turn off bluetooth", expect: [set_radio]}
+- {say: "take a screenshot", expect: [take_screenshot]}
+- {say: "empty the recycle bin", expect: [empty_recycle_bin]}
+- {say: "open wifi settings", expect: [open_settings]}
+- {say: "take a note: buy a new SSD", expect: [take_note]}
+- {say: "jot this down, the meeting moved to Thursday", expect: [take_note]}
+- {say: "what did I note about the SSD?", expect: [search_notes]}
+- {say: "what's this error on my screen?", expect: [read_screen]}
+- {say: "read what's on my screen", expect: [read_screen]}
+- {say: "what does my lease say about the notice period?", expect: [search_documents]}
+- {say: "open amazon.in and search for a usb c cable", expect: [browser_open]}
+- {say: "turn on gaming mode", expect: [set_gaming_mode]}
+- {say: "roll two dice", expect: [roll_dice]}
+- {say: "what time is it in London?", expect: [world_time]}
+- {say: "flip a coin", expect: [flip_coin]}
+- {say: "hi jarvis, how are you?", expect: [none]}
+- {say: "tell me a joke", expect: [none]}
+- {say: "what's 15 percent of 240?", expect: [none]}
+- {say: "translate 'good morning' to Hindi", expect: [none]}
+- {say: "write a short birthday message for my mom", expect: [none]}
+- {say: "explain how a rainbow forms in two sentences", expect: [none, web_search, wikipedia_summary]}

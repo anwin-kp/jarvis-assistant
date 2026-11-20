@@ -65,7 +65,9 @@ def chunk_text(text: str, size: int = 900, overlap: int = 150) -> list[str]:
     return chunks
 
 
-def ollama_embedder(client, model: str) -> Callable[[list[str]], np.ndarray]:
+def ollama_embedder(client, model: str, cpu: bool = True) -> Callable[[list[str]], np.ndarray]:
+    """cpu=True keeps the embedding model in RAM, leaving the GPU to the main AI model."""
+    opts = {"num_gpu": 0} if cpu else {}
     pulled = []
 
     def embed(texts: list[str]) -> np.ndarray:
@@ -75,7 +77,8 @@ def ollama_embedder(client, model: str) -> Callable[[list[str]], np.ndarray]:
                 logger.info("Downloading embedding model {}", model)
                 client.pull(model)
             pulled.append(True)
-        return np.asarray(client.embed(model=model, input=texts).embeddings, dtype=np.float32)
+        res = client.embed(model=model, input=texts, options=opts, keep_alive="60m")
+        return np.asarray(res.embeddings, dtype=np.float32)
 
     return embed
 
