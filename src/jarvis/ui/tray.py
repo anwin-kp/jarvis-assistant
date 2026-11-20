@@ -28,6 +28,7 @@ class Tray:
                  checked=lambda _: self.a["state"]()["wake"]),
             item("Speak replies", lambda: self.a["toggle_speech"](), checked=lambda _: self.a["state"]()["speech"]),
             item("Gaming mode", lambda: self.a["gaming"](), checked=lambda _: self.a["state"]()["gaming"]),
+            item("Open HUD", lambda: self.a["open_hud"](), default=True),
             item("Free GPU memory", lambda: self.a["free_gpu"]()),
             pystray.Menu.SEPARATOR,
             item("Quit JARVIS", lambda: self.a["quit"]()),

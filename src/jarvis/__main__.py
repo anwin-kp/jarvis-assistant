@@ -31,6 +31,7 @@ HELP = """Commands:
   /unload   free the GPU memory now
   /briefing your daily briefing now
   /gaming   toggle gaming mode (GPU freed, slower CPU replies)
+  /hud      open the HUD window
   /wake     toggle the wake word
   /mute     stop speaking replies (/unmute to resume)
   /quit     exit"""
@@ -88,7 +89,8 @@ def setup_logging(debug: bool) -> None:
 class App:
     def __init__(self, args):
         self.cfg, self.orch, self.brain, self.reg, self.memory, _ = build(dry_run=args.dry_run)
-        self.reg.on_call = show_tool_call
+        self.reg.on_call = self._on_tool
+        self.hud = None
         self.name = self.cfg.get("assistant_name", "JARVIS")
         self.q: queue.Queue = queue.Queue()
         self.busy = threading.Event()  # set while a turn runs: pauses the wake-word listener
@@ -110,6 +112,16 @@ class App:
 
     # ------------------------------------------------------------ setup
     def start(self) -> None:
+        hcfg = self.cfg.get("hud", {})
+        if hcfg.get("enabled", True):
+            try:
+                from jarvis.ui.hud import Hud
+
+                self.hud = Hud(self.q, hcfg.get("port", 8765))
+                self.hud.start()
+            except Exception:
+                logger.exception("HUD failed to start")
+                self.hud = None
         try:
             self.brain.check()
         except BrainUnavailable as e:
@@ -149,6 +161,7 @@ class App:
                     "gaming": lambda: self.q.put(("text", "/gaming")),
                     "free_gpu": lambda: self.q.put(("text", "/unload")),
                     "quit": lambda: self.q.put(("quit",)),
+                    "open_hud": lambda: self.hud.open() if self.hud else None,
                     "state": lambda: {"wake": self.wake_on, "speech": self.speech_on, "gaming": self.gaming.active},
                 })
                 self.tray.start()
@@ -158,6 +171,11 @@ class App:
         self.gaming.start_watcher()
         self.reminders.start()
         threading.Thread(target=self._input_loop, daemon=True, name="input").start()
+        if self.hud:
+            self._flags()
+            self._publish("notice", text=f"{self.name} online")
+            if hcfg.get("open_on_start", True):
+                self.hud.open()
         if self.voice:
             self._say(f"{self.name} online.")
 
@@ -185,9 +203,21 @@ class App:
                 time.sleep(2)
 
     # ------------------------------------------------------------ helpers
+    def _publish(self, type_: str, **data) -> None:
+        if self.hud:
+            self.hud.publish(type_, **data)
+
+    def _flags(self) -> None:
+        self._publish("flags", wake=self.wake_on, mute=not self.speech_on, gaming=self.gaming.active)
+
+    def _on_tool(self, name: str, args: dict, status: str) -> None:
+        show_tool_call(name, args, status)
+        self._publish("tool", name=name, args=args, status=status)
+
     def _state(self, s: str) -> None:
         if self.tray:
             self.tray.set_state(s)
+        self._publish("state", state=s)
 
     def _say(self, text: str) -> None:
         if self.voice and self.speech_on:
@@ -199,6 +229,8 @@ class App:
     def _gaming_changed(self, active: bool, reason: str) -> None:
         msg = f"Gaming mode {'on' if active else 'off'} ({reason})."
         print(f"\n{YELLOW}{msg}{RESET}")
+        self._publish("notice", text=msg)
+        self._flags()
         if self.tray:
             self.tray.notify(msg)
 
@@ -226,6 +258,7 @@ class App:
         for k, v in args.items():
             print(f"     {k}: {v}")
         need = "yes" if tool.risk is Risk.DANGER else "y"
+        self._publish("confirm", name=tool.name, args=args, risk=tool.risk.value)
         print(f"   Type '{need}' to approve, anything else to cancel: {RESET}", end="", flush=True)
         if self.tray:
             self.tray.notify(f"Approval needed: {tool.name} (see the JARVIS window)")
@@ -258,8 +291,10 @@ class App:
             if follow:
                 self.listen_and_handle(start_timeout=follow)
 
-    def handle(self, text: str) -> bool:
+    def handle(self, text: str, show: bool = True) -> bool:
         """Run one turn. Returns True if a reply was produced."""
+        if show:
+            self._publish("user", text=text)
         self._state("thinking")
         start = time.perf_counter()
         print(f"{DIM}thinking…{RESET}", end="\r", flush=True)
@@ -268,9 +303,11 @@ class App:
         except Exception as e:
             logger.exception("Turn failed")
             print(f"{RED}Something went wrong: {e}. Details in data/logs/jarvis.log{RESET}")
+            self._publish("notice", text=f"Error: {e}")
             self._state("idle")
             return False
         print(f"{CYAN}{self.name}:{RESET} {reply}  {DIM}({time.perf_counter() - start:.1f}s){RESET}")
+        self._publish("reply", text=reply)
         self._state("speaking")
         self._say(reply)
         self._state("idle")
@@ -305,7 +342,12 @@ class App:
             self.gaming.manual = on
             self.gaming.set(on)
         elif cmd == "/briefing":
-            self.handle(self.briefing_prompt())
+            self.handle(self.briefing_prompt(), show=False)
+        elif cmd == "/hud":
+            if self.hud:
+                self.hud.open()
+            else:
+                print(f"{DIM}HUD is disabled in config.{RESET}")
         elif cmd == "/wake":
             if not self.wake:
                 print(f"{DIM}Wake word isn't available (voice off or disabled in config).{RESET}")
@@ -317,6 +359,7 @@ class App:
             print(f"{DIM}Speech {'on' if self.speech_on else 'off'}.{RESET}")
         else:
             print("Unknown command. /help for the list.")
+        self._flags()
         return True
 
     def run(self) -> None:
@@ -332,10 +375,11 @@ class App:
                     self.listen_and_handle()
                 elif event[0] == "reminder":
                     print(f"\n{YELLOW}⏰ Reminder: {event[1]}{RESET}")
+                    self._publish("notice", text=f"⏰ Reminder: {event[1]}")
                     self._say(f"Reminder: {event[1]}")
                 elif event[0] == "briefing":
                     print(f"\n{CYAN}☀  Daily briefing{RESET}")
-                    self.handle(self.briefing_prompt())
+                    self.handle(self.briefing_prompt(), show=False)
                 elif event[0] == "text":
                     text = event[1]
                     if not text:

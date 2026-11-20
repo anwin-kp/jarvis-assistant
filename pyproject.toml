@@ -18,6 +18,7 @@ classifiers = [
 dependencies = [
     "comtypes>=1.5.0",
     "ddgs>=9.16.1",
+    "fastapi>=0.165.0",
     "faster-whisper>=1.2.1",
     "feedparser>=6.0.14",
     "google-api-python-client>=2.202.0",
@@ -40,7 +41,9 @@ dependencies = [
     "send2trash>=2.2.0",
     "sounddevice>=0.5.6",
     "trafilatura>=2.3.1",
+    "uvicorn>=0.54.0",
     "webrtcvad-wheels>=2.0.14.post1",
+    "websockets>=17.4",
     "win11toast>=0.36.3",
 ]
 
@@ -76,6 +79,7 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
+    "httpx>=0.28.1",
     "pytest>=9.2.0",
     "ruff>=0.17.6",
 ]
