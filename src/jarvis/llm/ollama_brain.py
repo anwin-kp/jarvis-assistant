@@ -8,7 +8,8 @@ from loguru import logger
 from jarvis.tools.registry import ConfirmFn, ToolRegistry
 
 CLAIMS_ACTION = re.compile(
-    r"\b(added|saved|created|scheduled|opened|closed|deleted|removed|moved|renamed|muted|unmuted|remembered|"
+    r"\b(taken|written|typed|played|paused|resumed|switched|snapped|minimi[sz]ed|maximi[sz]ed|copied|sent|"
+    r"enabled|disabled|added|saved|created|scheduled|opened|closed|deleted|removed|moved|renamed|muted|unmuted|remembered|"
     r"noted|cancell?ed|marked|launched|started|stopped|locked|set (?:to|for|up)|turned (?:on|off|up|down)|"
     r"has been|have been|is now|are now)\b",
     re.IGNORECASE,
@@ -17,6 +18,39 @@ NUDGE = (
     "[System check] Your reply says an action happened, but you did not call any tool, so nothing was done. "
     "If the user asked for an action, call the right tool now. If no action was needed, repeat your answer."
 )
+
+
+SENTENCE_END = re.compile(r"(?<=[.!?])\s+(?=[A-Z0-9\"'(])")
+FILLER = re.compile(r"^\s*(let me know|feel free to|is there anything else|if you need anything)", re.I)
+
+
+class SentenceStream:
+    """Collects streamed text and hands complete sentences to `emit` as soon as they're finished.
+    Holds back sentences that claim an action before any tool ran (they may be bluffs)."""
+
+    def __init__(self, emit, tools_ran):
+        self.emit, self.tools_ran = emit, tools_ran
+        self.buf, self.held = "", False
+
+    def feed(self, text: str) -> None:
+        self.buf += text
+        parts = SENTENCE_END.split(self.buf)
+        for sentence in parts[:-1]:
+            self._out(sentence)
+        self.buf = parts[-1]
+
+    def _out(self, sentence: str) -> None:
+        s = sentence.strip()
+        if not s or self.held or FILLER.match(s):
+            return
+        if not self.tools_ran() and CLAIMS_ACTION.search(s):
+            self.held = True  # let the final (checked) answer be spoken instead
+            return
+        self.emit(s)
+
+    def finish(self) -> None:
+        self._out(self.buf)
+        self.buf = ""
 
 
 class BrainUnavailable(RuntimeError):
@@ -62,21 +96,35 @@ class OllamaBrain:
                                 keep_alive=self.keep_alive, options=self.options)
         return (resp.message.content or "").strip()
 
-    def respond(self, messages: list[dict], tools: list[dict], confirm: ConfirmFn) -> str:
+    def _chat_stream(self, msgs, tools, think, on_sentence):
+        """Streaming chat: speaks sentences while the model is still writing. Returns a Message."""
+        content, calls = "", []
+        stream = SentenceStream(on_sentence, lambda: bool(self.last_tool_calls))
+        for chunk in self.client.chat(model=self.model, messages=msgs, tools=tools or None, think=think,
+                                      keep_alive=self.keep_alive, options=self.options, stream=True):
+            m = chunk.message
+            if m.tool_calls:
+                calls.extend(m.tool_calls)
+            if m.content:
+                content += m.content
+                if not calls:
+                    stream.feed(m.content)
+        if not calls:
+            stream.finish()
+        return ollama.Message(role="assistant", content=content, tool_calls=calls or None)
+
+    def respond(self, messages: list[dict], tools: list[dict], confirm: ConfirmFn, on_sentence=None) -> str:
         """messages: plain [{"role", "content"}] dicts. Tool calls live only inside this turn."""
         msgs = list(messages)
         self.last_tool_calls: list[str] = []
         nudged = False
         for step in range(self.max_steps):
-            resp = self.client.chat(
-                model=self.model,
-                messages=msgs,
-                tools=tools or None,
-                think=self.think or nudged,  # think harder on the retry
-                keep_alive=self.keep_alive,
-                options=self.options,
-            )
-            msg = resp.message
+            think = self.think or nudged  # think harder on the retry
+            if on_sentence and not nudged:
+                msg = self._chat_stream(msgs, tools, think, on_sentence)
+            else:
+                msg = self.client.chat(model=self.model, messages=msgs, tools=tools or None, think=think,
+                                       keep_alive=self.keep_alive, options=self.options).message
             msgs.append(msg)
             if not msg.tool_calls:
                 reply = (msg.content or "").strip()

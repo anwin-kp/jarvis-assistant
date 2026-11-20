@@ -1,5 +1,7 @@
 """Wires all components together."""
 
+from pathlib import Path
+
 from jarvis.core.config import DATA, ensure_data_dirs, load_config, load_persona
 from jarvis.core.orchestrator import Orchestrator
 from jarvis.llm.ollama_brain import OllamaBrain
@@ -21,6 +23,14 @@ def build(dry_run: bool = False):
     app_tools.register(reg, cfg["security"]["app_allowlist"])
     roots = file_tools.register(reg, cfg["security"]["allowed_roots"])
     web_tools.register(reg, cfg.get("web", {}).get("rss_feeds", []))
+    from jarvis.tools import clipboard_tools, media_tools, notes_tools, pc_tools, window_tools
+
+    media_tools.register(reg)
+    window_tools.register(reg)
+    clipboard_tools.register(reg)
+    pc_tools.register(reg)
+    notes_dir = cfg.get("notes", {}).get("folder") or str(file_tools.resolve_root("documents") / "JARVIS Notes")
+    notes_tools.register(reg, Path(notes_dir).expanduser())
     memory_tools.register(reg, memory)
     from jarvis.integrations import google
 

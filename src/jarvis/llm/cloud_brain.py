@@ -52,7 +52,7 @@ class CloudBrain:
     def complete(self, messages: list[dict]) -> str:
         return (self._chat(messages, None).get("content") or "").strip()
 
-    def respond(self, messages: list[dict], tools: list[dict], confirm: ConfirmFn) -> str:
+    def respond(self, messages: list[dict], tools: list[dict], confirm: ConfirmFn, on_sentence=None) -> str:
         msgs = list(messages)
         self.last_tool_calls = []
         nudged = False
@@ -103,7 +103,7 @@ class Router:
             return False  # files / email stay on this PC
         return self.mode == "cloud_first" or (self.gaming and self.cloud_in_gaming)
 
-    def respond(self, messages: list[dict], tools: list[dict], confirm: ConfirmFn) -> str:
+    def respond(self, messages: list[dict], tools: list[dict], confirm: ConfirmFn, on_sentence=None) -> str:
         if self._use_cloud(tools):
             try:
                 reply = self.cloud.respond(messages, tools, confirm)
@@ -114,7 +114,8 @@ class Router:
                     logger.warning("Cloud failed after running tools: {}", e)
                     return "I lost the connection to the cloud model midway. Please check whether it finished."
                 logger.warning("Cloud unavailable ({}); using local model", e)
-        reply = self.local.respond(messages, tools, confirm)
+        kw = {"on_sentence": on_sentence} if on_sentence else {}
+        reply = self.local.respond(messages, tools, confirm, **kw)
         self.last_tool_calls, self.last_backend = self.local.last_tool_calls, "local"
         return reply
 
