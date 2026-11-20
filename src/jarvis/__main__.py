@@ -121,8 +121,14 @@ class App:
         reminders_mod.register(self.reg, self.reminders)
 
         pcfg = self.cfg.get("proactive", {})
+        events_fn = None
+        if "list_events" in self.reg.names() and pcfg.get("meeting_reminder_minutes", 10):
+            from jarvis.integrations.google import upcoming_events as events_fn
         self.proactive = Proactive(lambda m: self.q.put(("alert", m)), pcfg.get("battery_percent", 15),
-                                   pcfg.get("disk_free_gb", 10)) if pcfg.get("enabled", True) else None
+                                   pcfg.get("disk_free_gb", 10), break_minutes=pcfg.get("break_reminder_minutes", 0),
+                                   events_fn=events_fn, meeting_minutes=pcfg.get("meeting_reminder_minutes", 10),
+                                   ) if pcfg.get("enabled", True) else None
+        self.telegram = None
 
     # ------------------------------------------------------------ setup
     def start(self) -> None:
@@ -199,6 +205,7 @@ class App:
             self.reg.doc_index.start_background()
         if self.proactive:
             self.proactive.start()
+        self._start_telegram()
         if not self.args.background:
             threading.Thread(target=self._input_loop, daemon=True, name="input").start()
         if self.hud:
@@ -354,6 +361,42 @@ class App:
                  "the top 3 news headlines"]
         return ("Give me my daily briefing in a few short spoken sentences: "
                 + ", ".join(p for p in parts if p) + ". Start with a short greeting.")
+
+    def _start_telegram(self) -> None:
+        tcfg = self.cfg.get("telegram") or {}
+        from jarvis.core.config import get_secret
+
+        token = get_secret("telegram_api_key")
+        if not tcfg.get("enabled", True) or not token:
+            return
+        from jarvis.integrations.telegram import TelegramBridge
+
+        def unknown(chat_id, name):
+            self.q.put(("notice", f"Telegram: {name or 'someone'} (chat id {chat_id}) messaged your bot. If that's "
+                                  f"you, set telegram.allowed_chat_id: {chat_id} in config.yaml and restart."))
+
+        self.telegram = TelegramBridge(token, tcfg.get("allowed_chat_id"),
+                                       lambda chat_id, text: self.q.put(("remote", chat_id, text)), unknown)
+        self.telegram.start()
+        logger.info("Telegram remote active")
+
+    def handle_remote(self, chat_id: int, text: str) -> None:
+        """A message from your phone: answer by text; actions that need approval are refused."""
+        from jarvis.integrations.telegram import remote_confirm
+
+        print(f"\n📱 Telegram: {text}")
+        self._publish("notice", text=f"📱 {text}")
+        if is_kill_command(text):
+            self.telegram.send(chat_id, "Shutting down JARVIS.")
+            self.kill()
+        try:
+            reply = self.orch.handle(text, remote_confirm)
+        except Exception as e:
+            logger.exception("Remote turn failed")
+            reply = f"Something went wrong: {e}"
+        print(f"{CYAN}{self.name} → phone:{RESET} {reply}")
+        self._publish("reply", text=f"📱 {reply}")
+        self.telegram.send(chat_id, reply)
 
     def _prompt(self) -> None:
         print("\nYou: ", end="", flush=True)
@@ -568,6 +611,11 @@ class App:
                     self._publish("notice", text=event[1])
                     reminders_mod.toast("JARVIS", event[1])
                     self._say(event[1])
+                elif event[0] == "remote":
+                    self.handle_remote(event[1], event[2])
+                elif event[0] == "notice":
+                    print(f"\n{YELLOW}{event[1]}{RESET}")
+                    self._publish("notice", text=event[1])
                 elif event[0] == "briefing":
                     print(f"\n{CYAN}☀  Daily briefing{RESET}")
                     self.handle(self.briefing_prompt(), show=False)
@@ -593,6 +641,10 @@ class App:
         self.quit.set()
         self.gaming.stop()
         self.reminders.stop()
+        if self.telegram:
+            self.telegram.stop()
+        if getattr(self.reg, "mcp", None):
+            self.reg.mcp.close()
         print(f"\n{DIM}Saving conversation summary…{RESET}")
         self.orch.summarize_session()
         if self.tray:

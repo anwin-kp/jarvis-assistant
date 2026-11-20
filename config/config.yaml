@@ -44,6 +44,8 @@ proactive:              # JARVIS speaks up on its own
   enabled: true
   battery_percent: 15    # warn when unplugged and at or below this
   disk_free_gb: 10       # warn when drive C has less free space
+  break_reminder_minutes: 120   # suggest a break after this much continuous work (0 = off)
+  meeting_reminder_minutes: 10  # announce calendar events this long before (needs Google login)
 
 home_assistant:         # optional smart home; token: .\jarvis.ps1 set-key home_assistant
   url: null             # e.g. http://homeassistant.local:8123
@@ -99,6 +101,18 @@ documents:              # "ask your documents" (local semantic search)
   folders: [documents]   # known names or full paths; PDFs, Word, .txt and .md are indexed
   index_on_start: true   # re-scan in the background at startup (only changed files are processed)
   model: nomic-embed-text  # small local embedding model (~270 MB, downloaded automatically)
+
+telegram:               # phone remote; token: .\jarvis.ps1 set-key telegram
+  enabled: true
+  allowed_chat_id: null  # message your bot once; JARVIS shows your chat id. Only this chat is answered.
+
+mcp_servers: {}          # connect MCP servers; their tools become JARVIS tools. Example:
+#  github:
+#    command: npx
+#    args: ["-y", "@modelcontextprotocol/server-github"]
+#    env: {GITHUB_PERSONAL_ACCESS_TOKEN: "..."}
+#    keywords: [github, repo, issue, pull request]
+#    trust: confirm       # confirm = ask before every call | read_only = no approval needed
 
 notes:
   folder: null           # null = Documents\JARVIS Notes
