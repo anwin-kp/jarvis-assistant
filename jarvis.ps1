@@ -14,12 +14,13 @@
     .\jarvis.ps1 test             # run unit tests and lint
     .\jarvis.ps1 autostart-on     # start JARVIS (minimized) when you log in to Windows
     .\jarvis.ps1 autostart-off
+    .\jarvis.ps1 google-login     # sign in to Gmail/Calendar (needs data\google\credentials.json)
 
     For an emergency stop use kill-switch.ps1 (or double-click kill-switch.cmd).
 #>
 param(
     [Parameter(Position = 0)]
-    [ValidateSet('start', 'stop', 'restart', 'status', 'free', 'stop-all', 'logs', 'test', 'autostart-on', 'autostart-off', 'help')]
+    [ValidateSet('start', 'stop', 'restart', 'status', 'free', 'stop-all', 'logs', 'test', 'autostart-on', 'autostart-off', 'google-login', 'help')]
     [string]$Command = 'help',
     [switch]$DryRun,
     [switch]$Text,
@@ -194,5 +195,6 @@ switch ($Command) {
     'test'     { Invoke-Test }
     'autostart-on'  { Set-Autostart $true }
     'autostart-off' { Set-Autostart $false }
+    'google-login'  { Push-Location $Root; try { & $Python -W ignore -m jarvis.integrations.google } finally { Pop-Location } }
     'help'     { Get-Help $PSCommandPath -Examples | Out-String | Write-Host }
 }

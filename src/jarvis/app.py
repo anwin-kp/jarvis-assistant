@@ -22,6 +22,10 @@ def build(dry_run: bool = False):
     roots = file_tools.register(reg, cfg["security"]["allowed_roots"])
     web_tools.register(reg, cfg.get("web", {}).get("rss_feeds", []))
     memory_tools.register(reg, memory)
+    from jarvis.integrations import google
+
+    if google.is_configured():
+        google.register(reg)
 
     brain = OllamaBrain(reg, cfg["llm"])
     orch = Orchestrator(brain, reg, memory, load_persona(), cfg.get("history_turns", 8),
