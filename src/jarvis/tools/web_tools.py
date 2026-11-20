@@ -6,6 +6,7 @@ import threading
 from urllib.parse import quote, urlparse
 
 import requests
+from loguru import logger
 
 from jarvis.tools.registry import ToolRegistry
 
@@ -93,7 +94,53 @@ def geocode(place: str, country: str = "") -> dict | None:
     return loc
 
 
-ENGINES = ("bing","google", "yahoo", "duckduckgo", "brave")
+def _open_meteo(lat: float, lon: float) -> dict:
+    wx = requests.get("https://api.open-meteo.com/v1/forecast", headers=UA, timeout=8, params={
+        "latitude": lat, "longitude": lon, "timezone": "auto", "forecast_days": 1,
+        "current": "temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m",
+        "daily": "temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code"}).json()
+    cur, day = wx["current"], wx["daily"]  # KeyError when it answers {"error": true, "reason": "...overloaded"}
+    return {
+        "now": {"temperature_c": cur["temperature_2m"], "feels_like_c": cur["apparent_temperature"],
+                "humidity_percent": cur["relative_humidity_2m"], "wind_kmh": cur["wind_speed_10m"],
+                "conditions": WMO.get(cur["weather_code"], f"code {cur['weather_code']}")},
+        "today": {"max_c": day["temperature_2m_max"][0], "min_c": day["temperature_2m_min"][0],
+                  "rain_chance_percent": day["precipitation_probability_max"][0],
+                  "conditions": WMO.get(day["weather_code"][0], f"code {day['weather_code'][0]}")},
+    }
+
+
+def _wttr(lat: float, lon: float) -> dict:
+    j = requests.get(f"https://wttr.in/{lat:.4f},{lon:.4f}", params={"format": "j1"}, headers=UA, timeout=8).json()
+    cur, day = j["current_condition"][0], j["weather"][0]
+    hours = day.get("hourly") or [{}]
+    midday = (hours[len(hours) // 2].get("weatherDesc") or [{"value": ""}])[0]["value"]
+    return {
+        "now": {"temperature_c": float(cur["temp_C"]), "feels_like_c": float(cur["FeelsLikeC"]),
+                "humidity_percent": int(cur["humidity"]), "wind_kmh": float(cur["windspeedKmph"]),
+                "conditions": cur["weatherDesc"][0]["value"].strip().lower()},
+        "today": {"max_c": float(day["maxtempC"]), "min_c": float(day["mintempC"]),
+                  "rain_chance_percent": max(int(h.get("chanceofrain", 0)) for h in hours),
+                  "conditions": midday.strip().lower()},
+    }
+
+
+def forecast(lat: float, lon: float) -> dict | None:
+    """Current weather + today. Open-Meteo (retried once: it sometimes answers "service is overloaded"),
+    then wttr.in as a second free source."""
+    import time
+
+    for attempt, source in enumerate((_open_meteo, _open_meteo, _wttr)):
+        try:
+            return source(lat, lon)
+        except (requests.RequestException, ValueError, KeyError, IndexError, TypeError) as e:
+            logger.warning("Weather via {} failed: {}", source.__name__, e)
+            if attempt == 0:
+                time.sleep(0.8)
+    return None
+
+
+ENGINES = ("bing", "google", "yahoo", "duckduckgo", "brave")
 _cache: dict[str, tuple[float, list[dict]]] = {}
 
 
@@ -165,51 +212,32 @@ def register(reg: ToolRegistry, rss_feeds: list[str]) -> None:
 
     @reg.tool(
         "get_weather",
-        "Get current weather and today's forecast for a city.",
+        "Get current weather and today's forecast. Leave city empty for the user's current location.",
         {
-            "city": {"type": "string"},
+            "city": {"type": "string", "description": "Place name; omit for where the user is now"},
             "country": {"type": "string", "description": "Optional country name or code, e.g. 'India' or 'IN'"},
         },
-        required=["city"],
+        required=[],
         group="web",
         read_only=True,
     )
-    def get_weather(city: str, country: str = ""):
-        if not country and "," in city:  # "Kochi, India"
-            city, country = (s.strip() for s in city.split(",", 1))
-        loc = geocode(city, country)
+    def get_weather(city: str = "", country: str = ""):
+        city = (city or "").strip()
+        if city.lower() in ("", "here", "my location", "current location", "near me", "local"):
+            locator = getattr(reg, "locator", None)
+            loc = locator.get() if locator else None
+            if not loc:
+                return "ERROR: I don't know where you are. Ask which city, or set location.home in config.yaml."
+        else:
+            if not country and "," in city:  # "Kochi, India"
+                city, country = (s.strip() for s in city.split(",", 1))
+            loc = geocode(city, country)
         if not loc:
             return f"ERROR: couldn't find a place called {city}{', ' + country if country else ''}."
-        wx = requests.get(
-            "https://api.open-meteo.com/v1/forecast",
-            headers=UA,
-            timeout=10,
-            params={
-                "latitude": loc["latitude"],
-                "longitude": loc["longitude"],
-                "timezone": "auto",
-                "current": "temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m",
-                "daily": "temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code",
-                "forecast_days": 1,
-            },
-        ).json()
-        cur, day = wx["current"], wx["daily"]
-        return {
-            "place": loc["place"],
-            "now": {
-                "temperature_c": cur["temperature_2m"],
-                "feels_like_c": cur["apparent_temperature"],
-                "humidity_percent": cur["relative_humidity_2m"],
-                "wind_kmh": cur["wind_speed_10m"],
-                "conditions": WMO.get(cur["weather_code"], f"code {cur['weather_code']}"),
-            },
-            "today": {
-                "max_c": day["temperature_2m_max"][0],
-                "min_c": day["temperature_2m_min"][0],
-                "rain_chance_percent": day["precipitation_probability_max"][0],
-                "conditions": WMO.get(day["weather_code"][0], f"code {day['weather_code'][0]}"),
-            },
-        }
+        report = forecast(loc["latitude"], loc["longitude"])
+        if not report:
+            return "ERROR: the weather services are not responding right now. Try again in a minute."
+        return {"place": loc["place"], **report}
 
     @reg.tool(
         "wikipedia_summary",

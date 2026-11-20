@@ -51,6 +51,7 @@ dependencies = [
     "webrtcvad-wheels>=2.0.14.post1",
     "websockets>=17.4",
     "win11toast>=0.36.3",
+    "winrt-windows-devices-geolocation>=4!10.0.28000.2957",
     "winrt-windows-devices-radios>=4!10.0.28000.2957",
     "winrt-windows-foundation>=4!10.0.28000.2957",
     "winrt-windows-foundation-collections>=4!10.0.28000.2957",

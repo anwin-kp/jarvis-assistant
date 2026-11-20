@@ -23,6 +23,9 @@ def build(dry_run: bool = False):
     app_tools.register(reg, cfg["security"]["app_allowlist"])
     roots = file_tools.register(reg, cfg["security"]["allowed_roots"])
     web_tools.register(reg, cfg.get("web", {}).get("rss_feeds", []))
+    from jarvis.tools import location_tools
+
+    locator = location_tools.register(reg, cfg)
     from jarvis.tools import clipboard_tools, media_tools, notes_tools, pc_tools, window_tools
 
     media_tools.register(reg)
@@ -104,6 +107,8 @@ def build(dry_run: bool = False):
     home_assistant.register(reg, cfg.get("home_assistant") or {})
     orch = Orchestrator(brain, reg, memory, load_persona(cfg.get("persona")), cfg.get("history_turns", 8),
                         cfg.get("idle_summary_minutes", 10))
+    if (cfg.get("location") or {}).get("in_prompt", True):
+        orch.location_fn = locator.city  # "Panaji, Goa, India": lets "near me" questions work
     if cfg["llm"].get("semantic_tools", True):
         from jarvis.llm.semantic import SemanticGroups
 

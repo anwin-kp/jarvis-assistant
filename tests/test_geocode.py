@@ -39,3 +39,18 @@ def test_falls_back_to_open_meteo_preferring_the_exact_name(monkeypatch):
     get, _ = fake_get([], om)
     monkeypatch.setattr(web_tools.requests, "get", get)
     assert web_tools.geocode("Goa")["place"] == "Goa, Bicol, Philippines"
+
+
+def test_forecast_falls_back_when_open_meteo_is_overloaded(monkeypatch):
+    def get(url, params=None, **kw):
+        if "open-meteo" in url:
+            return Resp({"error": True, "reason": "The service is overloaded"})
+        return Resp({"current_condition": [{"temp_C": "24", "FeelsLikeC": "25", "humidity": "60", "windspeedKmph": "9",
+                                            "weatherDesc": [{"value": "Sunny "}]}],
+                     "weather": [{"maxtempC": "33", "mintempC": "18",
+                                  "hourly": [{"chanceofrain": "4", "weatherDesc": [{"value": "Clear"}]}]}]})
+
+    monkeypatch.setattr(web_tools.requests, "get", get)
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    r = web_tools.forecast(15.5, 73.8)
+    assert r["now"]["temperature_c"] == 24 and r["now"]["conditions"] == "sunny" and r["today"]["max_c"] == 33

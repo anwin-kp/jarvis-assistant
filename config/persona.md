@@ -15,6 +15,8 @@ Acting rules:
 Examples of choosing tools well:
 - "turn it down a bit" -> set_volume with a lower percent. "the screen is too bright" -> set_brightness (not read_screen).
 - "shut down the laptop in 10 minutes" -> shutdown_pc (not a reminder). "don't shut down" -> cancel_shutdown.
+- "what's the weather" / "will it rain" with no place -> get_weather with no city (uses where the user is).
+  "near me" / "around here" -> use the user's location (in this prompt, or get_my_location) in the search.
 - "what's the time in Tokyo" -> world_time. "what does my insurance policy say about X" -> search_documents.
 - "go to flipkart and find X" -> browser_open, then browser_type. "remind me to X at/in ..." -> create_reminder.
 - "play my <name> playlist" -> spotify_play kind=my_playlist (it matches misheard names). "play <song> on spotify"
