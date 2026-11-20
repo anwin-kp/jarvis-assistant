@@ -20,8 +20,28 @@ voice:
   language: null         # null = auto-detect, or e.g. "en", "hi", "ml"
   silence_ms: 800        # stop recording after this much silence
   max_seconds: 15
-  tts_rate: 185          # speaking speed
-  tts_voice: null        # part of a Windows voice name, e.g. "David" or "Zira"
+  tts_engine: piper      # piper (natural, offline) | sapi (built-in Windows voices)
+  piper_voice: en_GB-alan-medium   # any voice from huggingface.co/rhasspy/piper-voices (auto-downloads)
+  tts_speed: 1.0
+  tts_rate: 185          # SAPI speaking speed
+  tts_voice: null        # SAPI: part of a Windows voice name, e.g. "David" or "Zira"
+  wake_word: true        # say "Hey Jarvis" to talk hands-free
+  wake_threshold: 0.5    # 0.3 = more sensitive, 0.7 = fewer false wakes
+  follow_up_seconds: 4   # after a spoken reply, keep listening this long without the wake word
+
+tray: true               # system-tray icon
+
+gaming:
+  auto_detect: true      # free the GPU automatically while one of these games runs
+  processes:             # add your games' .exe names (see Task Manager > Details)
+    - VALORANT-Win64-Shipping.exe
+    - cs2.exe
+    - GTA5.exe
+    - FortniteClient-Win64-Shipping.exe
+    - RocketLeague.exe
+    - eldenring.exe
+    - Cyberpunk2077.exe
+    - r5apex.exe
 
 security:
   shell_enabled: false   # true = allow read-only PowerShell commands (always asks first)

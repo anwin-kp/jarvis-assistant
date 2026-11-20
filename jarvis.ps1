@@ -12,15 +12,18 @@
     .\jarvis.ps1 stop-all         # close JARVIS, free the GPU, and shut down Ollama
     .\jarvis.ps1 logs [-Follow]   # show the log file
     .\jarvis.ps1 test             # run unit tests and lint
+    .\jarvis.ps1 autostart-on     # start JARVIS (minimized) when you log in to Windows
+    .\jarvis.ps1 autostart-off
 
     For an emergency stop use kill-switch.ps1 (or double-click kill-switch.cmd).
 #>
 param(
     [Parameter(Position = 0)]
-    [ValidateSet('start', 'stop', 'restart', 'status', 'free', 'stop-all', 'logs', 'test', 'help')]
+    [ValidateSet('start', 'stop', 'restart', 'status', 'free', 'stop-all', 'logs', 'test', 'autostart-on', 'autostart-off', 'help')]
     [string]$Command = 'help',
     [switch]$DryRun,
     [switch]$Text,
+    [switch]$Minimized,
     [switch]$Follow,
     [int]$Lines = 40
 )
@@ -119,7 +122,8 @@ function Invoke-Start {
     $jarvisArgs = @('-W', 'ignore', '-m', 'jarvis')
     if ($DryRun) { $jarvisArgs += '--dry-run' }
     if ($Text)   { $jarvisArgs += '--text' }
-    Start-Process -FilePath $Python -ArgumentList $jarvisArgs -WorkingDirectory $Root
+    $style = if ($Minimized) { 'Minimized' } else { 'Normal' }
+    Start-Process -FilePath $Python -ArgumentList $jarvisArgs -WorkingDirectory $Root -WindowStyle $style
     Start-Sleep -Seconds 2
     if (@(Get-JarvisProcesses).Count -gt 0) { Write-Ok 'JARVIS started in a new window' }
     else { Write-Warn "JARVIS exited right away. Check the log: .\jarvis.ps1 logs" }
@@ -162,6 +166,23 @@ function Invoke-Test {
     } finally { Pop-Location }
 }
 
+$Shortcut = Join-Path ([Environment]::GetFolderPath('Startup')) 'JARVIS.lnk'
+
+function Set-Autostart([bool]$On) {
+    if (-not $On) {
+        if (Test-Path $Shortcut) { Remove-Item $Shortcut; Write-Ok 'Autostart removed' } else { Write-Ok 'Autostart was not set' }
+        return
+    }
+    $ws = New-Object -ComObject WScript.Shell
+    $lnk = $ws.CreateShortcut($Shortcut)
+    $lnk.TargetPath = 'powershell.exe'
+    $lnk.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$PSCommandPath`" start -Minimized"
+    $lnk.WorkingDirectory = $Root
+    $lnk.Description = 'Start JARVIS'
+    $lnk.Save()
+    Write-Ok "JARVIS will start minimized when you log in ($Shortcut)"
+}
+
 switch ($Command) {
     'start'    { Invoke-Start }
     'stop'     { Stop-Jarvis; Clear-GpuModels }
@@ -171,5 +192,7 @@ switch ($Command) {
     'stop-all' { Stop-Jarvis; Clear-GpuModels; Stop-Ollama; Show-Gpu }
     'logs'     { Invoke-Logs }
     'test'     { Invoke-Test }
+    'autostart-on'  { Set-Autostart $true }
+    'autostart-off' { Set-Autostart $false }
     'help'     { Get-Help $PSCommandPath -Examples | Out-String | Write-Host }
 }
