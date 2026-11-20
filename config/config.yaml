@@ -14,6 +14,8 @@ llm:
   cloud:                 # optional free tier; needs a key: .\jarvis.ps1 set-key groq
     provider: groq       # groq | gemini | openrouter
     model: openai/gpt-oss-120b   # see console.groq.com/docs/models; gemini: gemini-2.5-flash, openrouter: a ":free" model
+    fallbacks:           # tried in order when the one above is rate limited / down (free keys: set-key gemini)
+      - {provider: gemini, model: gemini-2.5-flash}
     use_in_gaming_mode: true         # while gaming, use the cloud (if a key is set) instead of the slow CPU
 
 history_turns: 8         # how many previous exchanges the model sees

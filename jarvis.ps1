@@ -250,9 +250,9 @@ switch ($Command) {
         if ($Name -eq 'spotify_client_id' -and $plain -match '(?<![0-9a-fA-F])([0-9a-fA-F]{32})(?![0-9a-fA-F])') { $plain = $Matches[1].ToLower() }  # extra text pasted along: keep just the ID
         if ($plain.Length -lt 16) { throw "That key is only $($plain.Length) characters - it looks incomplete. Nothing was saved. Tip: copy the key, then run: .\jarvis.ps1 set-key $Name -FromClipboard" }
         # check the format, so a wrong clipboard can't be saved by mistake
-        $formats = @{ groq = '^gsk_\S{20,}$'; spotify_client_id = '^[0-9a-f]{32}$' }
+        $formats = @{ groq = '^gsk_\S{20,}$'; gemini = '^AIza[0-9A-Za-z_-]{30,}$'; spotify_client_id = '^[0-9a-f]{32}$' }
         if ($formats.ContainsKey($Name) -and $plain -notmatch $formats[$Name]) {
-            $hint = @{ groq = 'a Groq key starts with gsk_'; spotify_client_id = 'a Spotify Client ID is 32 characters (0-9, a-f), from the app Settings page' }[$Name]
+            $hint = @{ groq = 'a Groq key starts with gsk_'; gemini = 'a Gemini key starts with AIza (copy the key itself, not the command)'; spotify_client_id = 'a Spotify Client ID is 32 characters (0-9, a-f), from the app Settings page' }[$Name]
             throw "That doesn't look right ($($plain.Length) characters; $hint). Nothing was saved."
         }
         $keyName = if ($Name -eq 'spotify_client_id') { 'spotify_client_id' } else { "${Name}_api_key" }
