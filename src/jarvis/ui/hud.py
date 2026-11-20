@@ -19,6 +19,7 @@ class Hud:
     def __init__(self, app_queue, port: int = 8765):
         self.q = app_queue
         self.on_stop = None  # called immediately (not queued) when you press Stop / type "stop" while JARVIS talks
+        self.on_input = None  # called immediately for buttons and typed messages: they cut in on JARVIS talking
         self.port = port
         self.token = secrets.token_urlsafe(24)
         self.clients: set = set()
@@ -99,11 +100,14 @@ class Hud:
                 while True:
                     msg = await ws.receive_json()
                     text = str(msg.get("text", ""))[:2000]
-                    if msg.get("action") == "stop" or (self.on_stop and msg.get("action") == "text"
-                                                        and self.on_stop(text)):
-                        if msg.get("action") == "stop" and self.on_stop:
+                    action = msg.get("action")
+                    if action == "stop" or (self.on_stop and action == "text" and self.on_stop(text)):
+                        if action == "stop" and self.on_stop:
                             self.on_stop("stop")
-                    elif msg.get("action") == "text" and msg.get("files"):
+                        continue
+                    if action in ("text", "command", "talk") and self.on_input:
+                        self.on_input(text)  # buttons / typed messages cut in on JARVIS talking or thinking
+                    if action == "text" and msg.get("files"):
                         self.q.put(("text", text, [str(f) for f in msg["files"]][:10]))
                     elif msg.get("action") in ("text", "command"):
                         self.q.put(("text", text))

@@ -251,6 +251,7 @@ class App:
 
                 self.hud = Hud(self.q, hcfg.get("port", 8765))
                 self.hud.on_stop = self.interrupt
+                self.hud.on_input = self.preempt
                 self.hud.start()
                 self._publish("state", state="booting")
                 if hcfg.get("open_on_start", True):
@@ -338,6 +339,15 @@ class App:
     def speaking(self) -> bool:
         return self._speech_q.unfinished_tasks > 0
 
+    def preempt(self, text: str = "") -> None:
+        """A HUD button or typed message takes priority: if JARVIS is talking or working, stop that now
+        (voice, rest of the reply, AI generation, app task) so the new input runs straight away."""
+        if getattr(self, "_awaiting_confirm", False):
+            return  # it's the answer to an approval request, which is part of the current turn
+        if self.speaking or self.busy.is_set():
+            logger.info("HUD input cuts in: {}", text[:40] or "(talk)")
+            self.interrupt(f"HUD: {text or 'talk'}", force=True)
+
     def interrupt(self, text: str = "stop", force: bool = False) -> bool:
         """Stop talking right now: HUD Stop button, 'stop' typed or said while JARVIS talks or thinks,
         or talking over JARVIS (force). Stops the voice, the rest of the reply and the AI's generation."""
@@ -358,7 +368,8 @@ class App:
             brain.cancel.set()
         if getattr(self.reg, "operator_cancel", None):
             self.reg.operator_cancel.set()  # stop an app task in progress
-        logger.info("Interrupted ({})", "you talked over JARVIS" if force else text)
+        reason = text if text.startswith("HUD: ") else ("you talked over JARVIS" if force else text)
+        logger.info("Interrupted ({})", reason)
         return True
 
     # ------------------------------------------------------------ audio engine (the only mic owner)
@@ -633,18 +644,22 @@ class App:
         for k, v in args.items():
             print(f"     {k}: {v}")
         need = "yes" if tool.risk is Risk.DANGER else "y"
+        self._awaiting_confirm = True  # the next typed message answers this; it must not cut in on the turn
         self._publish("confirm", name=tool.name, args=args, risk=tool.risk.value)
         print(f"   Type '{need}' to approve, anything else to cancel: {RESET}", end="", flush=True)
         if self.tray:
             self.tray.notify(f"Approval needed: {tool.name} (see the JARVIS window)")
         self._say("I need your approval in the console.")
-        while True:
-            event = self.q.get()
-            if event[0] == "quit":
-                self.q.put(event)
-                return False
-            if event[0] == "text":
-                return event[1].lower() in ({"yes"} if need == "yes" else {"y", "yes"})
+        try:
+            while True:
+                event = self.q.get()
+                if event[0] == "quit":
+                    self.q.put(event)
+                    return False
+                if event[0] == "text":
+                    return event[1].lower() in ({"yes"} if need == "yes" else {"y", "yes"})
+        finally:
+            self._awaiting_confirm = False
 
     # ------------------------------------------------------------ turns
     def voice_turn(self, text: str, after_wake: bool) -> bool:
