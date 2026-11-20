@@ -6,30 +6,32 @@
 ![Platform: Windows](https://img.shields.io/badge/platform-Windows-0078D6)
 
 A **free, local-first** JARVIS-style personal AI assistant for Windows. The AI runs on your own GPU
-through [Ollama](https://ollama.com). No paid APIs, and it works offline.
+through [Ollama](https://ollama.com). No paid APIs, works offline, and your voice never leaves your PC.
 
-See [JARVIS_PLAN.md](JARVIS_PLAN.md) for the full architecture and roadmap.
+See [JARVIS_PLAN.md](JARVIS_PLAN.md) for the architecture and roadmap.
 
-## Status
-
-**v0.1.0 (Phase 1):** a text chat with tool use.
+## Features
 
 | Area | What JARVIS can do |
 |---|---|
-| System | CPU/RAM/disk/battery info, top processes, volume, mute, brightness, lock screen |
-| Apps | Open/close apps from an allowlist |
-| Files | Search, list, open, create, move, delete (to the Recycle Bin), limited to allowed folders |
+| Voice | "Hey Jarvis" wake word, push-to-talk, Whisper speech recognition (GPU), natural offline Piper voice |
+| Desktop | Futuristic HUD window (arc reactor, live transcript, tool activity, on-screen approvals), tray icon |
+| System | CPU/RAM/disk/battery, processes, volume, brightness, lock, shutdown/restart (cancellable), optional read-only PowerShell |
+| Apps & files | Open/close allowlisted apps; search, open, move and delete files (Recycle Bin), limited to allowed folders |
 | Web | DuckDuckGo search, read web pages, weather (Open-Meteo), Wikipedia, news (RSS) |
-| Memory | Remembers facts about you in a local SQLite database |
-| Safety | Permission tiers (safe / confirm / danger), approval prompts, audit log, dry-run mode, kill switch |
+| Memory | Remembers facts about you, summarizes past conversations, `/export` everything |
+| Reminders | Reminders and timers (one-time, daily, weekdays, weekly), to-do list, toasts, daily briefing |
+| Email & calendar | Gmail (read, draft, send with approval) and Google Calendar, *optional* |
+| Gaming mode | Detects your games and frees the GPU automatically |
+| Proactive | Warns about low battery and low disk space |
+| Personality | `default`, `butler`, `casual`, `terse` (or write your own) |
+| Smart home | Home Assistant lights, switches, fans and more, *optional* (locks and alarms are never allowed) |
+| Cloud fallback | Free Groq / Gemini / OpenRouter tiers, *optional*; files, email and memory always stay local |
+| Safety | Permission tiers (safe / confirm / danger), keyboard or HUD approvals, audit log, dry-run, kill switch |
 
-Next: Phase 2, voice (push-to-talk, Whisper speech-to-text, text-to-speech).
+## Install
 
-## Requirements
-
-- Windows 10/11
-- [Python 3.12](https://www.python.org/downloads/) (python.org build), [uv](https://docs.astral.sh/uv/), [Ollama](https://ollama.com)
-- NVIDIA GPU with ~6 GB+ VRAM recommended (it also runs on CPU, more slowly)
+Requirements: Windows 10/11, an NVIDIA GPU with ~6 GB+ VRAM recommended (it also runs on CPU, more slowly).
 
 ```powershell
 winget install Python.Python.3.12 astral-sh.uv Ollama.Ollama
@@ -40,46 +42,86 @@ ollama pull qwen3:8b
 .\jarvis.ps1 start
 ```
 
-## Control: `jarvis.ps1` (all commands in one file)
+The first start downloads the speech models (~550 MB) and voice (~60 MB).
+
+## Use
+
+Say **"Hey Jarvis"**, press **Enter** on an empty line to talk, or type. In the HUD you can also click
+**Talk** or type. Actions that change things show an approval prompt. Dangerous ones (delete, send email,
+shutdown, kill process) need you to type `yes` or click **Approve**, never just a spoken yes.
+
+Console commands: `/help`, `/briefing`, `/gaming`, `/persona <name>`, `/private`, `/mute`, `/wake`, `/hud`,
+`/facts`, `/export`, `/reset`, `/unload`, `/quit`.
+
+## Control: `jarvis.ps1`
 
 ```powershell
-.\jarvis.ps1 start            # start JARVIS in a new window (starts Ollama if needed)
-.\jarvis.ps1 start -DryRun    # simulation mode: actions that change things are only simulated
-.\jarvis.ps1 status           # JARVIS / Ollama / model / GPU memory
-.\jarvis.ps1 free             # unload the AI model from the GPU (e.g. before gaming)
-.\jarvis.ps1 stop             # close JARVIS and free the GPU
-.\jarvis.ps1 restart
-.\jarvis.ps1 stop-all         # close JARVIS, free the GPU and shut down Ollama
-.\jarvis.ps1 logs [-Follow]   # show the log
-.\jarvis.ps1 test             # unit tests + lint
+.\jarvis.ps1 start [-DryRun] [-Text] [-Minimized]   # start (Ollama is started if needed)
+.\jarvis.ps1 status            # JARVIS / Ollama / model / GPU memory
+.\jarvis.ps1 free              # unload the AI model from the GPU
+.\jarvis.ps1 stop | restart | stop-all
+.\jarvis.ps1 logs [-Follow]
+.\jarvis.ps1 test
+.\jarvis.ps1 autostart-on | autostart-off             # start with Windows
+.\jarvis.ps1 google-login                             # connect Gmail/Calendar
+.\jarvis.ps1 set-key groq|gemini|openrouter|home_assistant
 ```
 
-Inside the JARVIS window: `/help`, `/reset`, `/facts`, `/tools`, `/unload`, `/quit`.
+**Emergency stop:** double-click **`kill-switch.cmd`** (or run `.\kill-switch.ps1`). It force-kills JARVIS
+and Ollama and frees GPU memory. It is self-contained and logged to `data/logs/killswitch.log`.
 
-## Emergency stop: `kill-switch.ps1`
+## Optional setup
 
-Double-click **`kill-switch.cmd`** (or run `.\kill-switch.ps1`). It force-kills all JARVIS processes,
-unloads the model from GPU memory, and kills Ollama, then confirms everything stopped. It doesn't depend
-on `jarvis.ps1` or Python, and every use is logged to `data/logs/killswitch.log`.
+<details><summary><b>Gmail & Google Calendar</b> (free)</summary>
 
-Ollama starts automatically when you log in to Windows; the kill switch stops it for the current session only.
+1. Open [Google Cloud Console](https://console.cloud.google.com/), create a project.
+2. **APIs & Services → Library**: enable **Gmail API** and **Google Calendar API**.
+3. **OAuth consent screen**: External, add yourself under *Test users*.
+4. **Credentials → Create credentials → OAuth client ID → Desktop app**, then download the JSON.
+5. Save it as `data\google\credentials.json` and run `.\jarvis.ps1 google-login`.
+
+In "Testing" mode Google expires the sign-in after about 7 days; run `google-login` again when JARVIS asks.
+</details>
+
+<details><summary><b>Free cloud model</b> (smarter answers when online)</summary>
+
+Get a free key from [Groq](https://console.groq.com/keys) (or Google AI Studio / OpenRouter), then:
+
+```powershell
+.\jarvis.ps1 set-key groq
+```
+
+Set `llm.mode: cloud_first` in `config/config.yaml` (or leave `local` and the cloud is used only in gaming mode).
+Free tiers have rate limits; JARVIS falls back to the local model automatically. Files, email and memory
+summaries are never sent to the cloud, and `/private` forces everything local.
+</details>
+
+<details><summary><b>Home Assistant</b></summary>
+
+Create a long-lived access token in Home Assistant (Profile → Security), run
+`.\jarvis.ps1 set-key home_assistant`, and set `home_assistant.url` in `config/config.yaml`.
+</details>
 
 ## Configure
 
-- `config/config.yaml`: model, allowed folders, app allowlist, news feeds
-- `config/persona.md`: JARVIS's personality and rules
-- Runtime data (memory, logs, audit trail) lives in `data/`, which git ignores.
+- `config/config.yaml`: models, voice, wake word, allowed folders, app allowlist, games, briefing, HUD, cloud
+- `config/persona.md` and `config/personas/*.md`: personality
+- Runtime data (memory, logs, models, Google token) lives in `data/`, which git ignores.
 
 ## Project structure
 
 ```
-config/            settings and persona
+config/            settings, persona, personality profiles
 src/jarvis/
-  core/            config loading, orchestrator (turn loop)
-  llm/             Ollama brain, tool-group selection
-  tools/           tool registry + permission gate, system/app/file/web/memory tools
-  memory/          SQLite store
-tests/             unit tests
+  core/            config, orchestrator, gaming mode, proactive alerts
+  llm/             Ollama brain, cloud brain + router, tool-group selection
+  tools/           tool registry + permission gate; system, app, file, web, memory, shell tools
+  audio/ stt/ tts/ microphone + VAD, wake word, Whisper, Piper / SAPI
+  memory/          SQLite store (facts, history, summaries, audit log)
+  scheduler/       reminders, tasks, briefing
+  integrations/    Google (Gmail/Calendar), Home Assistant
+  ui/              HUD (FastAPI + web page), tray icon
+tests/
 jarvis.ps1         control script
 kill-switch.ps1    emergency stop
 ```
@@ -87,16 +129,16 @@ kill-switch.ps1    emergency stop
 ## Development
 
 ```powershell
-uv run python -m jarvis --debug    # run directly with debug logs
+uv run python -m jarvis --debug    # run with debug logs
 .\jarvis.ps1 test                  # tests + lint
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the branch model (`main` / `develop` / `feature/*`) and commit conventions.
 
-> **Windows Smart App Control:** if it's on, it blocks uv's own unsigned Python builds and the `.exe`
-> launchers uv generates (`jarvis.exe`, `pytest.exe`). This project therefore uses the signed python.org
-> Python (`python-preference = "only-system"` in `pyproject.toml`) and runs everything with
-> `uv run python -m ...` or `jarvis.ps1`.
+> **Windows Smart App Control:** if it's on, it blocks unsigned native code, including uv's own Python builds,
+> the `.exe` launchers uv generates and some compiled packages (e.g. SQLAlchemy). This project uses the signed
+> python.org Python (`python-preference = "only-system"`), avoids the blocked packages, and runs everything
+> with `uv run python -m ...` or `jarvis.ps1`.
 
 ## License
 
