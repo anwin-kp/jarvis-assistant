@@ -20,6 +20,10 @@ KEYWORDS: dict[str, list[str]] = {
         "remind", "reminder", "alarm", "timer", "minutes", "tomorrow", "schedule", "task", "to-do", "todo",
         "to do", "briefing", "agenda",
     ],
+    "email": [
+        "email", "e-mail", "mail", "inbox", "gmail", "unread", "draft", "reply", "send", "calendar",
+        "meeting", "event", "appointment", "schedule", "agenda", "busy", "free on",
+    ],
     "memory": ["remember", "forget", "recall", "my name", "my favorite", "do you know", "facts", "about me"],
 }
 
