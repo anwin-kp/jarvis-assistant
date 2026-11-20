@@ -26,6 +26,17 @@ See [JARVIS_PLAN.md](JARVIS_PLAN.md) for the architecture and roadmap.
 | Proactive | Warns about low battery and low disk space |
 | Personality | `default`, `butler`, `casual`, `terse` (or write your own) |
 | Smart home | Home Assistant lights, switches, fans and more, *optional* (locks and alarms are never allowed) |
+| Hands-free | Always listening (no button), "Jarvis, go to sleep", optional wake word, interrupt by talking (headset), voice ID (only obeys you) |
+| Languages | Speak English, Hindi, Malayalam, Telugu, Marathi and more; JARVIS answers in a matching voice |
+| Media & windows | Play/pause/next, play on YouTube, Spotify search, switch/snap/minimize windows, show desktop |
+| Clipboard & typing | Summarize/translate what you copied, copy results, type text into any app |
+| PC toggles | Dark mode, Wi-Fi/Bluetooth, screenshots, empty recycle bin, open Settings pages |
+| Notes | "Take a note…", journal and search, saved as Markdown in Documents\JARVIS Notes |
+| Screen | "What's this error on my screen?" via Windows' built-in OCR (offline) |
+| Your documents | Ask questions about your PDFs/Word/text files (local semantic search) |
+| Browser agent | JARVIS drives its own Edge window to open sites, read, click and fill forms (always asks first, never types passwords) |
+| Extensible | Drop-in plugins (`plugins/`), any MCP server (`mcp_servers`), Telegram phone remote |
+| Proactive | Low battery/disk, break reminders, upcoming meetings |
 | Cloud fallback | Free Groq / Gemini / OpenRouter tiers, *optional*; files, email and memory always stay local |
 | Safety | Permission tiers (safe / confirm / danger), keyboard or HUD approvals, audit log, dry-run, kill switch |
 

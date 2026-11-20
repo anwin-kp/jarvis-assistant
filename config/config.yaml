@@ -34,6 +34,18 @@ voice:
   tts_voice: null        # SAPI: part of a Windows voice name, e.g. "David" or "Zira"
   listen_mode: always    # always = just talk (no button, no wake word) | wake_word = say "Hey Jarvis" | push
   min_speech_ms: 400     # always mode: ignore sounds shorter than this (coughs, clicks)
+  languages: [en]       # languages you speak, e.g. [en, hi, ml] (prevents mis-detection on short phrases)
+  voices:                # reply voice per spoken language (free Piper voices, downloaded on first use)
+    en: en_GB-alan-medium
+    hi: hi_IN-rohan-medium
+    ml: ml_IN-arjun-medium
+    te: te_IN-venkatesh-medium
+    mr: mr_IN-google-medium
+  barge_in: false        # talk over JARVIS to interrupt it (use a headset: speakers echo into the mic)
+  barge_in_rms: 0.03     # how loud you must be to interrupt
+  voice_id:              # only obey your voice; enroll first: .\jarvis.ps1 enroll-voice
+    enabled: false
+    threshold: 0.45      # higher = stricter
   wake_word: true        # also load "Hey Jarvis" (wake_word mode, and waking up after "go to sleep")
   wake_threshold: 0.5    # 0.3 = more sensitive, 0.7 = fewer false wakes
   follow_up_seconds: 4   # after a spoken reply, keep listening this long without the wake word
@@ -113,6 +125,9 @@ mcp_servers: {}          # connect MCP servers; their tools become JARVIS tools.
 #    env: {GITHUB_PERSONAL_ACCESS_TOKEN: "..."}
 #    keywords: [github, repo, issue, pull request]
 #    trust: confirm       # confirm = ask before every call | read_only = no approval needed
+
+browser:
+  enabled: true          # browser agent (its own Edge window); clicking/typing always asks first
 
 notes:
   folder: null           # null = Documents\JARVIS Notes

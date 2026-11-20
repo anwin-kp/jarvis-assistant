@@ -39,6 +39,8 @@ KEYWORDS: dict[str, list[str]] = {
     "screen": ["screen", "error", "this window", "what am i looking at", "read this", "on my monitor"],
     "docs": ["document", "documents", "pdf", "agreement", "contract", "invoice", "report", "resume", "cv",
              "according to", "my files", "policy", "manual", "in my notes"],
+    "browser": ["website", "browser", "web page", "webpage", "site", "click", "fill", "form", "sign up", "log in",
+                "order", "book a", "on amazon", "on flipkart", "checkout"],
     "memory": ["remember", "forget", "recall", "my name", "my favorite", "do you know", "facts", "about me"],
 }
 

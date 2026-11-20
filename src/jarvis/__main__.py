@@ -64,7 +64,19 @@ class Voice:
         self.cfg = vcfg
         self.stt = WhisperSTT(vcfg.get("stt_model", "small"), vcfg.get("stt_device", "cuda"),
                               vcfg.get("stt_compute_type", "float16"), download_root=str(DATA / "models"),
-                              vocabulary=vcfg.get("vocabulary"))
+                              vocabulary=vcfg.get("vocabulary"), languages=vcfg.get("languages"))
+        self.last_lang: str | None = None
+        self.voices = {k.lower(): v for k, v in (vcfg.get("voices") or {}).items()}
+        self._tts_cache: dict = {}
+        self.voiceid = None
+        idcfg = vcfg.get("voice_id") or {}
+        if idcfg.get("enabled"):
+            from jarvis.audio.voiceid import VoiceID
+
+            self.voiceid = VoiceID(DATA / "models" / "voiceid", idcfg.get("threshold", 0.45))
+            if not self.voiceid.enrolled:
+                logger.warning("Voice ID is on but no voice is enrolled: run .\\jarvis.ps1 enroll-voice")
+                self.voiceid = None
         self.tts = None
         if vcfg.get("tts_engine", "piper") == "piper":
             try:
@@ -77,13 +89,42 @@ class Voice:
         if self.tts is None:
             self.tts = SapiTTS(vcfg.get("tts_rate", 185), vcfg.get("tts_voice"))
 
+    def tts_for(self, lang: str | None):
+        """The Piper voice for the language you spoke (config voice.voices), else the default voice."""
+        name = self.voices.get(lang or "")
+        if not name or name == self.cfg.get("piper_voice"):
+            return self.tts
+        if name not in self._tts_cache:
+            try:
+                from jarvis.tts.piper_tts import PiperTTS
+
+                self._tts_cache[name] = PiperTTS(name, DATA / "models" / "piper", self.cfg.get("tts_speed", 1.0))
+            except Exception as e:
+                logger.warning("Voice {} unavailable: {}", name, e)
+                self._tts_cache[name] = self.tts
+        return self._tts_cache[name]
+
+    def is_owner(self, audio) -> bool:
+        if not self.voiceid:
+            return True
+        ok, score = self.voiceid.is_owner(audio)
+        if not ok:
+            logger.info("Ignored speech from another voice (similarity {:.2f})", score)
+        return ok
+
+    def transcribe(self, audio) -> str:
+        if not audio.size or not self.is_owner(audio):
+            return ""
+        text, lang = self.stt.transcribe(audio, self.cfg.get("language"))
+        self.last_lang = lang if text else self.last_lang
+        return text
+
     def listen(self, start_timeout: float = 6) -> str:
         from jarvis.audio.mic import record_until_silence
 
         audio = record_until_silence(self.cfg.get("max_seconds", 15), self.cfg.get("silence_ms", 800),
                                      start_timeout=start_timeout)
-        text, _ = self.stt.transcribe(audio, self.cfg.get("language"))
-        return text
+        return self.transcribe(audio)
 
 
 def setup_logging(debug: bool) -> None:
@@ -107,6 +148,7 @@ class App:
         self.listen_mode = "push"  # always | wake_word | push
         self.sleeping = False  # always-mode paused until 'Hey Jarvis'
         self._speech_q: queue.Queue = queue.Queue()
+        self._barged = False
         self._streamed: list[str] = []
         self.args = args
 
@@ -305,15 +347,46 @@ class App:
         while True:
             text = self._speech_q.get()
             try:
-                if self.speech_on:
-                    self.voice.tts.speak(text)
+                if self.speech_on and not self._barged:
+                    tts = self.voice.tts_for(self.voice.last_lang)
+                    stop = threading.Event()
+                    if self.cfg.get("voice", {}).get("barge_in") and hasattr(tts, "stop"):
+                        threading.Thread(target=self._barge_monitor, args=(stop, tts), daemon=True).start()
+                    try:
+                        tts.speak(text)
+                    finally:
+                        stop.set()
             except Exception:
                 logger.exception("TTS failed")
             finally:
                 self._speech_q.task_done()
 
+    def _barge_monitor(self, stop: threading.Event, tts) -> None:
+        """Interrupt JARVIS by talking over it (best with a headset: speakers can echo into the mic)."""
+        import numpy as np
+        import sounddevice as sd
+        import webrtcvad
+
+        vad, run = webrtcvad.Vad(3), 0
+        threshold = self.cfg.get("voice", {}).get("barge_in_rms", 0.03)
+        try:
+            with sd.InputStream(samplerate=16000, channels=1, dtype="int16", blocksize=480) as s:
+                while not stop.is_set():
+                    block, _ = s.read(480)
+                    rms = float(np.sqrt(np.mean((block.astype(np.float32) / 32768.0) ** 2)))
+                    run = run + 1 if rms >= threshold and vad.is_speech(block.tobytes(), 16000) else 0
+                    if run >= 8:  # ~0.25 s of clear speech
+                        self._barged = True
+                        tts.stop()
+                        logger.info("Barge-in: stopped speaking")
+                        return
+        except Exception:
+            logger.exception("Barge-in monitor failed")
+
     def _speak_async(self, sentence: str) -> None:
         """Streaming: speak each sentence as soon as the model finishes writing it."""
+        if self._barged:
+            return
         self._streamed.append(sentence)
         self._state("speaking")
         self._speech_q.put(sentence)
@@ -328,7 +401,8 @@ class App:
                 self._speech_q.join()
             finally:
                 if not was_busy:
-                    time.sleep(0.4)  # let the echo die down
+                    if not self._barged:
+                        time.sleep(0.4)  # let the echo die down
                     self.busy.clear()
 
     def _finish_speech(self, reply: str) -> None:
@@ -338,6 +412,9 @@ class App:
             rest = rest.replace(s, "", 1)
         self._streamed = []
         rest = rest.strip()
+        if self._barged:  # you interrupted: stop talking and listen
+            self._barged = False
+            return
         self._say(rest if len(rest.strip(" .,!?")) > 1 else "")
 
     def _gaming_changed(self, active: bool, reason: str) -> None:
@@ -445,7 +522,7 @@ class App:
     def handle_audio(self, audio) -> bool:
         """Speech captured by always-listening. Returns False if it was just noise (nothing printed)."""
         self._state("thinking")
-        text, _ = self.voice.stt.transcribe(audio, self.cfg.get("voice", {}).get("language"))
+        text = self.voice.transcribe(audio)
         if not text:
             self._state("idle")
             return False
@@ -486,6 +563,7 @@ class App:
             return False
         if show:
             self._publish("user", text=text)
+        self._barged = False
         self._state("thinking")
         start = time.perf_counter()
         print(f"{DIM}thinking…{RESET}", end="\r", flush=True)
@@ -621,6 +699,8 @@ class App:
                     self.handle(self.briefing_prompt(), show=False)
                 elif event[0] == "text":
                     text = event[1]
+                    if self.voice and text and not text.startswith("/"):
+                        self.voice.last_lang = None  # typed: answer in the default voice
                     if not text:
                         if self.voice:
                             self.listen_and_handle()
@@ -645,6 +725,11 @@ class App:
             self.telegram.stop()
         if getattr(self.reg, "mcp", None):
             self.reg.mcp.close()
+        if getattr(self.reg, "browser", None):
+            try:
+                self.reg.browser.close()
+            except Exception:
+                pass
         print(f"\n{DIM}Saving conversation summary…{RESET}")
         self.orch.summarize_session()
         if self.tray:
