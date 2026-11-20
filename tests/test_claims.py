@@ -12,6 +12,7 @@ CLAIMS = [
     "Spotify has been opened.",
     "I turned the volume up.",
     "Successfully deleted the file.",
+    "12 times 7 is 84. The display shows 84.",
 ]
 PROSE = [  # real false alarms from the log, and ordinary answers
     "The history of Kerala dates back to the 3rd century BCE, when it was written about by Greek travellers.",

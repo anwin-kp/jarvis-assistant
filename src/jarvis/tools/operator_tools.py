@@ -42,7 +42,8 @@ def register(reg: ToolRegistry, cfg: dict) -> None:
 
     @reg.tool("operate_app", "Carry out a multi-step task inside any app by looking at it and clicking/typing like a "
               "person, e.g. app='settings' task='turn on night light', app='chrome' task='open gmail and search for "
-              "invoices'. Opens the app if needed. NOT for playing music: use spotify_play (it opens Spotify itself).",
+              "invoices'. It opens the app itself: don't call open_app first. Not for websites (browser_open) "
+              "or music (spotify_play).",
               {"app": {"type": "string", "description": "app or window name"},
                "task": {"type": "string", "description": "what to do, step goal in plain words"}},
               risk=Risk.CONFIRM, group="screen")
