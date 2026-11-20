@@ -28,6 +28,8 @@ class FakeSpotify(Spotify):
         if path == "/search":
             return {"tracks": {"items": [{"name": "Believer", "uri": "spotify:track:1",
                                           "artists": [{"name": "Imagine Dragons"}]}]}}
+        if path == "/me/player/currently-playing":  # playback started: the tool checks this before saying so
+            return {"is_playing": True, "item": {"name": "Track One", "artists": [{"name": "Artist"}]}}
         return {}
 
 
@@ -37,7 +39,7 @@ def test_spotify_play_my_playlist_and_song():
     reg = ToolRegistry()
     spm.register(reg, sp)
     r = reg.execute("spotify_play", {"query": "mixup match", "kind": "my_playlist"}, OK)
-    assert r.text == "Playing your playlist 'Mix-Up Mash'."
+    assert r.text == "Playing your playlist 'Mix-Up Mash'. Checked: now playing Track One by Artist."
     assert ("PUT", "/me/player/play?device_id=dev1", {"json": {"context_uri": "spotify:playlist:B"}}) in sp.calls
     r = reg.execute("spotify_play", {"query": "believer", "kind": "song"}, OK)
     assert "Believer by Imagine Dragons" in r.text
