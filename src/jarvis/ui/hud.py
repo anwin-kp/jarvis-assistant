@@ -49,8 +49,8 @@ class Hud:
 
     # ------------------------------------------------------------ server
     def _make_app(self):
-        from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-        from fastapi.responses import HTMLResponse, PlainTextResponse
+        from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
+        from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 
         app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
         html = (WEB / "index.html").read_text(encoding="utf-8")
@@ -60,6 +60,31 @@ class Hud:
             if not secrets.compare_digest(token, self.token):
                 return PlainTextResponse("Forbidden", status_code=403)
             return HTMLResponse(html)
+
+        @app.post("/upload")
+        async def upload(request: Request, token: str = "", name: str = "file"):
+            """Attachment from the page (raw body). Saved to data/knowledge; the page sends the id with its message."""
+            if not secrets.compare_digest(token, self.token):
+                return PlainTextResponse("Forbidden", status_code=403)
+            from jarvis.ui import attachments
+
+            try:
+                path = attachments.save(name, await request.body())
+            except ValueError as e:
+                return JSONResponse({"error": str(e)}, status_code=413)
+            return JSONResponse({"id": path.name, "name": attachments.display_name(path)})
+
+        @app.get("/file/{file_id}")
+        async def file(file_id: str, token: str = ""):
+            """Thumbnails of attached images in the chat (only files in data/knowledge)."""
+            from fastapi.responses import FileResponse
+
+            from jarvis.ui import attachments
+
+            path = attachments.resolve(file_id) if secrets.compare_digest(token, self.token) else None
+            if not path or path.suffix.lower() not in attachments.IMAGE_EXT:
+                return PlainTextResponse("Not found", status_code=404)
+            return FileResponse(path)
 
         @app.websocket("/ws")
         async def ws_endpoint(ws: WebSocket):
@@ -78,6 +103,8 @@ class Hud:
                                                         and self.on_stop(text)):
                         if msg.get("action") == "stop" and self.on_stop:
                             self.on_stop("stop")
+                    elif msg.get("action") == "text" and msg.get("files"):
+                        self.q.put(("text", text, [str(f) for f in msg["files"]][:10]))
                     elif msg.get("action") in ("text", "command"):
                         self.q.put(("text", text))
                     elif msg.get("action") == "talk":

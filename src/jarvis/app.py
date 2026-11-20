@@ -64,8 +64,10 @@ def build(dry_run: bool = False):
     if dcfg.get("enabled", True):
         from jarvis.docs.index import DocIndex
         from jarvis.docs.index import register as register_docs
+        from jarvis.ui.attachments import KNOWLEDGE
 
-        folders = [file_tools.resolve_root(f) for f in dcfg.get("folders", ["documents"])]
+        KNOWLEDGE.mkdir(parents=True, exist_ok=True)  # files given in the HUD: always searchable
+        folders = [file_tools.resolve_root(f) for f in dcfg.get("folders", ["documents"])] + [KNOWLEDGE]
         reg.doc_index = DocIndex(memory, [f for f in folders if f.exists()], embed)
         register_docs(reg, reg.doc_index)
     notes_dir = cfg.get("notes", {}).get("folder") or str(file_tools.resolve_root("documents") / "JARVIS Notes")
