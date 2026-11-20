@@ -17,6 +17,7 @@
     .\jarvis.ps1 autostart-off
     .\jarvis.ps1 shortcut         # add JARVIS (and Kill JARVIS) to the Desktop and Start menu
     .\jarvis.ps1 enroll-voice     # record your voiceprint (for voice.voice_id)
+    .\jarvis.ps1 spotify-login    # connect Spotify (after: set-key spotify_client_id)
     .\jarvis.ps1 google-login     # sign in to Gmail/Calendar (needs data\google\credentials.json)
     .\jarvis.ps1 set-key groq     # store an API key securely (add -FromClipboard to read it from the clipboard)
 
@@ -24,7 +25,7 @@
 #>
 param(
     [Parameter(Position = 0)]
-    [ValidateSet('start', 'stop', 'restart', 'status', 'free', 'stop-all', 'logs', 'test', 'autostart-on', 'autostart-off', 'google-login', 'set-key', 'shortcut', 'enroll-voice', 'eval', 'help')]
+    [ValidateSet('start', 'stop', 'restart', 'status', 'free', 'stop-all', 'logs', 'test', 'autostart-on', 'autostart-off', 'google-login', 'set-key', 'shortcut', 'enroll-voice', 'eval', 'spotify-login', 'help')]
     [string]$Command = 'help',
     [switch]$DryRun,
     [switch]$Text,
@@ -230,9 +231,10 @@ switch ($Command) {
     'autostart-off' { Set-Autostart $false }
     'shortcut'      { New-Shortcuts }
     'eval'          { Push-Location $Root; try { $env:PYTHONIOENCODING = 'utf-8'; & $Python -W ignore -m jarvis.evals } finally { Pop-Location } }
+    'spotify-login' { Push-Location $Root; try { & $Python -W ignore -m jarvis.integrations.spotify } finally { Pop-Location } }
     'enroll-voice'  { Push-Location $Root; try { & $Python -W ignore -m jarvis.audio.voiceid } finally { Pop-Location } }
     'set-key'       {
-        if ($Name -notin 'groq', 'gemini', 'openrouter', 'home_assistant', 'telegram') { throw 'Usage: .\jarvis.ps1 set-key groq|gemini|openrouter|home_assistant|telegram' }
+        if ($Name -notin 'groq', 'gemini', 'openrouter', 'home_assistant', 'telegram', 'spotify_client_id') { throw 'Usage: .\jarvis.ps1 set-key groq|gemini|openrouter|home_assistant|telegram|spotify_client_id' }
         if ($FromClipboard) {
             $plain = "$(Get-Clipboard -Raw)".Trim()   # copy the key first; avoids paste problems in hidden prompts
             Set-Clipboard -Value ' '                  # don't leave the key on the clipboard

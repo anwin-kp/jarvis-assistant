@@ -38,6 +38,14 @@ def build(dry_run: bool = False):
     reg.mcp = mcp_client.register(reg, cfg.get("mcp_servers") or {})
 
     screen_tools.register(reg)
+    from jarvis.integrations import spotify
+    from jarvis.tools import ui_tools, vision_tools
+
+    vision_tools.register(reg, cfg)
+    ui_tools.register(reg)
+    reg.spotify = spotify.setup(reg)
+    if reg.spotify:  # the real Spotify tools replace the "open a search" fallback
+        reg.unregister("search_spotify")
     if cfg.get("browser", {}).get("enabled", True):
         from jarvis.tools import browser_tools
 

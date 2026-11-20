@@ -57,8 +57,8 @@
 - {say: "take a note: buy a new SSD", expect: [take_note]}
 - {say: "jot this down, the meeting moved to Thursday", expect: [take_note]}
 - {say: "what did I note about the SSD?", expect: [search_notes]}
-- {say: "what's this error on my screen?", expect: [read_screen]}
-- {say: "read what's on my screen", expect: [read_screen]}
+- {say: "what's this error on my screen?", expect: [look_at_screen, read_screen]}
+- {say: "read what's on my screen", expect: [read_screen, look_at_screen]}
 - {say: "what does my lease say about the notice period?", expect: [search_documents]}
 - {say: "open amazon.in and search for a usb c cable", expect: [browser_open]}
 - {say: "turn on gaming mode", expect: [set_gaming_mode]}
@@ -71,3 +71,9 @@
 - {say: "translate 'good morning' to Hindi", expect: [none]}
 - {say: "write a short birthday message for my mom", expect: [none]}
 - {say: "explain how a rainbow forms in two sentences", expect: [none, web_search, wikipedia_summary]}
+- {say: "which playlist is selected in spotify right now?", expect: [look_at_screen, spotify_now_playing]}
+- {say: "look at my screen and tell me what you see", expect: [look_at_screen]}
+- {say: "what's in this picture on my screen?", expect: [look_at_screen]}
+- {say: "click the save button", expect: [list_ui_elements, click_ui_element]}
+- {say: "what buttons are in this window?", expect: [list_ui_elements, look_at_screen]}
+- {say: "in calculator press seven", expect: [click_ui_element, list_ui_elements]}
