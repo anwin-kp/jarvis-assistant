@@ -134,6 +134,10 @@ mcp_servers: {}          # connect MCP servers; their tools become JARVIS tools.
 browser:
   enabled: true          # browser agent (its own Edge window); clicking/typing always asks first
 
+vision:                 # "look at my screen": screenshot + question to a free vision model (Groq)
+  enabled: true          # false = never send screenshots; local text reading (OCR) only
+  model: qwen/qwen3.8-27b
+
 notes:
   folder: null           # null = Documents\JARVIS Notes
 

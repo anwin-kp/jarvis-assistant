@@ -82,6 +82,9 @@ class ToolRegistry:
 
         return deco
 
+    def unregister(self, name: str) -> None:
+        self._tools.pop(name, None)
+
     def get(self, name: str) -> Tool | None:
         return self._tools.get(name)
 
