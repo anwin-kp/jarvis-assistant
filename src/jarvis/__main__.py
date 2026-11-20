@@ -14,6 +14,7 @@ from loguru import logger
 
 from jarvis.app import build
 from jarvis.core import gaming as gaming_mod
+from jarvis.core.commands import is_kill_command, run_kill_switch
 from jarvis.core.config import DATA, ensure_data_dirs, list_personas, load_persona
 from jarvis.core.proactive import Proactive
 from jarvis.llm.ollama_brain import BrainUnavailable
@@ -37,7 +38,8 @@ HELP = """Commands:
   /persona  switch personality, e.g. /persona butler
   /wake     toggle the wake word
   /mute     stop speaking replies (/unmute to resume)
-  /quit     exit"""
+  /quit     exit (saves a conversation summary)
+  /kill     kill switch: stop JARVIS, HUD, model and Ollama (or say \"Jarvis, shut down\")"""
 
 STATUS_MARK = {"ok": "✓", "dry-run": "(simulated)", "declined": "✗ declined", "denied": "✗ not allowed",
                "error": "✗ failed", "invalid": "✗ invalid request"}
@@ -282,7 +284,7 @@ class App:
                 return event[1].lower() in ({"yes"} if need == "yes" else {"y", "yes"})
 
     # ------------------------------------------------------------ turns
-    def listen_and_handle(self, start_timeout: float = 6) -> None:
+    def listen_and_handle(self, start_timeout: float = 6, after_wake: bool = False) -> None:
         self._state("listening")
         print(f"\n{CYAN}🎙  listening…{RESET}", flush=True)
         time.sleep(0.15)  # let the wake-word stream release the mic
@@ -296,6 +298,8 @@ class App:
             print(f"{DIM}(didn't catch that){RESET}")
             return
         print(f"You said: {text}")
+        if is_kill_command(text, after_wake=after_wake):
+            self.kill()
         if self.handle(text) and self.voice:
             follow = self.cfg.get("voice", {}).get("follow_up_seconds", 4)
             if follow:
@@ -303,6 +307,9 @@ class App:
 
     def handle(self, text: str, show: bool = True) -> bool:
         """Run one turn. Returns True if a reply was produced."""
+        if is_kill_command(text):
+            self.kill()
+            return False
         if show:
             self._publish("user", text=text)
         self._state("thinking")
@@ -324,11 +331,23 @@ class App:
         self._state("idle")
         return True
 
+    def kill(self) -> None:
+        """'Jarvis shut down' / 'Shutdown Jarvis' / /kill: run the kill switch (stops JARVIS, HUD, model, Ollama)."""
+        print(f"\n{RED}Shutting down: running the kill switch…{RESET}", flush=True)
+        self._publish("notice", text="Shutting down (kill switch)")
+        self._say("Shutting down.")
+        logger.info("Kill command received; running kill-jarvis.cmd")
+        run_kill_switch()
+        time.sleep(15)  # the kill script force-stops this process; exit anyway if it somehow didn't
+        os._exit(0)
+
     def command(self, cmd: str) -> bool:
         """Handle a /command. Returns False to quit."""
         cmd = cmd.lower()
         if cmd in ("/quit", "/exit"):
             return False
+        if cmd == "/kill":
+            self.kill()
         if cmd == "/help":
             print(HELP)
         elif cmd == "/reset":
@@ -394,7 +413,7 @@ class App:
                 if event[0] == "quit":
                     break
                 if event[0] == "wake":
-                    self.listen_and_handle()
+                    self.listen_and_handle(after_wake=True)
                 elif event[0] == "reminder":
                     print(f"\n{YELLOW}⏰ Reminder: {event[1]}{RESET}")
                     self._publish("notice", text=f"⏰ Reminder: {event[1]}")
