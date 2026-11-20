@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JARVIS</title>
+<style>
+  :root { --bg:#050b14; --panel:#0a1626cc; --line:#13324f; --cyan:#00d2ff; --cyan2:#7fe9ff; --text:#cfe8f5;
+          --dim:#5f7f96; --warn:#ffbe3c; --bad:#ff5a5a; --ok:#3cff9e; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; background:radial-gradient(circle at 30% 20%, #0b2038 0%, var(--bg) 60%);
+              color:var(--text); font:14px/1.45 "Segoe UI", system-ui, sans-serif; overflow:hidden; }
+  body::before { content:""; position:fixed; inset:0; pointer-events:none; opacity:.25;
+    background-image:linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px);
+    background-size:40px 40px; mask-image:radial-gradient(circle at center, #000 30%, transparent 80%); }
+  .wrap { position:relative; display:grid; grid-template-columns:340px 1fr; gap:16px; height:100%; padding:16px; }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:12px; backdrop-filter:blur(6px);
+           box-shadow:0 0 24px #00d2ff10 inset; }
+  h2 { margin:0 0 8px; font-size:11px; letter-spacing:.25em; color:var(--cyan); font-weight:600; text-transform:uppercase; }
+  .left { display:flex; flex-direction:column; gap:16px; min-height:0; }
+  .core { padding:16px; text-align:center; }
+  canvas { width:260px; height:260px; }
+  #state { margin-top:4px; letter-spacing:.3em; text-transform:uppercase; color:var(--cyan2); font-size:12px; }
+  .controls { padding:14px; display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  button { background:#0d2236; color:var(--text); border:1px solid var(--line); border-radius:8px; padding:9px 10px;
+           cursor:pointer; font:inherit; transition:.15s; }
+  button:hover { border-color:var(--cyan); box-shadow:0 0 10px #00d2ff40; }
+  button.on { border-color:var(--cyan); color:var(--cyan2); }
+  .tools { padding:14px; flex:1; min-height:0; overflow:auto; font:12px/1.5 Consolas, monospace; }
+  .tools div { padding:3px 0; border-bottom:1px dashed #13324f80; color:var(--dim); word-break:break-word; }
+  .tools .ok { color:var(--ok); } .tools .bad { color:var(--bad); } .tools .sim { color:var(--warn); }
+  .right { display:flex; flex-direction:column; min-height:0; }
+  #log { flex:1; overflow:auto; padding:18px; display:flex; flex-direction:column; gap:10px; }
+  .msg { max-width:78%; padding:10px 14px; border-radius:12px; white-space:pre-wrap; animation:in .25s ease; }
+  .user { align-self:flex-end; background:#0f2a44; border:1px solid #1d4a73; }
+  .jarvis { align-self:flex-start; background:#081c2e; border:1px solid var(--cyan); box-shadow:0 0 14px #00d2ff25; }
+  .notice { align-self:center; color:var(--warn); font-size:12px; }
+  .confirm { align-self:stretch; border:1px solid var(--warn); background:#2a1d05aa; padding:14px; border-radius:12px; }
+  .confirm.danger { border-color:var(--bad); background:#2a0707aa; }
+  .confirm pre { margin:8px 0; white-space:pre-wrap; font:12px Consolas, monospace; color:var(--text); }
+  .confirm button { margin-right:8px; }
+  form { display:flex; gap:8px; padding:12px; border-top:1px solid var(--line); }
+  input { flex:1; background:#06121f; color:var(--text); border:1px solid var(--line); border-radius:8px; padding:11px 12px; font:inherit; }
+  input:focus { outline:none; border-color:var(--cyan); }
+  #conn { position:fixed; top:8px; right:14px; font-size:11px; color:var(--dim); letter-spacing:.15em; }
+  @keyframes in { from { opacity:0; transform:translateY(4px); } to { opacity:1; } }
+</style>
+</head>
+<body>
+<div id="conn">CONNECTING…</div>
+<div class="wrap">
+  <div class="left">
+    <div class="panel core"><h2>J.A.R.V.I.S.</h2><canvas id="reactor" width="520" height="520"></canvas><div id="state">idle</div></div>
+    <div class="panel controls">
+      <button id="talk">🎙 Talk</button>
+      <button data-cmd="/wake" id="b-wake">Wake word</button>
+      <button data-cmd="/mute" id="b-mute">Mute voice</button>
+      <button data-cmd="/gaming" id="b-gaming">Gaming mode</button>
+      <button data-cmd="/unload">Free GPU</button>
+      <button data-cmd="/briefing">Briefing</button>
+    </div>
+    <div class="panel tools"><h2>Activity</h2><div id="tools"></div></div>
+  </div>
+  <div class="panel right">
+    <div id="log"></div>
+    <form id="f"><input id="t" placeholder="Type a message or /command…" autocomplete="off"><button>Send</button></form>
+  </div>
+</div>
+<script>
+const token = new URLSearchParams(location.search).get("token");
+const $ = (id) => document.getElementById(id);
+let ws, state = "idle", pendingConfirm = null;
+
+function add(cls, text) {
+  const d = document.createElement("div"); d.className = "msg " + cls; d.textContent = text;
+  $("log").appendChild(d); $("log").scrollTop = 1e9; return d;
+}
+function tool(e) {
+  const d = document.createElement("div");
+  d.className = e.status === "ok" ? "ok" : e.status === "dry-run" ? "sim" : "bad";
+  d.textContent = `${e.name}(${Object.entries(e.args || {}).map(([k, v]) => k + "=" + JSON.stringify(v)).join(", ")}) ${e.status}`;
+  $("tools").prepend(d);
+}
+function confirmCard(e) {
+  const d = document.createElement("div");
+  d.className = "confirm" + (e.risk === "danger" ? " danger" : "");
+  d.innerHTML = `<b>⚠ Approve <span></span>?</b><pre></pre>`;
+  d.querySelector("span").textContent = e.name;
+  d.querySelector("pre").textContent = JSON.stringify(e.args, null, 2);
+  const yes = document.createElement("button"); yes.textContent = "Approve";
+  const no = document.createElement("button"); no.textContent = "Deny";
+  yes.onclick = () => answer(d, true, e.risk); no.onclick = () => answer(d, false, e.risk);
+  d.append(yes, no); $("log").appendChild(d); $("log").scrollTop = 1e9; pendingConfirm = d;
+}
+function answer(card, ok, risk) {
+  send("text", ok ? (risk === "danger" ? "yes" : "y") : "no");
+  card.querySelectorAll("button").forEach((b) => b.remove());
+  card.insertAdjacentHTML("beforeend", ok ? "<i>approved</i>" : "<i>denied</i>"); pendingConfirm = null;
+}
+function send(action, text = "") { if (ws && ws.readyState === 1) ws.send(JSON.stringify({ action, text })); }
+
+function connect() {
+  ws = new WebSocket(`ws://${location.host}/ws?token=${token}`);
+  ws.onopen = () => { $("conn").textContent = "ONLINE"; $("conn").style.color = "var(--ok)"; };
+  ws.onclose = () => { $("conn").textContent = "OFFLINE – RECONNECTING"; $("conn").style.color = "var(--bad)"; setTimeout(connect, 2000); };
+  ws.onmessage = (m) => {
+    const e = JSON.parse(m.data);
+    if (e.type === "state") { state = e.state; $("state").textContent = e.state; }
+    else if (e.type === "user") add("user", e.text);
+    else if (e.type === "reply") add("jarvis", e.text);
+    else if (e.type === "notice") add("notice", e.text);
+    else if (e.type === "tool") tool(e);
+    else if (e.type === "confirm") confirmCard(e);
+    else if (e.type === "flags") for (const k of ["wake", "mute", "gaming"]) $("b-" + k).classList.toggle("on", !!e[k]);
+  };
+}
+$("f").onsubmit = (ev) => { ev.preventDefault(); const v = $("t").value.trim(); if (!v) return;
+  if (pendingConfirm) { answer(pendingConfirm, /^(y|yes)$/i.test(v), "danger"); } else send(v.startsWith("/") ? "command" : "text", v);
+  $("t").value = ""; };
+document.querySelectorAll("[data-cmd]").forEach((b) => b.onclick = () => {
+  let c = b.dataset.cmd; if (c === "/mute" && b.classList.contains("on")) c = "/unmute"; send("command", c); });
+$("talk").onclick = () => send("talk");
+connect();
+
+// Arc reactor animation: colour and pulse follow the assistant state.
+const cv = $("reactor"), cx = cv.getContext("2d");
+const colors = { idle: "#00d2ff", listening: "#3cff9e", thinking: "#ffbe3c", speaking: "#7fe9ff", muted: "#5f7f96" };
+function draw(t) {
+  const W = cv.width, c = W / 2, col = colors[state] || colors.idle;
+  const speed = state === "thinking" ? 3 : state === "listening" ? 2 : state === "speaking" ? 1.6 : 0.6;
+  const pulse = 1 + Math.sin(t / 1000 * speed * 2) * (state === "idle" ? 0.02 : 0.06);
+  cx.clearRect(0, 0, W, W); cx.save(); cx.translate(c, c); cx.shadowColor = col; cx.shadowBlur = 30;
+  for (let i = 0; i < 3; i++) {
+    cx.save(); cx.rotate((t / 1000) * speed * (i % 2 ? -0.4 : 0.6) + i);
+    cx.strokeStyle = col; cx.globalAlpha = 0.85 - i * 0.22; cx.lineWidth = 6 - i * 1.5;
+    const r = (200 - i * 45) * pulse;
+    for (let s = 0; s < 6; s++) { cx.beginPath(); cx.arc(0, 0, r, s * Math.PI / 3, s * Math.PI / 3 + Math.PI / 4.2); cx.stroke(); }
+    cx.restore();
+  }
+  const g = cx.createRadialGradient(0, 0, 4, 0, 0, 70 * pulse);
+  g.addColorStop(0, "#ffffff"); g.addColorStop(0.35, col); g.addColorStop(1, "transparent");
+  cx.fillStyle = g; cx.globalAlpha = 1; cx.beginPath(); cx.arc(0, 0, 70 * pulse, 0, Math.PI * 2); cx.fill();
+  cx.restore(); requestAnimationFrame(draw);
+}
+requestAnimationFrame(draw);
+</script>
+</body>
+</html>
