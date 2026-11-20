@@ -13,8 +13,19 @@ def load_config() -> dict:
         return yaml.safe_load(f)
 
 
-def load_persona() -> str:
-    return (CONFIG_DIR / "persona.md").read_text(encoding="utf-8")
+def load_persona(profile: str | None = None) -> str:
+    """Base persona plus an optional profile from config/personas/<profile>.md."""
+    base = (CONFIG_DIR / "persona.md").read_text(encoding="utf-8")
+    if profile and profile != "default":
+        extra = CONFIG_DIR / "personas" / f"{profile}.md"
+        if extra.exists():
+            base += "\n" + extra.read_text(encoding="utf-8")
+    return base
+
+
+def list_personas() -> list[str]:
+    folder = CONFIG_DIR / "personas"
+    return ["default"] + sorted(p.stem for p in folder.glob("*.md")) if folder.exists() else ["default"]
 
 
 def get_secret(name: str) -> str | None:
