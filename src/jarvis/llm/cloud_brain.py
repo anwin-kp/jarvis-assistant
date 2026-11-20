@@ -24,13 +24,15 @@ class CloudUnavailable(RuntimeError):
 
 
 class CloudBrain:
-    def __init__(self, registry: ToolRegistry, provider: str, model: str, max_steps: int = 6, timeout: float = 25):
+    def __init__(self, registry: ToolRegistry, provider: str, model: str, max_steps: int = 6, timeout: float = 25,
+                 extra: dict | None = None):
         if provider not in PROVIDERS:
             raise ValueError(f"Unknown provider {provider!r}; choose one of {sorted(PROVIDERS)}")
         self.base, key_name = PROVIDERS[provider]
         self.key = get_secret(key_name)
         self.reg, self.provider, self.model = registry, provider, model
         self.max_steps, self.timeout = max_steps, timeout
+        self.extra = extra or {}  # provider-specific request options, e.g. {"reasoning_effort": "low"}
         self.last_tool_calls: list[str] = []
 
     @property
@@ -38,7 +40,7 @@ class CloudBrain:
         return bool(self.key)
 
     def _chat(self, messages: list[dict], tools: list[dict] | None) -> dict:
-        body = {"model": self.model, "messages": messages, "temperature": 0.3}
+        body = {"model": self.model, "messages": messages, "temperature": 0.3, **self.extra}
         if tools:
             body["tools"] = tools
         try:
