@@ -49,7 +49,7 @@ The first start downloads the speech models (~550 MB) and voice (~60 MB).
 | | Double-click | Or run |
 |---|---|---|
 | **Start** | `start-jarvis.cmd` | `.\start-jarvis.ps1 [-DryRun] [-Text] [-Minimized]` |
-| **Kill** (emergency stop) | `kill-jarvis.cmd` | `.\kill-jarvis.ps1` |
+| **Kill** (emergency stop) | `kill-jarvis.cmd` | `.\kill-jarvis.ps1` or say **"Jarvis, shut down"** / **"Shutdown Jarvis"**, or type `/kill` |
 
 **start-jarvis** starts Ollama if needed, downloads the AI model if it's missing, opens JARVIS in its own
 window and waits until JARVIS reports it's ready (it tells you if startup fails, and the JARVIS window stays
