@@ -42,6 +42,12 @@ KEYWORDS: dict[str, list[str]] = {
     "memory": ["remember", "forget", "recall", "my name", "my favorite", "do you know", "facts", "about me"],
 }
 
+def add_keywords(group: str, words: list[str]) -> None:
+    """Plugins and MCP servers register the words that should bring their tools into play."""
+    KEYWORDS.setdefault(group, [])
+    KEYWORDS[group].extend(w.lower() for w in words if w)
+
+
 ALWAYS = {"core", "memory"}
 
 

@@ -22,6 +22,17 @@ SKIP_DIRS = {"node_modules", ".git", ".venv", "__pycache__", "AppData", "$RECYCL
 MAX_FILE_MB = 25
 
 
+# OneDrive "online-only" files: reading them would download them, so they're skipped.
+_CLOUD_ONLY = 0x00001000 | 0x00040000 | 0x00400000  # OFFLINE | RECALL_ON_OPEN | RECALL_ON_DATA_ACCESS
+
+
+def is_local(path: Path) -> bool:
+    try:
+        return not (path.stat().st_file_attributes & _CLOUD_ONLY)
+    except (OSError, AttributeError):
+        return False
+
+
 def extract_text(path: Path) -> str:
     ext = path.suffix.lower()
     if ext in (".txt", ".md"):
@@ -85,7 +96,7 @@ class DocIndex:
                 dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS and not d.startswith(".")]
                 for f in filenames:
                     p = Path(dirpath) / f
-                    if p.suffix.lower() in EXTENSIONS and not f.startswith("~$"):
+                    if p.suffix.lower() in EXTENSIONS and not f.startswith("~$") and is_local(p):
                         yield p
 
     def index(self) -> str:

@@ -153,6 +153,19 @@ def register(reg: ToolRegistry) -> None:
         return f"Event created: {title} on {start:%a %d %b %H:%M} ({e.get('htmlLink', '')})"
 
 
+def upcoming_events(minutes: float = 15) -> list[tuple[str, str, datetime]]:
+    """Timed events starting within `minutes` (used for proactive meeting reminders)."""
+    now = datetime.now().astimezone()
+    items = _service("calendar", "v3").events().list(
+        calendarId="primary", timeMin=now.isoformat(), timeMax=(now + timedelta(minutes=minutes)).isoformat(),
+        singleEvents=True, orderBy="startTime", maxResults=10).execute().get("items", [])
+    out = []
+    for e in items:
+        if "dateTime" in e["start"]:
+            out.append((e["id"], e.get("summary", "A meeting"), datetime.fromisoformat(e["start"]["dateTime"])))
+    return out
+
+
 def login() -> None:
     FOLDER.mkdir(parents=True, exist_ok=True)
     if not CREDENTIALS.exists():

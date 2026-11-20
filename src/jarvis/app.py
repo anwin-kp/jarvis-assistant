@@ -29,7 +29,13 @@ def build(dry_run: bool = False):
     window_tools.register(reg)
     clipboard_tools.register(reg)
     pc_tools.register(reg)
+    from jarvis.core.config import ROOT
+    from jarvis.core.plugins import load_plugins
+    from jarvis.integrations import mcp_client
     from jarvis.tools import screen_tools
+
+    reg.plugins = load_plugins(reg, ROOT / "plugins", cfg, memory, DATA)
+    reg.mcp = mcp_client.register(reg, cfg.get("mcp_servers") or {})
 
     screen_tools.register(reg)
     dcfg = cfg.get("documents", {})

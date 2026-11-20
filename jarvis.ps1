@@ -227,7 +227,7 @@ switch ($Command) {
     'autostart-off' { Set-Autostart $false }
     'shortcut'      { New-Shortcuts }
     'set-key'       {
-        if ($Name -notin 'groq', 'gemini', 'openrouter', 'home_assistant') { throw 'Usage: .\jarvis.ps1 set-key groq|gemini|openrouter|home_assistant' }
+        if ($Name -notin 'groq', 'gemini', 'openrouter', 'home_assistant', 'telegram') { throw 'Usage: .\jarvis.ps1 set-key groq|gemini|openrouter|home_assistant|telegram' }
         $sec = Read-Host "Paste your $Name API key" -AsSecureString
         $plain = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($sec))
         $env:JARVIS_KEY = $plain
