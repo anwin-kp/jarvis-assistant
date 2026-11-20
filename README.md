@@ -46,9 +46,14 @@ The first start downloads the speech models (~550 MB) and voice (~60 MB).
 
 ## Start and stop
 
+Run `.\jarvis.ps1 shortcut` once: it adds a **JARVIS** icon to your Desktop and Start menu (and **Kill JARVIS**
+to the Start menu). Clicking it starts everything silently in the background, and the only thing you see is the
+HUD. Clicking it again while JARVIS runs just reopens the HUD.
+
+
 | | Double-click | Or run |
 |---|---|---|
-| **Start** | `start-jarvis.cmd` | `.\start-jarvis.ps1 [-DryRun] [-Text] [-Minimized]` |
+| **Start** | **JARVIS** shortcut, or `start-jarvis.cmd` | `.\start-jarvis.ps1 [-Console] [-DryRun] [-Text]` (`-Console` shows the terminal) |
 | **Kill** (emergency stop) | `kill-jarvis.cmd` | `.\kill-jarvis.ps1` or say **"Jarvis, shut down"** / **"Shutdown Jarvis"**, or type `/kill` |
 
 **start-jarvis** starts Ollama if needed, downloads the AI model if it's missing, opens JARVIS in its own

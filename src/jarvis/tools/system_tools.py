@@ -148,7 +148,8 @@ def register_power(reg: ToolRegistry) -> None:
     import subprocess
 
     def _shutdown(*args: str) -> None:
-        subprocess.run(["shutdown", *args], check=True, capture_output=True)
+        subprocess.run(["shutdown", *args], check=True, capture_output=True,
+                       creationflags=subprocess.CREATE_NO_WINDOW)
 
     @reg.tool(
         "shutdown_pc",

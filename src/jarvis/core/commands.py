@@ -33,7 +33,12 @@ def is_sleep_command(text: str) -> bool:
     return bool(_SLEEP.match(text.strip()))
 
 
-def run_kill_switch() -> None:
-    """Run kill-jarvis.cmd in its own window. It force-stops this process, so this never returns normally."""
-    subprocess.Popen(["cmd", "/c", str(KILL_SCRIPT)], creationflags=subprocess.CREATE_NEW_CONSOLE,
-                     cwd=str(KILL_SCRIPT.parent))
+def run_kill_switch(visible: bool = True) -> None:
+    """Run the kill switch (in its own window, or silently). It force-stops this process."""
+    if visible:
+        subprocess.Popen(["cmd", "/c", str(KILL_SCRIPT)], creationflags=subprocess.CREATE_NEW_CONSOLE,
+                         cwd=str(KILL_SCRIPT.parent))
+    else:
+        subprocess.Popen(["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+                          str(KILL_SCRIPT.with_suffix(".ps1"))], creationflags=subprocess.CREATE_NO_WINDOW,
+                         cwd=str(KILL_SCRIPT.parent))
