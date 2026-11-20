@@ -2,11 +2,13 @@
 .SYNOPSIS
     START JARVIS. Starts Ollama (if needed), makes sure the AI model is downloaded, launches JARVIS in its
     own window, and waits until JARVIS reports it is ready.
-    Run: .\start-jarvis.ps1   or double-click start-jarvis.cmd
-    Options: -DryRun (simulate actions)  -Text (no voice)  -Minimized  -TimeoutSec 180
+    By default JARVIS runs in the background: you only see the HUD (no console, no Ollama window).
+    Run: .\start-jarvis.ps1   or double-click start-jarvis.cmd (or the JARVIS desktop shortcut)
+    Options: -Console (show the JARVIS terminal)  -DryRun  -Text (no voice)  -Minimized  -TimeoutSec 180
     Stop it with kill-jarvis.ps1 / kill-jarvis.cmd.
 #>
 param(
+    [switch]$Console,
     [switch]$DryRun,
     [switch]$Text,
     [switch]$Minimized,
@@ -15,6 +17,8 @@ param(
 $ErrorActionPreference = 'Stop'
 $Root      = $PSScriptRoot
 $Python    = Join-Path $Root '.venv\Scripts\python.exe'
+$PythonW   = Join-Path $Root '.venv\Scripts\pythonw.exe'
+$HudUrl    = Join-Path $Root 'data\hud-url.txt'
 $Config    = Join-Path $Root 'config\config.yaml'
 $LogFile   = Join-Path $Root 'data\logs\jarvis.log'
 $OllamaUrl = 'http://127.0.0.1:11434'
@@ -46,6 +50,12 @@ Write-Host ''
 $running = @(Get-JarvisProcesses | Where-Object { $_.Name -like 'python*' })
 if ($running.Count -gt 0) {
     Write-Ok "JARVIS is already running (PID $($running[0].ProcessId)). Use kill-jarvis to stop it."
+    if (Test-Path $HudUrl) {  # bring the HUD back
+        $url = (Get-Content $HudUrl -Raw).Trim()
+        $prof = Join-Path $Root 'data\hud-profile'
+        Start-Process msedge -ArgumentList "--app=$url", '--window-size=1440,900', "--user-data-dir=`"$prof`"", '--no-first-run'
+        Write-Ok 'HUD opened'
+    }
     Write-Host ''
     exit 0
 }
@@ -59,18 +69,14 @@ if (Test-Ollama) {
     Write-Ok 'Ollama is running'
 } else {
     $exe = Join-Path $OllamaDir 'ollama.exe'
-    $app = Join-Path $OllamaDir 'ollama app.exe'
     if (-not (Test-Path $exe)) { Stop-WithError 'Ollama is not installed. Install it with:  winget install Ollama.Ollama' }
-    Write-Info 'Starting Ollama...'
-    if ((Test-Path $app) -and -not (Get-Process -Name 'ollama app' -ErrorAction SilentlyContinue)) {
-        Start-Process -FilePath $app
-    }
+    Write-Info 'Starting Ollama (hidden)...'
+    # Start only the server, hidden. The Ollama desktop app would open its own window.
+    Start-Process -FilePath $exe -ArgumentList 'serve' -WindowStyle Hidden
     $up = $false
     for ($i = 0; $i -lt 40; $i++) {
         Start-Sleep -Milliseconds 500
         if (Test-Ollama) { $up = $true; break }
-        # The tray app sometimes doesn't start its server (e.g. after a force-kill): start it directly.
-        if ($i -eq 10) { Start-Process -FilePath $exe -ArgumentList 'serve' -WindowStyle Hidden }
     }
     if (-not $up) { Stop-WithError 'Ollama did not start within 20 seconds.' }
     Write-Ok 'Ollama started'
@@ -95,9 +101,14 @@ $flags = ''
 if ($DryRun) { $flags += ' --dry-run' }
 if ($Text)   { $flags += ' --text' }
 $logStart = if (Test-Path $LogFile) { (Get-Item $LogFile).Length } else { 0 }
-$cmdLine = "/c `"title JARVIS & `"$Python`" -W ignore -m jarvis$flags || pause`""
-$style = if ($Minimized) { 'Minimized' } else { 'Normal' }
-Start-Process -FilePath 'cmd.exe' -ArgumentList $cmdLine -WorkingDirectory $Root -WindowStyle $style
+if ($Console) {
+    $cmdLine = "/c `"title JARVIS & `"$Python`" -W ignore -m jarvis$flags || pause`""
+    $style = if ($Minimized) { 'Minimized' } else { 'Normal' }
+    Start-Process -FilePath 'cmd.exe' -ArgumentList $cmdLine -WorkingDirectory $Root -WindowStyle $style
+} else {
+    # pythonw = no console window at all; output goes to data\logs\console.log
+    Start-Process -FilePath $PythonW -ArgumentList "-W ignore -m jarvis --background$flags" -WorkingDirectory $Root
+}
 $launched = Get-Date
 Write-Info 'Launching JARVIS (loading the voice can take a moment)...'
 
@@ -121,7 +132,11 @@ while ((Get-Date) -lt $deadline) {
         if (@(Get-JarvisProcesses | Where-Object { $_.Name -like 'python*' }).Count -eq 0) {
             Write-Host ''
             if ($new) { Write-Host ($new.Trim() -split "`n" | Select-Object -Last 8 | Out-String) -ForegroundColor DarkGray }
-            Stop-WithError 'JARVIS exited during startup. See the JARVIS window or data\logs\jarvis.log.'
+            $console = Join-Path $Root 'data\logs\console.log'
+            if (-not $Console -and (Test-Path $console)) {
+                Write-Host ((Get-Content $console -Tail 6) -join "`n") -ForegroundColor DarkGray
+            }
+            Stop-WithError 'JARVIS exited during startup. See data\logs\console.log and data\logs\jarvis.log.'
         }
     }
 }
@@ -129,7 +144,7 @@ while ((Get-Date) -lt $deadline) {
 Write-Host ''
 if ($ready) {
     Write-Ok "JARVIS is online (PID $readyPid)"
-    Write-Info 'Say "Hey Jarvis", press Enter in the JARVIS window, or use the HUD.'
+    Write-Info 'Just talk, or use the HUD.'
     Write-Info 'To stop: kill-jarvis.cmd'
     Write-Host ''
     exit 0

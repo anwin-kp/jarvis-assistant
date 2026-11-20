@@ -131,6 +131,10 @@ class App:
 
                 self.hud = Hud(self.q, hcfg.get("port", 8765))
                 self.hud.start()
+                self._publish("state", state="booting")
+                if hcfg.get("open_on_start", True):
+                    time.sleep(0.6)  # let the server bind before the window connects
+                    self.hud.open()
             except Exception:
                 logger.exception("HUD failed to start")
                 self.hud = None
@@ -190,14 +194,13 @@ class App:
         self.reminders.start()
         if self.proactive:
             self.proactive.start()
-        threading.Thread(target=self._input_loop, daemon=True, name="input").start()
+        if not self.args.background:
+            threading.Thread(target=self._input_loop, daemon=True, name="input").start()
         if self.hud:
             threading.Thread(target=self._stats_loop, daemon=True, name="stats").start()
         if self.hud:
             self._flags()
             self._publish("notice", text=f"{self.name} online")
-            if hcfg.get("open_on_start", True):
-                self.hud.open()
         if self.voice:
             self._say(f"{self.name} online.")
         logger.info("JARVIS ready (pid {})", os.getpid())  # start-jarvis.ps1 waits for this line
@@ -288,10 +291,16 @@ class App:
 
     def _say(self, text: str) -> None:
         if self.voice and self.speech_on:
+            was_busy = self.busy.is_set()
+            self.busy.set()  # pause the microphone while speaking, so JARVIS never hears itself
             try:
                 self.voice.tts.speak(text)
             except Exception:
                 logger.exception("TTS failed")
+            finally:
+                if not was_busy:
+                    time.sleep(0.4)  # let the echo die down
+                    self.busy.clear()
 
     def _gaming_changed(self, active: bool, reason: str) -> None:
         msg = f"Gaming mode {'on' if active else 'off'} ({reason})."
@@ -428,7 +437,7 @@ class App:
         self._publish("notice", text="Shutting down (kill switch)")
         self._say("Shutting down.")
         logger.info("Kill command received; running kill-jarvis.cmd")
-        run_kill_switch()
+        run_kill_switch(visible=not self.args.background)
         time.sleep(15)  # the kill script force-stops this process; exit anyway if it somehow didn't
         os._exit(0)
 
@@ -566,13 +575,21 @@ def main() -> None:
     parser.add_argument("--debug", action="store_true", help="print debug logs to the console")
     parser.add_argument("--dry-run", action="store_true", help="don't actually run tools that change things")
     parser.add_argument("--text", action="store_true", help="text only (no microphone or speech)")
+    parser.add_argument("--background", action="store_true",
+                        help="no console: use the HUD/voice; output goes to data/logs/console.log")
     args = parser.parse_args()
 
-    if sys.platform == "win32":
+    ensure_data_dirs()
+    if args.background or sys.stdout is None:  # pythonw has no console
+        args.background = True
+        global CYAN, YELLOW, RED, DIM, RESET
+        CYAN = YELLOW = RED = DIM = RESET = ""
+        out = open(DATA / "logs" / "console.log", "w", encoding="utf-8", buffering=1)  # noqa: SIM115
+        sys.stdout = sys.stderr = out
+    elif sys.platform == "win32":
         os.system("")  # enable ANSI colours in the Windows console
         sys.stdout.reconfigure(encoding="utf-8")
 
-    ensure_data_dirs()
     setup_logging(args.debug)
     App(args).run()
 

@@ -14,6 +14,7 @@
     .\jarvis.ps1 test             # run unit tests and lint
     .\jarvis.ps1 autostart-on     # start JARVIS (minimized) when you log in to Windows
     .\jarvis.ps1 autostart-off
+    .\jarvis.ps1 shortcut         # add JARVIS (and Kill JARVIS) to the Desktop and Start menu
     .\jarvis.ps1 google-login     # sign in to Gmail/Calendar (needs data\google\credentials.json)
     .\jarvis.ps1 set-key groq     # store a free cloud API key (groq | gemini | openrouter) securely
 
@@ -21,10 +22,11 @@
 #>
 param(
     [Parameter(Position = 0)]
-    [ValidateSet('start', 'stop', 'restart', 'status', 'free', 'stop-all', 'logs', 'test', 'autostart-on', 'autostart-off', 'google-login', 'set-key', 'help')]
+    [ValidateSet('start', 'stop', 'restart', 'status', 'free', 'stop-all', 'logs', 'test', 'autostart-on', 'autostart-off', 'google-login', 'set-key', 'shortcut', 'help')]
     [string]$Command = 'help',
     [switch]$DryRun,
     [switch]$Text,
+    [switch]$Console,
     [switch]$Minimized,
     [switch]$Follow,
     [Parameter(Position = 1)]
@@ -127,6 +129,7 @@ function Invoke-Start {
     if ($DryRun)    { $startArgs.DryRun = $true }
     if ($Text)      { $startArgs.Text = $true }
     if ($Minimized) { $startArgs.Minimized = $true }
+    if ($Console)   { $startArgs.Console = $true }
     & (Join-Path $Root 'start-jarvis.ps1') @startArgs
 }
 
@@ -176,12 +179,39 @@ function Set-Autostart([bool]$On) {
     }
     $ws = New-Object -ComObject WScript.Shell
     $lnk = $ws.CreateShortcut($Shortcut)
-    $lnk.TargetPath = 'powershell.exe'
-    $lnk.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$(Join-Path $Root 'start-jarvis.ps1')`" -Minimized"
+    $lnk.TargetPath = Join-Path $Root '.venv\Scripts\pythonw.exe'   # silent: no console flash
+    $lnk.Arguments = '-m jarvis.launcher'
+    $lnk.IconLocation = Join-Path $Root 'assets\jarvis.ico'
     $lnk.WorkingDirectory = $Root
     $lnk.Description = 'Start JARVIS'
     $lnk.Save()
     Write-Ok "JARVIS will start minimized when you log in ($Shortcut)"
+}
+
+function New-Shortcuts {
+    $ws = New-Object -ComObject WScript.Shell
+    $menu = Join-Path ([Environment]::GetFolderPath('Programs')) 'JARVIS'
+    New-Item -ItemType Directory -Force $menu | Out-Null
+    $targets = @(
+        @{ Path = Join-Path ([Environment]::GetFolderPath('Desktop')) 'JARVIS.lnk'; Kill = $false },
+        @{ Path = Join-Path $menu 'JARVIS.lnk'; Kill = $false },
+        @{ Path = Join-Path $menu 'Kill JARVIS.lnk'; Kill = $true }
+    )
+    foreach ($t in $targets) {
+        $lnk = $ws.CreateShortcut($t.Path)
+        if ($t.Kill) {
+            $lnk.TargetPath = Join-Path $Root 'kill-jarvis.cmd'
+            $lnk.Description = 'Emergency stop: JARVIS, HUD, model and Ollama'
+        } else {
+            $lnk.TargetPath = Join-Path $Root '.venv\Scripts\pythonw.exe'
+            $lnk.Arguments = '-m jarvis.launcher'
+            $lnk.Description = 'Start JARVIS (opens the HUD)'
+        }
+        $lnk.WorkingDirectory = $Root
+        $lnk.IconLocation = Join-Path $Root 'assets\jarvis.ico'
+        $lnk.Save()
+        Write-Ok "Created $($t.Path)"
+    }
 }
 
 switch ($Command) {
@@ -195,6 +225,7 @@ switch ($Command) {
     'test'     { Invoke-Test }
     'autostart-on'  { Set-Autostart $true }
     'autostart-off' { Set-Autostart $false }
+    'shortcut'      { New-Shortcuts }
     'set-key'       {
         if ($Name -notin 'groq', 'gemini', 'openrouter', 'home_assistant') { throw 'Usage: .\jarvis.ps1 set-key groq|gemini|openrouter|home_assistant' }
         $sec = Read-Host "Paste your $Name API key" -AsSecureString

@@ -12,6 +12,7 @@ from pathlib import Path
 from loguru import logger
 
 WEB = Path(__file__).parent / "web"
+URL_FILE = Path(__file__).resolve().parents[3] / "data" / "hud-url.txt"
 
 
 class Hud:
@@ -99,6 +100,12 @@ class Hud:
                 logger.exception("HUD server stopped")
 
         threading.Thread(target=run, daemon=True, name="hud").start()
+        # Lets start-jarvis / the desktop shortcut reopen the HUD if JARVIS is already running.
+        try:
+            URL_FILE.parent.mkdir(parents=True, exist_ok=True)
+            URL_FILE.write_text(self.url, encoding="utf-8")
+        except OSError:
+            pass
 
     def open(self) -> None:
         """Open as a standalone app window (Edge --app), falling back to the default browser."""

@@ -258,8 +258,8 @@ function applyFlags(f) {
   $("mode").textContent = !f.voice ? "TEXT MODE" : f.sleeping ? 'SLEEPING · SAY "HEY JARVIS"' : MODE_TEXT[f.mode] || "";
   setState(state);
 }
-const STATE_TEXT = { ready: "online", idle: "standby", listening: "listening", thinking: "processing", speaking: "speaking" };
-const STATE_COLOR = { ready: "#00d8ff", idle: "#00d8ff", listening: "#35ffb0", thinking: "#ffb43c", speaking: "#8af3ff", sleeping: "#8f7cff" };
+const STATE_TEXT = { booting: "initializing", ready: "online", idle: "standby", listening: "listening", thinking: "processing", speaking: "speaking" };
+const STATE_COLOR = { booting: "#0077ff", ready: "#00d8ff", idle: "#00d8ff", listening: "#35ffb0", thinking: "#ffb43c", speaking: "#8af3ff", sleeping: "#8f7cff" };
 function shownState() { return flags.sleeping && (state === "idle" || state === "ready") ? "sleeping" : state; }
 function setState(s) {
   state = s; const v = shownState();
@@ -311,7 +311,7 @@ function draw(t) {
   const s = shownState(), col = STATE_COLOR[s] || "#00d8ff", sec = t / 1000;
   level += (levelTarget - level) * 0.25; levelTarget *= 0.92;
   history.push(level); history.shift();
-  const speed = { thinking: 3.2, speaking: 1.7, listening: 1.4, sleeping: 0.15 }[s] || 0.55;
+  const speed = { booting: 4.5, thinking: 3.2, speaking: 1.7, listening: 1.4, sleeping: 0.15 }[s] || 0.55;
   const breathe = s === "sleeping" ? 0.5 + 0.5 * Math.sin(sec * 1.2) : 1;
   const pulse = 1 + (s === "speaking" ? 0.05 * Math.sin(sec * 9) : 0) + level * 0.18;
   cx.clearRect(0, 0, W, W);
