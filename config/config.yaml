@@ -8,6 +8,11 @@ llm:
   think: false           # Qwen3 "thinking" mode; false = faster replies
   keep_alive: 10m        # unload from VRAM after 10 idle minutes (frees the GPU for games)
   max_steps: 6           # max tool-call rounds per request
+  mode: local            # local = everything on this PC | cloud_first = free cloud model, local fallback
+  cloud:                 # optional free tier; needs a key: .\jarvis.ps1 set-key groq
+    provider: groq       # groq | gemini | openrouter
+    model: llama-3.3-70b-versatile   # gemini: gemini-2.5-flash, openrouter: a ":free" model
+    use_in_gaming_mode: true         # while gaming, use the cloud (if a key is set) instead of the slow CPU
 
 history_turns: 8         # how many previous exchanges the model sees
 idle_summary_minutes: 10 # after this idle time the conversation is summarized into memory

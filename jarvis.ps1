@@ -15,17 +15,20 @@
     .\jarvis.ps1 autostart-on     # start JARVIS (minimized) when you log in to Windows
     .\jarvis.ps1 autostart-off
     .\jarvis.ps1 google-login     # sign in to Gmail/Calendar (needs data\google\credentials.json)
+    .\jarvis.ps1 set-key groq     # store a free cloud API key (groq | gemini | openrouter) securely
 
     For an emergency stop use kill-switch.ps1 (or double-click kill-switch.cmd).
 #>
 param(
     [Parameter(Position = 0)]
-    [ValidateSet('start', 'stop', 'restart', 'status', 'free', 'stop-all', 'logs', 'test', 'autostart-on', 'autostart-off', 'google-login', 'help')]
+    [ValidateSet('start', 'stop', 'restart', 'status', 'free', 'stop-all', 'logs', 'test', 'autostart-on', 'autostart-off', 'google-login', 'set-key', 'help')]
     [string]$Command = 'help',
     [switch]$DryRun,
     [switch]$Text,
     [switch]$Minimized,
     [switch]$Follow,
+    [Parameter(Position = 1)]
+    [string]$Name,
     [int]$Lines = 40
 )
 
@@ -195,6 +198,15 @@ switch ($Command) {
     'test'     { Invoke-Test }
     'autostart-on'  { Set-Autostart $true }
     'autostart-off' { Set-Autostart $false }
+    'set-key'       {
+        if ($Name -notin 'groq', 'gemini', 'openrouter') { throw 'Usage: .\jarvis.ps1 set-key groq|gemini|openrouter' }
+        $sec = Read-Host "Paste your $Name API key" -AsSecureString
+        $plain = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($sec))
+        $env:JARVIS_KEY = $plain
+        & $Python -c "import os, keyring; keyring.set_password('jarvis', '${Name}_api_key', os.environ['JARVIS_KEY'])"
+        Remove-Item Env:JARVIS_KEY
+        Write-Ok "Saved in Windows Credential Manager. Set llm.mode: cloud_first in config.yaml to use it."
+    }
     'google-login'  { Push-Location $Root; try { & $Python -W ignore -m jarvis.integrations.google } finally { Pop-Location } }
     'help'     { Get-Help $PSCommandPath -Examples | Out-String | Write-Host }
 }
