@@ -113,17 +113,23 @@ class OllamaBrain:
             stream.finish()
         return ollama.Message(role="assistant", content=content, tool_calls=calls or None)
 
-    def respond(self, messages: list[dict], tools: list[dict], confirm: ConfirmFn, on_sentence=None) -> str:
+    def warmup(self, messages: list[dict], tools: list[dict]) -> None:
+        """Load the model and pre-fill its prompt cache with the system prompt + tools."""
+        self.client.chat(model=self.model, messages=messages, tools=tools or None, think=False,
+                         keep_alive=self.keep_alive, options={**self.options, "num_predict": 1})
+
+    def respond(self, messages: list[dict], tools: list[dict], confirm: ConfirmFn, on_sentence=None,
+                think: bool = False) -> str:
         """messages: plain [{"role", "content"}] dicts. Tool calls live only inside this turn."""
         msgs = list(messages)
         self.last_tool_calls: list[str] = []
         nudged = False
         for step in range(self.max_steps):
-            think = self.think or nudged  # think harder on the retry
+            think_now = self.think or nudged or think  # think harder on complex requests / the retry
             if on_sentence and not nudged:
-                msg = self._chat_stream(msgs, tools, think, on_sentence)
+                msg = self._chat_stream(msgs, tools, think_now, on_sentence)
             else:
-                msg = self.client.chat(model=self.model, messages=msgs, tools=tools or None, think=think,
+                msg = self.client.chat(model=self.model, messages=msgs, tools=tools or None, think=think_now,
                                        keep_alive=self.keep_alive, options=self.options).message
             msgs.append(msg)
             if not msg.tool_calls:

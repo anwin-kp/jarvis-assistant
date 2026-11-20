@@ -6,6 +6,7 @@ import time
 
 from loguru import logger
 
+from jarvis.llm.semantic import needs_thinking
 from jarvis.llm.tool_groups import pick_groups
 from jarvis.memory.store import Memory
 from jarvis.tools.registry import ConfirmFn, ToolRegistry
@@ -48,6 +49,8 @@ class Orchestrator:
         self.persona = persona
         self.history_turns = history_turns
         self.history: list[dict] = []  # plain-text turns only
+        self.semantic = None  # SemanticGroups
+        self.last_think = False
         self.idle_seconds = idle_summary_minutes * 60
         self.last_activity = time.monotonic()
 
@@ -77,6 +80,15 @@ class Orchestrator:
             logger.exception("Session summary failed")
         self.history.clear()
 
+    def add_exchange(self, text: str, reply: str) -> None:
+        """Record a turn that was answered without the AI (instant commands)."""
+        now = dt.datetime.now().strftime("%A %d %B %Y, %H:%M")
+        self.history += [{"role": "user", "content": f"[Local time: {now}] {text}"},
+                         {"role": "assistant", "content": reply}]
+        self.history = self.history[-2 * self.history_turns :]
+        self.last_activity = time.monotonic()
+        self.memory.log_turn(text, reply)
+
     def reset(self) -> None:
         self.history.clear()
 
@@ -87,8 +99,14 @@ class Orchestrator:
         now = dt.datetime.now().strftime("%A %d %B %Y, %H:%M")
         user_msg = {"role": "user", "content": f"[Local time: {now}] {text}"}
         messages = [{"role": "system", "content": self.system_prompt()}, *self.history, user_msg]
-        tools = self.reg.schemas(pick_groups(text))
+        groups = pick_groups(text)
+        if self.semantic:
+            groups |= self.semantic.pick(text)
+        tools = self.reg.schemas(groups)
+        self.last_think = needs_thinking(text)
         kw = {"on_sentence": on_sentence} if on_sentence else {}
+        if self.last_think:
+            kw["think"] = True
         reply = strip_filler(self.brain.respond(messages, tools, confirm, **kw) or "(no reply)")
 
         # Safety net: small models sometimes say "remembered" without calling the tool.

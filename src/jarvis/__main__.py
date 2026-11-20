@@ -13,9 +13,9 @@ from datetime import datetime
 from loguru import logger
 
 from jarvis.app import build
-from jarvis.core import gaming as gaming_mod
 from jarvis.core.commands import is_kill_command, is_sleep_command, run_kill_switch
 from jarvis.core.config import DATA, ensure_data_dirs, list_personas, load_persona
+from jarvis.core.fast_intents import FastIntents
 from jarvis.core.proactive import Proactive
 from jarvis.llm.ollama_brain import BrainUnavailable
 from jarvis.scheduler import reminders as reminders_mod
@@ -152,15 +152,14 @@ class App:
         self._streamed: list[str] = []
         self.args = args
 
-        gcfg = self.cfg.get("gaming", {})
-        self.gaming = gaming_mod.GamingMode(self.brain, gcfg.get("processes", []), gcfg.get("auto_detect", True),
-                                            on_change=self._gaming_changed)
-        gaming_mod.register(self.reg, self.gaming)
-
-        bcfg = self.cfg.get("briefing", {})
-        self.reminders = reminders_mod.Reminders(
-            self.memory, self._reminder_fired, bcfg.get("time") if bcfg.get("enabled", True) else None)
-        reminders_mod.register(self.reg, self.reminders)
+        # created in app.build() (so evals/tests see the same tools); the app wires up the callbacks
+        self.gaming = self.reg.gaming
+        self.gaming.on_change = self._gaming_changed
+        self.reminders = self.reg.reminders
+        self.fast = FastIntents(self.reg, self.cfg)
+        self._first_word: float | None = None
+        self._stt_time = 0.0
+        self.reminders.on_fire = self._reminder_fired
 
         pcfg = self.cfg.get("proactive", {})
         events_fn = None
@@ -190,6 +189,7 @@ class App:
                 self.hud = None
         try:
             self.brain.check()
+            threading.Thread(target=self._warmup, daemon=True, name="warmup").start()
         except BrainUnavailable as e:
             print(f"{RED}{e}{RESET}")
             sys.exit(1)
@@ -383,8 +383,32 @@ class App:
         except Exception:
             logger.exception("Barge-in monitor failed")
 
+    def _warmup(self) -> None:
+        """Load the AI into the GPU and pre-fill its prompt cache, so the first question is fast too."""
+        from jarvis.llm.tool_groups import pick_groups
+
+        t = time.perf_counter()
+        try:
+            msgs = [{"role": "system", "content": self.orch.system_prompt()}, {"role": "user", "content": "hi"}]
+            self.brain.warmup(msgs, self.reg.schemas(pick_groups("hi")))
+            if getattr(self.orch, "semantic", None):
+                self.orch.semantic.pick("hello")  # loads the embedding model + tool vectors
+            logger.info("Warm-up done in {:.1f}s", time.perf_counter() - t)
+        except Exception as e:
+            logger.warning("Warm-up failed: {}", e)
+
+    def _timing(self, start: float, path: str) -> None:
+        total = time.perf_counter() - start
+        first = (self._first_word - start) if self._first_word else total
+        t = {"stt": round(self._stt_time, 2), "first": round(first, 2), "total": round(total, 2), "path": path}
+        logger.info("Timing: heard {stt}s · first word {first}s · total {total}s · {path}", **t)
+        self._publish("timing", **t)
+        self._stt_time, self._first_word = 0.0, None
+
     def _speak_async(self, sentence: str) -> None:
         """Streaming: speak each sentence as soon as the model finishes writing it."""
+        if self._first_word is None:
+            self._first_word = time.perf_counter()
         if self._barged:
             return
         self._streamed.append(sentence)
@@ -522,7 +546,9 @@ class App:
     def handle_audio(self, audio) -> bool:
         """Speech captured by always-listening. Returns False if it was just noise (nothing printed)."""
         self._state("thinking")
+        t = time.perf_counter()
         text = self.voice.transcribe(audio)
+        self._stt_time = time.perf_counter() - t
         if not text:
             self._state("idle")
             return False
@@ -564,8 +590,19 @@ class App:
         if show:
             self._publish("user", text=text)
         self._barged = False
-        self._state("thinking")
         start = time.perf_counter()
+        quick = self.fast.try_handle(text, self.confirm)  # instant commands: no AI round-trip
+        if quick is not None:
+            print(f"{CYAN}{self.name}:{RESET} {quick}  {DIM}(instant){RESET}")
+            self.orch.add_exchange(text, quick)
+            self._publish("reply", text=quick)
+            self._first_word = time.perf_counter()
+            self._timing(start, "instant")
+            self._state("speaking")
+            self._say(quick)
+            self._state("idle")
+            return True
+        self._state("thinking")
         print(f"{DIM}thinking…{RESET}", end="\r", flush=True)
         try:
             stream = self._speak_async if (self.voice and self.speech_on) else None
@@ -577,6 +614,8 @@ class App:
             self._state("idle")
             return False
         where = " · cloud" if getattr(self.brain, "last_backend", "local") == "cloud" else ""
+        path = ("cloud" if where else "local") + (" · thinking" if self.orch.last_think else "")
+        self._timing(start, path)
         print(f"{CYAN}{self.name}:{RESET} {reply}  {DIM}({time.perf_counter() - start:.1f}s{where}){RESET}")
         self._publish("reply", text=reply)
         self._state("speaking")

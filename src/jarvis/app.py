@@ -43,14 +43,18 @@ def build(dry_run: bool = False):
 
         reg.browser = browser_tools.register(reg, DATA / "browser-profile")
     dcfg = cfg.get("documents", {})
-    if dcfg.get("enabled", True):
-        import ollama
+    import ollama
 
-        from jarvis.docs.index import DocIndex, ollama_embedder
+    from jarvis.docs.index import ollama_embedder
+
+    embed = ollama_embedder(ollama.Client(host=cfg["llm"]["ollama_host"]), dcfg.get("model", "nomic-embed-text"))
+    reg.embed = embed
+    memory.embed = embed  # recall by meaning
+    if dcfg.get("enabled", True):
+        from jarvis.docs.index import DocIndex
         from jarvis.docs.index import register as register_docs
 
         folders = [file_tools.resolve_root(f) for f in dcfg.get("folders", ["documents"])]
-        embed = ollama_embedder(ollama.Client(host=cfg["llm"]["ollama_host"]), dcfg.get("model", "nomic-embed-text"))
         reg.doc_index = DocIndex(memory, [f for f in folders if f.exists()], embed)
         register_docs(reg, reg.doc_index)
     notes_dir = cfg.get("notes", {}).get("folder") or str(file_tools.resolve_root("documents") / "JARVIS Notes")
@@ -71,9 +75,24 @@ def build(dry_run: bool = False):
     from jarvis.llm.cloud_brain import Router
 
     brain = Router(local, cloud, reg, cfg["llm"].get("mode", "local"), ccfg.get("use_in_gaming_mode", True))
+    from jarvis.core import gaming
+    from jarvis.scheduler import reminders
+
+    gcfg = cfg.get("gaming", {})
+    reg.gaming = gaming.GamingMode(brain, gcfg.get("processes", []), gcfg.get("auto_detect", True))
+    gaming.register(reg, reg.gaming)
+    bcfg = cfg.get("briefing", {})
+    reg.reminders = reminders.Reminders(memory, lambda kind, text: None,
+                                        bcfg.get("time") if bcfg.get("enabled", True) else None)
+    reminders.register(reg, reg.reminders)
+
     from jarvis.integrations import home_assistant
 
     home_assistant.register(reg, cfg.get("home_assistant") or {})
     orch = Orchestrator(brain, reg, memory, load_persona(cfg.get("persona")), cfg.get("history_turns", 8),
                         cfg.get("idle_summary_minutes", 10))
+    if cfg["llm"].get("semantic_tools", True):
+        from jarvis.llm.semantic import SemanticGroups
+
+        orch.semantic = SemanticGroups(reg, embed)
     return cfg, orch, brain, reg, memory, roots

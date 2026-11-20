@@ -23,7 +23,12 @@ def register(reg: ToolRegistry, memory: Memory) -> None:
         read_only=True,
     )
     def recall(query: str):
-        return memory.recall(query) or "Nothing found."
+        try:
+            by_meaning = memory.semantic_recall(query)
+        except Exception:
+            by_meaning = []
+        hits = list(dict.fromkeys(by_meaning + memory.recall(query)))  # meaning first, then exact words
+        return hits[:12] or "Nothing found."
 
     @reg.tool(
         "list_facts",

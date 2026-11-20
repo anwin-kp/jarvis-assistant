@@ -7,9 +7,10 @@ llm:
   num_ctx: 8192          # Ollama's default is small; tool schemas + history need room
   temperature: 0.3
   think: false           # Qwen3 "thinking" mode; false = faster replies
-  keep_alive: 10m        # unload from VRAM after 10 idle minutes (frees the GPU for games)
+  keep_alive: -1         # keep the model loaded while JARVIS runs (instant replies); gaming mode / Free GPU unload it
+  semantic_tools: true   # choose tools by meaning (small local embedding model on the CPU)
   max_steps: 6           # max tool-call rounds per request
-  mode: local            # local = everything on this PC | cloud_first = free cloud model, local fallback
+  mode: smart            # smart = local, but hard questions use the free cloud model if a key is set | local | cloud_first
   cloud:                 # optional free tier; needs a key: .\jarvis.ps1 set-key groq
     provider: groq       # groq | gemini | openrouter
     model: llama-3.3-70b-versatile   # gemini: gemini-2.5-flash, openrouter: a ":free" model
@@ -22,10 +23,10 @@ voice:
   enabled: true          # false = text only (or start with --text)
   stt_model: small       # tiny | base | small | medium | large-v3 (bigger = more accurate, slower)
   stt_device: cuda       # cuda | cpu (falls back to cpu automatically)
-  stt_compute_type: float16
+  stt_compute_type: int8_float16   # same accuracy, less GPU memory than float16
   language: null         # null = auto-detect, or e.g. "en", "hi", "ml"
   vocabulary: "Jarvis, Kochi, Kerala"   # names/places you say often (helps recognition)
-  silence_ms: 800        # stop recording after this much silence
+  silence_ms: 550        # stop recording after this much silence (lower = faster, may cut long pauses)
   max_seconds: 15
   tts_engine: piper      # piper (natural, offline) | sapi (built-in Windows voices)
   piper_voice: en_GB-alan-medium   # any voice from huggingface.co/rhasspy/piper-voices (auto-downloads)
