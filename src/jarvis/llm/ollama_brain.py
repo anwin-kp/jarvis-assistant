@@ -8,17 +8,44 @@ from loguru import logger
 
 from jarvis.tools.registry import ConfirmFn, ToolRegistry
 
+_DONE = (r"(?:taken|written|typed|played|paused|resumed|switched|snapped|minimi[sz]ed|maximi[sz]ed|copied|sent|"
+         r"enabled|disabled|added|saved|stored|created|scheduled|opened|closed|deleted|removed|moved|renamed|muted|"
+         r"unmuted|remembered|noted|cancell?ed|marked|launched|started|stopped|locked|set|turned|changed|updated|"
+         r"emailed|booked|installed)")
+# A claim that JARVIS itself just did something: "I've paused the music", "Done - saved.", "The timer is now set".
+# Not ordinary prose ("Kerala's history was written...", "the war started in 1914"), which used to trigger a
+# needless second (thinking, non-streamed) model call and held back speech.
+_FILLER = r"(?:(?!(?:can|could|will|would|should|may|might|shall|to|not|never)\b)\w+ )"  # no offers/negations
+# "I'll check the clipboard for you. One moment." - a promise with no tool call: nothing will happen.
+_DO = (r"(?:check|look|lower|raise|reduce|increase|dim|brighten|turn|set|switch|open|close|play|pause|resume|"
+       r"skip|search|find|read|send|create|add|delete|remove|start|stop|take|copy|save|remember|adjust|change|"
+       r"mute|unmute|enable|disable|launch|schedule|remind|note|write|type|move|rename|lock|get|fetch|pull up)")
+PROMISES = re.compile(rf"\bI(?:'ll| will|'m going to| am going to)\s+(?:now |just |quickly |go ahead and )?{_DO}\b"
+                      rf"|\b(?:let me(?! know)|one moment|just a moment|give me a (?:second|moment))\b", re.IGNORECASE)
 CLAIMS_ACTION = re.compile(
-    r"\b(taken|written|typed|played|paused|resumed|switched|snapped|minimi[sz]ed|maximi[sz]ed|copied|sent|"
-    r"enabled|disabled|added|saved|created|scheduled|opened|closed|deleted|removed|moved|renamed|muted|unmuted|remembered|"
-    r"noted|cancell?ed|marked|launched|started|stopped|locked|set (?:to|for|up)|turned (?:on|off|up|down)|"
-    r"has been|have been|is now|are now)\b",
+    rf"(?:\bI(?:'ve| have| just| also)?\b|\bdone\b[,.!: -]+(?:I've |I )?)\s*{_FILLER}{{0,2}}{_DONE}\b"
+    rf"|\b(?:has|have) (?:now |just |successfully )?been {_DONE}\b"
+    rf"|\b(?:is|are) now (?:\w+ )?{_DONE}\b"
+    rf"|\bsuccessfully {_DONE}\b",
     re.IGNORECASE,
 )
 NUDGE = (
     "[System check] Your reply says an action happened, but you did not call any tool, so nothing was done. "
     "If the user asked for an action, call the right tool now. If no action was needed, repeat your answer."
 )
+NUDGE_PROMISE = (
+    "[System check] You said you would do something, but you did not call a tool, so nothing will happen. "
+    "Call the right tool now. If no tool fits, answer the user directly instead."
+)
+
+
+def unbacked_claim(reply: str) -> str | None:
+    """The nudge to send when a reply claims or promises an action that no tool call backs up."""
+    if CLAIMS_ACTION.search(reply):
+        return NUDGE
+    if PROMISES.search(reply):
+        return NUDGE_PROMISE
+    return None
 
 
 SENTENCE_END = re.compile(r"(?<=[.!?])\s+(?=[A-Z0-9\"'(])")
@@ -44,7 +71,7 @@ class SentenceStream:
         s = sentence.strip()
         if not s or self.held or FILLER.match(s):
             return
-        if not self.tools_ran() and CLAIMS_ACTION.search(s):
+        if not self.tools_ran() and unbacked_claim(s):
             self.held = True  # let the final (checked) answer be spoken instead
             return
         self.emit(s)
@@ -140,10 +167,11 @@ class OllamaBrain:
             if not msg.tool_calls:
                 reply = (msg.content or "").strip()
                 # Small models sometimes claim an action without calling a tool: push back once.
-                if tools and not self.last_tool_calls and not nudged and CLAIMS_ACTION.search(reply):
+                nudge = unbacked_claim(reply) if tools and not self.last_tool_calls and not nudged else None
+                if nudge:
                     nudged = True
-                    logger.info("Reply claims an action but no tool ran; nudging: {}", reply[:80])
-                    msgs.append({"role": "user", "content": NUDGE})
+                    logger.info("Reply claims/promises an action but no tool ran; nudging: {}", reply[:80])
+                    msgs.append({"role": "user", "content": nudge})
                     continue
                 if nudged and not self.last_tool_calls and CLAIMS_ACTION.search(reply):
                     reply += " (Heads-up: no tool actually ran, so nothing was changed. Please ask again.)"
