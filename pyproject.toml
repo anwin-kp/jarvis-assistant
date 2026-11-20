@@ -18,18 +18,23 @@ classifiers = [
 dependencies = [
     "comtypes>=1.5.0",
     "ddgs>=9.16.1",
+    "faster-whisper>=1.2.1",
     "feedparser>=6.0.14",
     "keyring>=25.7.0",
     "loguru>=0.8.0",
+    "numpy>=2.5.5",
     "ollama>=0.6.3",
     "psutil>=7.2.2",
     "pycaw>=20260927",
+    "pyttsx3>=2.99",
     "pywin32>=312",
     "pyyaml>=6.0.3",
     "requests>=2.34.2",
     "screen-brightness-control>=0.27.2",
     "send2trash>=2.2.0",
+    "sounddevice>=0.5.6",
     "trafilatura>=2.3.1",
+    "webrtcvad-wheels>=2.0.14.post1",
 ]
 
 [project.urls]
@@ -42,6 +47,8 @@ jarvis = "jarvis.__main__:main"
 [tool.uv]
 # Smart App Control blocks uv's unsigned Python builds; use the signed python.org install.
 python-preference = "only-system"
+# GPU speech recognition libraries (~1 GB) are installed by default; CI skips them.
+default-groups = ["dev", "gpu"]
 
 [tool.ruff]
 line-length = 120
@@ -62,4 +69,8 @@ build-backend = "uv_build"
 dev = [
     "pytest>=9.2.0",
     "ruff>=0.17.6",
+]
+gpu = [
+    "nvidia-cublas-cu12==12.4.5.8 ; sys_platform == 'win32'",
+    "nvidia-cudnn-cu12==9.1.0.70 ; sys_platform == 'win32'",
 ]

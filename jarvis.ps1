@@ -4,7 +4,7 @@
 
 .EXAMPLE
     .\jarvis.ps1 start            # start JARVIS in a new window (starts Ollama if needed)
-    .\jarvis.ps1 start -DryRun    # start in simulation mode
+    .\jarvis.ps1 start -DryRun    # start in simulation mode (-Text = no voice)
     .\jarvis.ps1 status           # is it running? what's on the GPU?
     .\jarvis.ps1 free             # unload the AI model from GPU memory (JARVIS keeps running)
     .\jarvis.ps1 stop             # close JARVIS and free the GPU
@@ -20,6 +20,7 @@ param(
     [ValidateSet('start', 'stop', 'restart', 'status', 'free', 'stop-all', 'logs', 'test', 'help')]
     [string]$Command = 'help',
     [switch]$DryRun,
+    [switch]$Text,
     [switch]$Follow,
     [int]$Lines = 40
 )
@@ -117,6 +118,7 @@ function Invoke-Start {
     Start-Ollama
     $jarvisArgs = @('-W', 'ignore', '-m', 'jarvis')
     if ($DryRun) { $jarvisArgs += '--dry-run' }
+    if ($Text)   { $jarvisArgs += '--text' }
     Start-Process -FilePath $Python -ArgumentList $jarvisArgs -WorkingDirectory $Root
     Start-Sleep -Seconds 2
     if (@(Get-JarvisProcesses).Count -gt 0) { Write-Ok 'JARVIS started in a new window' }
