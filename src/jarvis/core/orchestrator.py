@@ -50,12 +50,15 @@ class Orchestrator:
         self.history_turns = history_turns
         self.history: list[dict] = []  # plain-text turns only
         self.semantic = None  # SemanticGroups
+        self.location_fn = None  # () -> "City, Region, Country" (cached) or None
         self.last_think = False
         self.idle_seconds = idle_summary_minutes * 60
         self.last_activity = time.monotonic()
 
     def system_prompt(self) -> str:
         prompt = self.persona
+        if self.location_fn and (where := self.location_fn()):
+            prompt += f"\n\nThe user is currently in or near: {where} (approximate)."
         if facts := self.memory.profile():
             prompt += f"\n\nKnown facts about the user:\n{facts}"
         if sums := self.memory.recent_summaries():
