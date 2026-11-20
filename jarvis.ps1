@@ -18,7 +18,7 @@
     .\jarvis.ps1 shortcut         # add JARVIS (and Kill JARVIS) to the Desktop and Start menu
     .\jarvis.ps1 enroll-voice     # record your voiceprint (for voice.voice_id)
     .\jarvis.ps1 google-login     # sign in to Gmail/Calendar (needs data\google\credentials.json)
-    .\jarvis.ps1 set-key groq     # store a free cloud API key (groq | gemini | openrouter) securely
+    .\jarvis.ps1 set-key groq     # store an API key securely (add -FromClipboard to read it from the clipboard)
 
     Start/stop by double-click: start-jarvis.cmd / kill-jarvis.cmd (emergency stop).
 #>
@@ -33,6 +33,7 @@ param(
     [switch]$Follow,
     [Parameter(Position = 1)]
     [string]$Name,
+    [switch]$FromClipboard,
     [int]$Lines = 40
 )
 
@@ -232,12 +233,20 @@ switch ($Command) {
     'enroll-voice'  { Push-Location $Root; try { & $Python -W ignore -m jarvis.audio.voiceid } finally { Pop-Location } }
     'set-key'       {
         if ($Name -notin 'groq', 'gemini', 'openrouter', 'home_assistant', 'telegram') { throw 'Usage: .\jarvis.ps1 set-key groq|gemini|openrouter|home_assistant|telegram' }
-        $sec = Read-Host "Paste your $Name API key" -AsSecureString
-        $plain = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($sec))
+        if ($FromClipboard) {
+            $plain = "$(Get-Clipboard -Raw)".Trim()   # copy the key first; avoids paste problems in hidden prompts
+            Set-Clipboard -Value ' '                  # don't leave the key on the clipboard
+        } else {
+            $sec = Read-Host "Paste your $Name API key" -AsSecureString
+            $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($sec)
+            try { $plain = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr).Trim() }
+            finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
+        }
+        if ($plain.Length -lt 16) { throw "That key is only $($plain.Length) characters - it looks incomplete. Nothing was saved. Tip: copy the key, then run: .\jarvis.ps1 set-key $Name -FromClipboard" }
         $env:JARVIS_KEY = $plain
         & $Python -c "import os, keyring; keyring.set_password('jarvis', '${Name}_api_key', os.environ['JARVIS_KEY'])"
         Remove-Item Env:JARVIS_KEY
-        Write-Ok "Saved in Windows Credential Manager. Set llm.mode: cloud_first in config.yaml to use it."
+        Write-Ok "Saved in Windows Credential Manager ($($plain.Length) characters). Restart JARVIS to use it."
     }
     'google-login'  { Push-Location $Root; try { & $Python -W ignore -m jarvis.integrations.google } finally { Pop-Location } }
     'help'     { Get-Help $PSCommandPath -Examples | Out-String | Write-Host }
