@@ -652,6 +652,7 @@ dependencies = [
     { name = "webrtcvad-wheels" },
     { name = "websockets" },
     { name = "win11toast" },
+    { name = "winrt-windows-devices-geolocation" },
     { name = "winrt-windows-devices-radios" },
     { name = "winrt-windows-foundation" },
     { name = "winrt-windows-foundation-collections" },
@@ -710,6 +711,7 @@ requires-dist = [
     { name = "webrtcvad-wheels", specifier = ">=2.0.14.post1" },
     { name = "websockets", specifier = ">=17.4" },
     { name = "win11toast", specifier = ">=0.36.3" },
+    { name = "winrt-windows-devices-geolocation", specifier = ">=4!10.0.28000.2957" },
     { name = "winrt-windows-devices-radios", specifier = ">=4!10.0.28000.2957" },
     { name = "winrt-windows-foundation", specifier = ">=4!10.0.28000.2957" },
     { name = "winrt-windows-foundation-collections", specifier = ">=4!10.0.28000.2957" },
@@ -1970,6 +1972,20 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/c5/85/ef6bbcf68383c9f10c609c9a27121d7eab8159eb4819f6c74d14fcdf1b96/winrt_windows_data_xml_dom-4!10.0.28000.2957.tar.gz", hash = "sha256:03643378e9123c85448c57965a056a7f76ebb63f67b00610bd4cf3095d2e9387", size = 16892, upload-time = "2026-10-31T23:43:48.754Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/37/3e/a1b8eb06c74f52a2745c7e2b251bb66c54125aa0bb4dfae88dce2e784d3b/winrt_windows_data_xml_dom-4!10.0.28000.2957-py3-none-any.whl", hash = "sha256:26a516c6484744260cfb15ec44510d5bf020ee29a946f87f38ef7eac7df3673e", size = 21701, upload-time = "2026-10-31T23:38:44.874Z" },
+]
+
+[[package]]
+name = "winrt-windows-devices-geolocation"
+version = "4!10.0.28000.2957"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "winrt-runtime" },
+    { name = "winrt-windows-foundation" },
+    { name = "winrt-windows-foundation-collections" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/12/1f/4576bcace399b88bc7e4ca4c7232df2826c703d5b6613b52f464556b4c0a/winrt_windows_devices_geolocation-4!10.0.28000.2957.tar.gz", hash = "sha256:1f0b2f43b829a2cd31b5ca50e4c2911a78f895dd6ee9431e97613ea0018e9e77", size = 15361, upload-time = "2026-10-31T23:43:59.321Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/45/93/e1817e0fcd2646a38fd92983663d490905a55e5dfd3794ef6d08b48d8b67/winrt_windows_devices_geolocation-4!10.0.28000.2957-py3-none-any.whl", hash = "sha256:47fb317a73d000cfe209f543d2594799dd6f71eeea5a6957039e797efe6bd2c2", size = 18858, upload-time = "2026-10-31T23:39:00.053Z" },
 ]
 
 [[package]]
