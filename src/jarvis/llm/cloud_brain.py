@@ -91,25 +91,31 @@ class Router:
 
     @property
     def model(self) -> str:
-        if self.cloud and self.cloud.available and self.mode == "cloud_first":
+        if self.cloud and self.cloud.available and self.mode in ("cloud_first", "smart"):
             return f"{self.local.model} + {self.cloud.provider}:{self.cloud.model}"
         return self.local.model
 
-    def _use_cloud(self, tools: list[dict], complex_: bool = False) -> bool:
+    def _is_private(self, tool_schema: dict) -> bool:
+        tool = self.reg.get(tool_schema["function"]["name"])
+        return bool(tool and tool.group in PRIVATE_GROUPS)
+
+    def _use_cloud(self, tools: list[dict], complex_: bool = False, private: bool | None = None) -> bool:
         if not (self.cloud and self.cloud.available) or self.private:
             return False
-        names = {t["function"]["name"] for t in tools or []}
-        if any((tool := self.reg.get(n)) and tool.group in PRIVATE_GROUPS for n in names):
-            return False  # files / email stay on this PC
+        if private is None:  # caller didn't say: judge by the tools on offer
+            private = any(self._is_private(t) for t in tools or [])
+        if private:
+            return False  # files / email / screen / clipboard / notes stay on this PC
         if self.mode == "smart" and complex_:
             return True  # hard questions go to the bigger free model
         return self.mode == "cloud_first" or (self.gaming and self.cloud_in_gaming)
 
     def respond(self, messages: list[dict], tools: list[dict], confirm: ConfirmFn, on_sentence=None,
-                think: bool = False) -> str:
-        if self._use_cloud(tools, think):
+                think: bool = False, private: bool | None = None) -> str:
+        if self._use_cloud(tools, think, private):
             try:
-                reply = self.cloud.respond(messages, tools, confirm)
+                public_tools = [t for t in tools or [] if not self._is_private(t)]  # the cloud never gets private tools
+                reply = self.cloud.respond(messages, public_tools, confirm)
                 self.last_tool_calls, self.last_backend = self.cloud.last_tool_calls, "cloud"
                 return reply
             except CloudUnavailable as e:

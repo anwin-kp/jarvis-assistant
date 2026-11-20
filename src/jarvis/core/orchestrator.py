@@ -99,7 +99,8 @@ class Orchestrator:
         now = dt.datetime.now().strftime("%A %d %B %Y, %H:%M")
         user_msg = {"role": "user", "content": f"[Local time: {now}] {text}"}
         messages = [{"role": "system", "content": self.system_prompt()}, *self.history, user_msg]
-        groups = pick_groups(text)
+        asked = pick_groups(text)  # what the words explicitly ask for
+        groups = set(asked)
         if self.semantic:
             groups |= self.semantic.pick(text)
         tools = self.reg.schemas(groups)
@@ -107,6 +108,10 @@ class Orchestrator:
         kw = {"on_sentence": on_sentence} if on_sentence else {}
         if self.last_think:
             kw["think"] = True
+        if hasattr(self.brain, "cloud"):  # router: privacy follows what you asked for, not tools added "just in case"
+            from jarvis.llm.cloud_brain import PRIVATE_GROUPS
+
+            kw["private"] = bool(asked & PRIVATE_GROUPS)
         reply = strip_filler(self.brain.respond(messages, tools, confirm, **kw) or "(no reply)")
 
         # Safety net: small models sometimes say "remembered" without calling the tool.

@@ -13,7 +13,7 @@ llm:
   mode: smart            # smart = local, but hard questions use the free cloud model if a key is set | local | cloud_first
   cloud:                 # optional free tier; needs a key: .\jarvis.ps1 set-key groq
     provider: groq       # groq | gemini | openrouter
-    model: llama-3.3-70b-versatile   # gemini: gemini-2.5-flash, openrouter: a ":free" model
+    model: openai/gpt-oss-120b   # see console.groq.com/docs/models; gemini: gemini-2.5-flash, openrouter: a ":free" model
     use_in_gaming_mode: true         # while gaming, use the cloud (if a key is set) instead of the slow CPU
 
 history_turns: 8         # how many previous exchanges the model sees
