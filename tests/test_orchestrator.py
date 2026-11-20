@@ -46,10 +46,10 @@ def test_idle_session_is_summarized(tmp_path):
     mem = Memory(tmp_path / "m.db")
     reg = ToolRegistry()
     memory_tools.register(reg, mem)
-    orch = Orchestrator(SummaryBrain(), reg, mem, persona="test", idle_summary_minutes=0)
+    orch = Orchestrator(SummaryBrain(), reg, mem, persona="test", idle_summary_minutes=10)
     orch.handle("hello", confirm=lambda t, a: True)
     orch.handle("how about chai?", confirm=lambda t, a: True)
-    orch.last_activity -= 1  # simulate idle time
+    orch.last_activity -= 11 * 60  # simulate 11 idle minutes
     orch.handle("new topic", confirm=lambda t, a: True)
     assert mem.recent_summaries()[0].endswith("User asked about chai.")
     assert "User asked about chai." in orch.system_prompt()
