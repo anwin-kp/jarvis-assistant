@@ -1,9 +1,22 @@
 """Local LLM brain using Ollama's tool calling."""
 
+import re
+
 import ollama
 from loguru import logger
 
 from jarvis.tools.registry import ConfirmFn, ToolRegistry
+
+CLAIMS_ACTION = re.compile(
+    r"\b(added|saved|created|scheduled|opened|closed|deleted|removed|moved|renamed|muted|unmuted|remembered|"
+    r"noted|cancell?ed|marked|launched|started|stopped|locked|set (?:to|for|up)|turned (?:on|off|up|down)|"
+    r"has been|have been|is now|are now)\b",
+    re.IGNORECASE,
+)
+NUDGE = (
+    "[System check] Your reply says an action happened, but you did not call any tool, so nothing was done. "
+    "If the user asked for an action, call the right tool now. If no action was needed, repeat your answer."
+)
 
 
 class BrainUnavailable(RuntimeError):
@@ -36,23 +49,46 @@ class OllamaBrain:
         """Free the GPU memory immediately (e.g. before gaming)."""
         self.client.generate(model=self.model, prompt="", keep_alive=0)
 
+    def set_cpu_only(self, cpu_only: bool) -> None:
+        """Gaming mode: run the model on the CPU so the GPU stays free (slower replies)."""
+        if cpu_only:
+            self.options["num_gpu"] = 0
+        else:
+            self.options.pop("num_gpu", None)
+
+    def complete(self, messages: list[dict]) -> str:
+        """Plain completion without tools (summaries etc.)."""
+        resp = self.client.chat(model=self.model, messages=messages, think=False,
+                                keep_alive=self.keep_alive, options=self.options)
+        return (resp.message.content or "").strip()
+
     def respond(self, messages: list[dict], tools: list[dict], confirm: ConfirmFn) -> str:
         """messages: plain [{"role", "content"}] dicts. Tool calls live only inside this turn."""
         msgs = list(messages)
         self.last_tool_calls: list[str] = []
+        nudged = False
         for step in range(self.max_steps):
             resp = self.client.chat(
                 model=self.model,
                 messages=msgs,
                 tools=tools or None,
-                think=self.think,
+                think=self.think or nudged,  # think harder on the retry
                 keep_alive=self.keep_alive,
                 options=self.options,
             )
             msg = resp.message
             msgs.append(msg)
             if not msg.tool_calls:
-                return (msg.content or "").strip()
+                reply = (msg.content or "").strip()
+                # Small models sometimes claim an action without calling a tool: push back once.
+                if tools and not self.last_tool_calls and not nudged and CLAIMS_ACTION.search(reply):
+                    nudged = True
+                    logger.info("Reply claims an action but no tool ran; nudging: {}", reply[:80])
+                    msgs.append({"role": "user", "content": NUDGE})
+                    continue
+                if nudged and not self.last_tool_calls and CLAIMS_ACTION.search(reply):
+                    reply += " (Heads-up: no tool actually ran, so nothing was changed. Please ask again.)"
+                return reply
             for call in msg.tool_calls:
                 name, args = call.function.name, call.function.arguments
                 logger.debug("step {} tool call {} {}", step, name, args)

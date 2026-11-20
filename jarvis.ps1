@@ -4,7 +4,7 @@
 
 .EXAMPLE
     .\jarvis.ps1 start            # start JARVIS in a new window (starts Ollama if needed)
-    .\jarvis.ps1 start -DryRun    # start in simulation mode
+    .\jarvis.ps1 start -DryRun    # start in simulation mode (-Text = no voice)
     .\jarvis.ps1 status           # is it running? what's on the GPU?
     .\jarvis.ps1 free             # unload the AI model from GPU memory (JARVIS keeps running)
     .\jarvis.ps1 stop             # close JARVIS and free the GPU
@@ -12,15 +12,23 @@
     .\jarvis.ps1 stop-all         # close JARVIS, free the GPU, and shut down Ollama
     .\jarvis.ps1 logs [-Follow]   # show the log file
     .\jarvis.ps1 test             # run unit tests and lint
+    .\jarvis.ps1 autostart-on     # start JARVIS (minimized) when you log in to Windows
+    .\jarvis.ps1 autostart-off
+    .\jarvis.ps1 google-login     # sign in to Gmail/Calendar (needs data\google\credentials.json)
+    .\jarvis.ps1 set-key groq     # store a free cloud API key (groq | gemini | openrouter) securely
 
     For an emergency stop use kill-switch.ps1 (or double-click kill-switch.cmd).
 #>
 param(
     [Parameter(Position = 0)]
-    [ValidateSet('start', 'stop', 'restart', 'status', 'free', 'stop-all', 'logs', 'test', 'help')]
+    [ValidateSet('start', 'stop', 'restart', 'status', 'free', 'stop-all', 'logs', 'test', 'autostart-on', 'autostart-off', 'google-login', 'set-key', 'help')]
     [string]$Command = 'help',
     [switch]$DryRun,
+    [switch]$Text,
+    [switch]$Minimized,
     [switch]$Follow,
+    [Parameter(Position = 1)]
+    [string]$Name,
     [int]$Lines = 40
 )
 
@@ -117,7 +125,9 @@ function Invoke-Start {
     Start-Ollama
     $jarvisArgs = @('-W', 'ignore', '-m', 'jarvis')
     if ($DryRun) { $jarvisArgs += '--dry-run' }
-    Start-Process -FilePath $Python -ArgumentList $jarvisArgs -WorkingDirectory $Root
+    if ($Text)   { $jarvisArgs += '--text' }
+    $style = if ($Minimized) { 'Minimized' } else { 'Normal' }
+    Start-Process -FilePath $Python -ArgumentList $jarvisArgs -WorkingDirectory $Root -WindowStyle $style
     Start-Sleep -Seconds 2
     if (@(Get-JarvisProcesses).Count -gt 0) { Write-Ok 'JARVIS started in a new window' }
     else { Write-Warn "JARVIS exited right away. Check the log: .\jarvis.ps1 logs" }
@@ -160,6 +170,23 @@ function Invoke-Test {
     } finally { Pop-Location }
 }
 
+$Shortcut = Join-Path ([Environment]::GetFolderPath('Startup')) 'JARVIS.lnk'
+
+function Set-Autostart([bool]$On) {
+    if (-not $On) {
+        if (Test-Path $Shortcut) { Remove-Item $Shortcut; Write-Ok 'Autostart removed' } else { Write-Ok 'Autostart was not set' }
+        return
+    }
+    $ws = New-Object -ComObject WScript.Shell
+    $lnk = $ws.CreateShortcut($Shortcut)
+    $lnk.TargetPath = 'powershell.exe'
+    $lnk.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$PSCommandPath`" start -Minimized"
+    $lnk.WorkingDirectory = $Root
+    $lnk.Description = 'Start JARVIS'
+    $lnk.Save()
+    Write-Ok "JARVIS will start minimized when you log in ($Shortcut)"
+}
+
 switch ($Command) {
     'start'    { Invoke-Start }
     'stop'     { Stop-Jarvis; Clear-GpuModels }
@@ -169,5 +196,17 @@ switch ($Command) {
     'stop-all' { Stop-Jarvis; Clear-GpuModels; Stop-Ollama; Show-Gpu }
     'logs'     { Invoke-Logs }
     'test'     { Invoke-Test }
+    'autostart-on'  { Set-Autostart $true }
+    'autostart-off' { Set-Autostart $false }
+    'set-key'       {
+        if ($Name -notin 'groq', 'gemini', 'openrouter', 'home_assistant') { throw 'Usage: .\jarvis.ps1 set-key groq|gemini|openrouter|home_assistant' }
+        $sec = Read-Host "Paste your $Name API key" -AsSecureString
+        $plain = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($sec))
+        $env:JARVIS_KEY = $plain
+        & $Python -c "import os, keyring; keyring.set_password('jarvis', '${Name}_api_key', os.environ['JARVIS_KEY'])"
+        Remove-Item Env:JARVIS_KEY
+        Write-Ok "Saved in Windows Credential Manager. Set llm.mode: cloud_first in config.yaml to use it."
+    }
+    'google-login'  { Push-Location $Root; try { & $Python -W ignore -m jarvis.integrations.google } finally { Pop-Location } }
     'help'     { Get-Help $PSCommandPath -Examples | Out-String | Write-Host }
 }

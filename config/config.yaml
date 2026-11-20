@@ -1,4 +1,5 @@
 assistant_name: JARVIS
+persona: default        # default | butler | casual | terse (config/personas/*.md)
 
 llm:
   ollama_host: http://127.0.0.1:11434
@@ -8,10 +9,67 @@ llm:
   think: false           # Qwen3 "thinking" mode; false = faster replies
   keep_alive: 10m        # unload from VRAM after 10 idle minutes (frees the GPU for games)
   max_steps: 6           # max tool-call rounds per request
+  mode: local            # local = everything on this PC | cloud_first = free cloud model, local fallback
+  cloud:                 # optional free tier; needs a key: .\jarvis.ps1 set-key groq
+    provider: groq       # groq | gemini | openrouter
+    model: llama-3.3-70b-versatile   # gemini: gemini-2.5-flash, openrouter: a ":free" model
+    use_in_gaming_mode: true         # while gaming, use the cloud (if a key is set) instead of the slow CPU
 
 history_turns: 8         # how many previous exchanges the model sees
+idle_summary_minutes: 10 # after this idle time the conversation is summarized into memory
+
+voice:
+  enabled: true          # false = text only (or start with --text)
+  stt_model: small       # tiny | base | small | medium | large-v3 (bigger = more accurate, slower)
+  stt_device: cuda       # cuda | cpu (falls back to cpu automatically)
+  stt_compute_type: float16
+  language: null         # null = auto-detect, or e.g. "en", "hi", "ml"
+  silence_ms: 800        # stop recording after this much silence
+  max_seconds: 15
+  tts_engine: piper      # piper (natural, offline) | sapi (built-in Windows voices)
+  piper_voice: en_GB-alan-medium   # any voice from huggingface.co/rhasspy/piper-voices (auto-downloads)
+  tts_speed: 1.0
+  tts_rate: 185          # SAPI speaking speed
+  tts_voice: null        # SAPI: part of a Windows voice name, e.g. "David" or "Zira"
+  wake_word: true        # say "Hey Jarvis" to talk hands-free
+  wake_threshold: 0.5    # 0.3 = more sensitive, 0.7 = fewer false wakes
+  follow_up_seconds: 4   # after a spoken reply, keep listening this long without the wake word
+
+tray: true               # system-tray icon
+
+proactive:              # JARVIS speaks up on its own
+  enabled: true
+  battery_percent: 15    # warn when unplugged and at or below this
+  disk_free_gb: 10       # warn when drive C has less free space
+
+home_assistant:         # optional smart home; token: .\jarvis.ps1 set-key home_assistant
+  url: null             # e.g. http://homeassistant.local:8123
+  domains: [light, switch, fan, media_player, climate, scene]   # locks/alarms/doors are never allowed
+
+hud:
+  enabled: true          # futuristic window (local only: 127.0.0.1 + secret token)
+  port: 8765
+  open_on_start: true
+
+briefing:
+  enabled: true
+  time: "08:30"          # daily briefing (weather, tasks, reminders, news); fires once per day
+  city: null             # e.g. "Kochi, India" for the weather part
+
+gaming:
+  auto_detect: true      # free the GPU automatically while one of these games runs
+  processes:             # add your games' .exe names (see Task Manager > Details)
+    - VALORANT-Win64-Shipping.exe
+    - cs2.exe
+    - GTA5.exe
+    - FortniteClient-Win64-Shipping.exe
+    - RocketLeague.exe
+    - eldenring.exe
+    - Cyberpunk2077.exe
+    - r5apex.exe
 
 security:
+  shell_enabled: false   # true = allow read-only PowerShell commands (always asks first)
   # Folders JARVIS may read/search. Known-folder names are resolved via Windows
   # (handles OneDrive redirection); you can also add full paths.
   allowed_roots:
