@@ -19,7 +19,9 @@ def _add_cuda_dlls() -> None:
 
 class WhisperSTT:
     def __init__(self, model: str = "small", device: str = "cuda", compute_type: str = "float16",
-                 download_root: str | None = None, vocabulary: str | None = None):
+                 download_root: str | None = None, vocabulary: str | None = None,
+                 languages: list[str] | None = None):
+        self.languages = [lang.lower() for lang in (languages or [])]  # e.g. ['en', 'hi', 'ml']
         self.vocabulary = vocabulary  # names/places to help recognition, e.g. "Jarvis, Kochi"
         if device == "cuda":
             _add_cuda_dlls()
@@ -47,6 +49,12 @@ class WhisperSTT:
             return "", ""
         segments, info = self.model.transcribe(audio, language=language, beam_size=1, vad_filter=True,
                                                 initial_prompt=self.vocabulary or None)
+        if not language and self.languages and info.language not in self.languages:
+            # short phrases are sometimes mis-detected: retry in the most likely of *your* languages
+            probs = dict(info.all_language_probs or [])
+            best = max(self.languages, key=lambda lang: probs.get(lang, 0))
+            segments, info = self.model.transcribe(audio, language=best, beam_size=1, vad_filter=True,
+                                                    initial_prompt=self.vocabulary or None)
         # Drop segments Whisper itself thinks are not speech or is very unsure about (noise, TV murmur).
         kept = [s.text.strip() for s in segments if s.no_speech_prob < 0.6 and s.avg_logprob > -1.0]
         text = " ".join(kept).strip()

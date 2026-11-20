@@ -15,6 +15,7 @@
     .\jarvis.ps1 autostart-on     # start JARVIS (minimized) when you log in to Windows
     .\jarvis.ps1 autostart-off
     .\jarvis.ps1 shortcut         # add JARVIS (and Kill JARVIS) to the Desktop and Start menu
+    .\jarvis.ps1 enroll-voice     # record your voiceprint (for voice.voice_id)
     .\jarvis.ps1 google-login     # sign in to Gmail/Calendar (needs data\google\credentials.json)
     .\jarvis.ps1 set-key groq     # store a free cloud API key (groq | gemini | openrouter) securely
 
@@ -22,7 +23,7 @@
 #>
 param(
     [Parameter(Position = 0)]
-    [ValidateSet('start', 'stop', 'restart', 'status', 'free', 'stop-all', 'logs', 'test', 'autostart-on', 'autostart-off', 'google-login', 'set-key', 'shortcut', 'help')]
+    [ValidateSet('start', 'stop', 'restart', 'status', 'free', 'stop-all', 'logs', 'test', 'autostart-on', 'autostart-off', 'google-login', 'set-key', 'shortcut', 'enroll-voice', 'help')]
     [string]$Command = 'help',
     [switch]$DryRun,
     [switch]$Text,
@@ -226,6 +227,7 @@ switch ($Command) {
     'autostart-on'  { Set-Autostart $true }
     'autostart-off' { Set-Autostart $false }
     'shortcut'      { New-Shortcuts }
+    'enroll-voice'  { Push-Location $Root; try { & $Python -W ignore -m jarvis.audio.voiceid } finally { Pop-Location } }
     'set-key'       {
         if ($Name -notin 'groq', 'gemini', 'openrouter', 'home_assistant', 'telegram') { throw 'Usage: .\jarvis.ps1 set-key groq|gemini|openrouter|home_assistant|telegram' }
         $sec = Read-Host "Paste your $Name API key" -AsSecureString

@@ -38,6 +38,10 @@ def build(dry_run: bool = False):
     reg.mcp = mcp_client.register(reg, cfg.get("mcp_servers") or {})
 
     screen_tools.register(reg)
+    if cfg.get("browser", {}).get("enabled", True):
+        from jarvis.tools import browser_tools
+
+        reg.browser = browser_tools.register(reg, DATA / "browser-profile")
     dcfg = cfg.get("documents", {})
     if dcfg.get("enabled", True):
         import ollama
