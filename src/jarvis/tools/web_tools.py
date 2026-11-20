@@ -2,6 +2,7 @@
 
 import ipaddress
 import socket
+import threading
 from urllib.parse import quote, urlparse
 
 import requests
@@ -43,7 +44,56 @@ WMO = {
 }
 
 
-ENGINES = ("bing", "google", "yahoo", "duckduckgo", "brave")
+_geo_cache: dict[str, dict] = {}
+_geo_last = [0.0]
+_GEO_LOCK = threading.Lock()
+
+
+def geocode(place: str, country: str = "") -> dict | None:
+    """Place name -> {"place", "latitude", "longitude"}. OpenStreetMap (Nominatim) understands states, regions
+    and other names ("Goa", "Bangalore" -> Bengaluru) and ranks by importance; Open-Meteo's own geocoder only
+    knows towns and matches loosely ("Goa" -> Genoa), so it is only the fallback."""
+    import time
+
+    query = ", ".join(p.strip() for p in (place, country) if p and p.strip())
+    key = query.lower()
+    if key in _geo_cache:
+        return _geo_cache[key]
+    loc = None
+    try:
+        with _GEO_LOCK:  # Nominatim usage policy: at most 1 request per second
+            wait = 1.0 - (time.monotonic() - _geo_last[0])
+            if wait > 0:
+                time.sleep(wait)
+            r = requests.get("https://nominatim.openstreetmap.org/search", headers=UA, timeout=8,
+                             params={"q": query, "format": "jsonv2", "limit": 1, "accept-language": "en"})
+            _geo_last[0] = time.monotonic()
+        hits = r.json() if r.ok else []
+        if hits:
+            h = hits[0]
+            loc = {"place": h["display_name"], "latitude": float(h["lat"]), "longitude": float(h["lon"])}
+    except (requests.RequestException, ValueError, KeyError):
+        pass
+    if loc is None:  # fallback: Open-Meteo, exact name first, then the biggest place
+        try:
+            res = requests.get("https://geocoding-api.open-meteo.com/v1/search", headers=UA, timeout=8,
+                               params={"name": place, "count": 10}).json().get("results") or []
+        except (requests.RequestException, ValueError):
+            res = []
+        if country:
+            c = country.lower()
+            res = [x for x in res if c in (x.get("country", "").lower(), x.get("country_code", "").lower())]
+        exact = [x for x in res if x.get("name", "").lower() == place.strip().lower()]
+        if exact or res:
+            x = max(exact or res, key=lambda x: x.get("population") or 0)
+            loc = {"place": ", ".join(filter(None, (x.get("name"), x.get("admin1"), x.get("country")))),
+                   "latitude": x["latitude"], "longitude": x["longitude"]}
+    if loc:
+        _geo_cache[key] = loc
+    return loc
+
+
+ENGINES = ("bing","google", "yahoo", "duckduckgo", "brave")
 _cache: dict[str, tuple[float, list[dict]]] = {}
 
 
@@ -127,20 +177,9 @@ def register(reg: ToolRegistry, rss_feeds: list[str]) -> None:
     def get_weather(city: str, country: str = ""):
         if not country and "," in city:  # "Kochi, India"
             city, country = (s.strip() for s in city.split(",", 1))
-        geo = requests.get(
-            "https://geocoding-api.open-meteo.com/v1/search",
-            params={"name": city, "count": 10},
-            headers=UA,
-            timeout=10,
-        ).json()
-        results = geo.get("results") or []
-        if country:
-            c = country.lower()
-            results = [r for r in results if c in (r.get("country", "").lower(), r.get("country_code", "").lower())]
-        if not results:
+        loc = geocode(city, country)
+        if not loc:
             return f"ERROR: couldn't find a place called {city}{', ' + country if country else ''}."
-        # Same name in several countries: prefer the biggest city
-        loc = max(results, key=lambda r: r.get("population") or 0)
         wx = requests.get(
             "https://api.open-meteo.com/v1/forecast",
             headers=UA,
@@ -156,7 +195,7 @@ def register(reg: ToolRegistry, rss_feeds: list[str]) -> None:
         ).json()
         cur, day = wx["current"], wx["daily"]
         return {
-            "place": f"{loc['name']}, {loc.get('admin1', '')}, {loc.get('country', '')}",
+            "place": loc["place"],
             "now": {
                 "temperature_c": cur["temperature_2m"],
                 "feels_like_c": cur["apparent_temperature"],
