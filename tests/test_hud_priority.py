@@ -51,3 +51,23 @@ def test_an_approval_answer_does_not_cut_in():
     app._awaiting_confirm = False
     app.preempt("/mute")
     assert calls == ["HUD: /mute"]
+
+
+def test_hej_is_hey_and_jarvis_needs_its_name_after_a_quiet_minute():
+    import time as _t
+    from types import SimpleNamespace
+
+    from jarvis.__main__ import App, normalize_heard
+
+    assert normalize_heard("Hej Jarvis.") == "Hey Jarvis." and normalize_heard("hej") == "Hey"
+    assert normalize_heard("Hejduk is a name") == "Hejduk is a name"
+    app = App.__new__(App)
+    app.cfg = {"voice": {"addressed_window_s": 60}}
+    app._engine_mode = lambda: "always"
+    app.fast = SimpleNamespace(matches=lambda t: t.lower() == "pause")
+    utt = SimpleNamespace(after_wake=False, barge=False)
+    app._spoke_at = app._last_heard = _t.monotonic() - 300  # quiet for 5 minutes
+    assert not app._addressed("We'd sneak it in making protein shakes", utt)  # someone else talking
+    assert app._addressed("Jarvis, what's the weather?", utt) and app._addressed("pause", utt)
+    app._spoke_at = _t.monotonic() - 10  # JARVIS just replied: follow-ups need no name
+    assert app._addressed("and tomorrow?", utt)

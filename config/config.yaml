@@ -55,6 +55,8 @@ voice:
     threshold: 0.45      # higher = stricter
   wake_word: true        # also load "Hey Jarvis" (wake_word mode, and waking up after "go to sleep")
   wake_threshold: 0.5    # 0.3 = more sensitive, 0.7 = fewer false wakes
+  addressed_window_s: 60 # always-listening: after this long without talking to JARVIS, it needs its name
+                         #   ("Jarvis, ...") so it ignores other people and the TV. 0 = answer everything
   follow_up_seconds: 4   # after a spoken reply, keep listening this long without the wake word
 
 tray: true               # system-tray icon
