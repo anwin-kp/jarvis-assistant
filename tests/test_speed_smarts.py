@@ -76,3 +76,11 @@ def test_semantic_groups_pick_by_meaning():
     sem = SemanticGroups(reg, embed, top_tools=1, min_score=0.5)
     assert sem.pick("make it less bright, too much brightness") == {"system"}
     assert sem.pick("put on a song") == {"media"}
+
+
+def test_fast_intents_matches_without_side_effects():
+    reg, calls = make_reg()
+    fast = FastIntents(reg, {})
+    assert fast.matches("next song") and fast.matches("Jarvis, pause")
+    assert not fast.matches("He's moved") and not fast.matches("tell me about Kerala")
+    assert calls == []

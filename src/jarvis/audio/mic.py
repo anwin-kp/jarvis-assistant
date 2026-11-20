@@ -23,6 +23,7 @@ def record_until_silence(
     min_speech_ms: int = 0,
     min_rms: float = 0.006,
     on_start: Callable[[], None] | None = None,
+    prefix: np.ndarray | None = None,
 ) -> np.ndarray:
     """Record from the default mic until `silence_ms` of silence after speech.
 
@@ -39,6 +40,9 @@ def record_until_silence(
     pre_roll: collections.deque[np.ndarray] = collections.deque(maxlen=10)  # keep ~300 ms before speech
     frames: list[np.ndarray] = []
     started, speech_frames, waited, n = False, 0, 0, 0
+    if prefix is not None and prefix.size:  # speech already captured (e.g. you interrupted JARVIS)
+        frames.append((np.clip(prefix, -1, 1) * 32767).astype(np.int16).reshape(-1, 1))
+        started, speech_frames = True, int(prefix.size / FRAME)
     max_frames = int(max_seconds * 1000 / FRAME_MS)
     with sd.InputStream(samplerate=RATE, channels=1, dtype="int16", blocksize=FRAME) as stream:
         while True:
@@ -71,3 +75,13 @@ def record_until_silence(
     if not frames or speech_frames * FRAME_MS < min_speech_ms:
         return np.zeros(0, dtype=np.float32)
     return np.concatenate(frames).flatten().astype(np.float32) / 32768.0
+
+
+def calibrate_noise(seconds: float = 1.0, floor: float = 0.003, ceiling: float = 0.03) -> float:
+    """Measure the room's background level and return a speech threshold just above it."""
+    with sd.InputStream(samplerate=RATE, channels=1, dtype="int16", blocksize=FRAME) as stream:
+        levels = []
+        for _ in range(int(seconds * 1000 / FRAME_MS)):
+            block, _ = stream.read(FRAME)
+            levels.append(float(np.sqrt(np.mean((block.astype(np.float32) / 32768.0) ** 2))))
+    return float(min(ceiling, max(floor, np.percentile(levels, 80) * 2.5)))

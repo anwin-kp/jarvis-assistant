@@ -51,6 +51,11 @@ class FastIntents:
         ]
 
     # ---------------------------------------------------------------- public
+    def matches(self, text: str) -> bool:
+        """Would this be an instant command? (no side effects)"""
+        t = normalize(text)
+        return bool(t) and len(t) <= 60 and any(p.fullmatch(t) for p, _ in self.rules)
+
     def try_handle(self, text: str, confirm) -> str | None:
         """Returns the spoken reply if the request was handled instantly, else None (send it to the AI)."""
         t = normalize(text)

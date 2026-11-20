@@ -20,7 +20,7 @@ class SapiTTS:
         self.rate = rate
         self.voice = voice  # part of a voice name, e.g. "David" or "Zira"
 
-    def speak(self, text: str) -> None:
+    def speak(self, text: str, should_stop=None) -> None:
         # A fresh engine per utterance avoids pyttsx3's known hang on repeated runAndWait().
         engine = pyttsx3.init()
         engine.setProperty("rate", self.rate)

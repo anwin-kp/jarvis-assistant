@@ -176,6 +176,7 @@
       <button id="b-gaming" data-cmd="/gaming">Gaming</button>
       <button data-cmd="/unload">Free GPU</button>
       <button data-cmd="/briefing">Briefing</button>
+      <button id="b-stop" class="warn hidden">■ Stop</button>
       <button id="b-kill" class="warn">Shut down</button>
     </div>
     <form id="f"><input id="t" placeholder="Speak, or type a message / command…" autocomplete="off"><button>Send</button></form>
@@ -275,7 +276,8 @@ const STATE_TEXT = { booting: "initializing", ready: "online", idle: "standby", 
 const STATE_COLOR = { booting: "#0077ff", ready: "#00d8ff", idle: "#00d8ff", listening: "#35ffb0", thinking: "#ffb43c", speaking: "#8af3ff", sleeping: "#8f7cff" };
 function shownState() { return flags.sleeping && (state === "idle" || state === "ready") ? "sleeping" : state; }
 function setState(s) {
-  state = s; const v = shownState();
+  state = s;
+  $("b-stop").classList.toggle("hidden", !(s === "speaking" || s === "thinking")); const v = shownState();
   $("state").textContent = v === "sleeping" ? "sleeping" : STATE_TEXT[v] || v;
   document.documentElement.style.setProperty("--accent", STATE_COLOR[v] || "#00d8ff");
 }
@@ -314,6 +316,7 @@ $("b-sleep").onclick = () => send("command", flags.sleeping ? "/wakeup" : "/slee
 $("b-mute").onclick = () => send("command", flags.mute ? "/unmute" : "/mute");
 $("b-kill").onclick = () => { if (confirm("Shut down JARVIS completely (kill switch)?")) send("command", "/kill"); };
 $("talk").onclick = () => send("talk");
+$("b-stop").onclick = () => send("stop");
 connect();
 
 /* ---------- reactor: glow pre-rendered once per colour, then only rotated/blitted each frame ---------- */
