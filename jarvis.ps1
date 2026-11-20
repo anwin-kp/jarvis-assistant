@@ -17,7 +17,7 @@
     .\jarvis.ps1 google-login     # sign in to Gmail/Calendar (needs data\google\credentials.json)
     .\jarvis.ps1 set-key groq     # store a free cloud API key (groq | gemini | openrouter) securely
 
-    For an emergency stop use kill-switch.ps1 (or double-click kill-switch.cmd).
+    Start/stop by double-click: start-jarvis.cmd / kill-jarvis.cmd (emergency stop).
 #>
 param(
     [Parameter(Position = 0)]
@@ -47,8 +47,8 @@ function Write-Warn($msg) { Write-Host "  [!] $msg" -ForegroundColor Yellow }
 
 function Get-JarvisProcesses {
     # Matches "python -m jarvis" and "uv run python -m jarvis", nothing else.
-    Get-CimInstance Win32_Process -Filter "Name='python.exe' OR Name='pythonw.exe' OR Name='uv.exe'" |
-        Where-Object { $_.CommandLine -match '(^|\s)-m\s+jarvis(\s|$)' }
+    Get-CimInstance Win32_Process -Filter "Name='python.exe' OR Name='pythonw.exe' OR Name='uv.exe' OR Name='cmd.exe'" |
+        Where-Object { $_.CommandLine -match '-m\s+jarvis(\s|"|$)' }
 }
 
 function Test-Ollama {
@@ -97,9 +97,12 @@ function Stop-Jarvis {
     foreach ($p in $procs) {
         Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue
     }
+    # close the HUD window (own Edge profile, so the normal browser is untouched)
+    Get-CimInstance Win32_Process -Filter "Name='msedge.exe'" | Where-Object { $_.CommandLine -like '*hud-profile*' } |
+        ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
     Start-Sleep -Milliseconds 500
     if (@(Get-JarvisProcesses).Count -eq 0) { Write-Ok "JARVIS stopped ($($procs.Count) process(es))" }
-    else { Write-Warn 'Some JARVIS processes are still running. Use kill-switch.ps1.' }
+    else { Write-Warn 'Some JARVIS processes are still running. Use kill-jarvis.ps1.' }
 }
 
 function Stop-Ollama {
@@ -120,17 +123,11 @@ function Show-Gpu {
 # ---------------------------------------------------------------- commands
 
 function Invoke-Start {
-    if (@(Get-JarvisProcesses).Count -gt 0) { Write-Warn 'JARVIS is already running. Use: .\jarvis.ps1 restart'; return }
-    if (-not (Test-Path $Python)) { throw "Python environment missing. Run: uv sync   (in $Root)" }
-    Start-Ollama
-    $jarvisArgs = @('-W', 'ignore', '-m', 'jarvis')
-    if ($DryRun) { $jarvisArgs += '--dry-run' }
-    if ($Text)   { $jarvisArgs += '--text' }
-    $style = if ($Minimized) { 'Minimized' } else { 'Normal' }
-    Start-Process -FilePath $Python -ArgumentList $jarvisArgs -WorkingDirectory $Root -WindowStyle $style
-    Start-Sleep -Seconds 2
-    if (@(Get-JarvisProcesses).Count -gt 0) { Write-Ok 'JARVIS started in a new window' }
-    else { Write-Warn "JARVIS exited right away. Check the log: .\jarvis.ps1 logs" }
+    $startArgs = @{}
+    if ($DryRun)    { $startArgs.DryRun = $true }
+    if ($Text)      { $startArgs.Text = $true }
+    if ($Minimized) { $startArgs.Minimized = $true }
+    & (Join-Path $Root 'start-jarvis.ps1') @startArgs
 }
 
 function Invoke-Status {
@@ -180,7 +177,7 @@ function Set-Autostart([bool]$On) {
     $ws = New-Object -ComObject WScript.Shell
     $lnk = $ws.CreateShortcut($Shortcut)
     $lnk.TargetPath = 'powershell.exe'
-    $lnk.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$PSCommandPath`" start -Minimized"
+    $lnk.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$(Join-Path $Root 'start-jarvis.ps1')`" -Minimized"
     $lnk.WorkingDirectory = $Root
     $lnk.Description = 'Start JARVIS'
     $lnk.Save()
