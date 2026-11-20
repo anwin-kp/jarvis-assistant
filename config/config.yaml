@@ -1,0 +1,38 @@
+assistant_name: JARVIS
+
+llm:
+  ollama_host: http://127.0.0.1:11434
+  ollama_model: qwen3:8b
+  num_ctx: 8192          # Ollama's default is small; tool schemas + history need room
+  temperature: 0.3
+  think: false           # Qwen3 "thinking" mode; false = faster replies
+  keep_alive: 10m        # unload from VRAM after 10 idle minutes (frees the GPU for games)
+  max_steps: 6           # max tool-call rounds per request
+
+history_turns: 8         # how many previous exchanges the model sees
+
+security:
+  # Folders JARVIS may read/search. Known-folder names are resolved via Windows
+  # (handles OneDrive redirection); you can also add full paths.
+  allowed_roots:
+    - documents
+    - desktop
+    - downloads
+    - pictures
+    - music
+    - videos
+  # Apps JARVIS may open without asking. name -> program, URI, or command
+  app_allowlist:
+    notepad: notepad.exe
+    calculator: calc.exe
+    file explorer: explorer.exe
+    task manager: taskmgr.exe
+    settings: "ms-settings:"
+    chrome: chrome.exe
+    edge: msedge.exe
+    vs code: code
+    spotify: "spotify:"
+
+web:
+  rss_feeds:
+    - https://feeds.bbci.co.uk/news/world/rss.xml
