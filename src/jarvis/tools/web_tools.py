@@ -220,6 +220,7 @@ def register(reg: ToolRegistry, rss_feeds: list[str]) -> None:
         required=[],
         group="web",
         read_only=True,
+        remember_last="disk",
     )
     def get_weather(city: str = "", country: str = ""):
         city = (city or "").strip()
@@ -256,7 +257,8 @@ def register(reg: ToolRegistry, rss_feeds: list[str]) -> None:
             return "ERROR: no Wikipedia page found."
         return untrusted("wikipedia", r.json().get("extract", "No summary."))
 
-    @reg.tool("news_headlines", "Get the latest news headlines.", {}, group="web", read_only=True)
+    @reg.tool("news_headlines", "Get the latest news headlines.", {}, group="web", read_only=True,
+              remember_last="disk")
     def news_headlines():
         import feedparser
 
@@ -264,4 +266,6 @@ def register(reg: ToolRegistry, rss_feeds: list[str]) -> None:
         for url in rss_feeds:
             feed = feedparser.parse(url)
             items += [f"- {e.title}" for e in feed.entries[:6]]
-        return untrusted("rss", "\n".join(items) or "No headlines available.")
+        if not items:
+            return "ERROR: no headlines: the news feeds didn't respond."
+        return untrusted("rss", "\n".join(items))
