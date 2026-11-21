@@ -15,10 +15,21 @@ from loguru import logger
 CASES = Path(__file__).resolve().parents[2] / "tests" / "evals" / "tool_selection.yaml"
 
 
+def load_cases(mine: bool = True) -> list[dict]:
+    """The public cases + your personal ones (data/evals/my_cases.yaml, from the weekly self-check)."""
+    cases = yaml.safe_load(CASES.read_text(encoding="utf-8"))
+    from jarvis.review import MY_CASES
+
+    if mine and MY_CASES.exists():
+        cases += [{**c, "mine": True} for c in yaml.safe_load(MY_CASES.read_text(encoding="utf-8")) or []]
+    return cases
+
+
 def run(limit: int | None = None, verbose: bool = False, use_fast: bool = True, local_only: bool = False,
-        cloud_model: str | None = None) -> dict:
+        cloud_model: str | None = None, local_model: str | None = None, mine: bool = True) -> dict:
     import jarvis.app as app
 
+    all_cases = load_cases(mine)[:limit]  # read before DATA moves to the temp folder
     logger.remove()
     app.DATA = Path(tempfile.mkdtemp())
     from jarvis.tasks import playbooks  # test traffic must never teach JARVIS: learn into the temp folder
@@ -35,12 +46,15 @@ def run(limit: int | None = None, verbose: bool = False, use_fast: bool = True, 
         brain.mode = "cloud_first"
     if local_only and hasattr(brain, "cloud"):  # "the cloud is unreachable": everything on the local model
         brain.cloud = None
+    if local_model:  # compare local models on the same cases: --local-model qwen3:4b
+        getattr(brain, "local", brain).model = local_model
+        brain.check()
     from jarvis.core.fast_intents import FastIntents
 
     fast = FastIntents(reg, cfg)
     calls: list[str] = []
     reg.on_call = lambda name, args, status: calls.append(name)
-    cases = yaml.safe_load(CASES.read_text(encoding="utf-8"))[:limit]
+    cases = all_cases
     passed, times, fails, fast_hits = 0, [], [], 0
     for c in cases:
         calls.clear()
@@ -62,10 +76,11 @@ def run(limit: int | None = None, verbose: bool = False, use_fast: bool = True, 
             print(f"{'✓' if ok else '✗'} {dt:4.1f}s {'[fast] ' if quick is not None else ''}{c['say']} -> {got}")
     result = {"cases": len(cases), "passed": passed, "accuracy": round(100 * passed / len(cases), 1),
               "median_s": round(statistics.median(times), 2), "p90_s": round(sorted(times)[int(len(times) * .9)], 2),
-              "fast_path": fast_hits}
+              "fast_path": fast_hits, "mine": sum(1 for c in cases if c.get("mine"))}
     print("\n".join(fails))
     print(f"\nAccuracy {result['accuracy']}% ({passed}/{len(cases)}) · median {result['median_s']}s · "
-          f"p90 {result['p90_s']}s · instant commands {fast_hits}")
+          f"p90 {result['p90_s']}s · instant commands {fast_hits}"
+          + (f" · {result['mine']} of your own cases" if result["mine"] else ""))
     return result
 
 
@@ -77,5 +92,11 @@ if __name__ == "__main__":
     ap.add_argument("--no-fast", action="store_true", help="disable instant commands (baseline)")
     ap.add_argument("--local", action="store_true", help="cloud unreachable: local model only")
     ap.add_argument("--cloud", help="every case on this cloud model, e.g. groq:openai/gpt-oss-20b")
+    ap.add_argument("--local-model", help="try another local model, e.g. qwen3:4b (must be pulled)")
+    ap.add_argument("--no-mine", action="store_true", help="only the public cases")
+    ap.add_argument("--min-accuracy", type=float, help="exit with an error below this %% (release check)")
     a = ap.parse_args()
-    run(a.limit, a.verbose, not a.no_fast, a.local, a.cloud)
+    res = run(a.limit, a.verbose, not a.no_fast, a.local, a.cloud, a.local_model, not a.no_mine)
+    if a.min_accuracy is not None and res["accuracy"] < a.min_accuracy:
+        print(f"FAILED: accuracy {res['accuracy']}% is below {a.min_accuracy}%")
+        sys.exit(1)
