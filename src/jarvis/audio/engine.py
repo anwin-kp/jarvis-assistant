@@ -40,6 +40,7 @@ class Utterance:
     barge: bool = False  # started while JARVIS was speaking
     after_wake: bool = False  # captured right after the wake word
     voiced_ms: int = 0  # how much actual speech it contains
+    short: bool = False  # under min_speech_ms: only accepted if it turns out to be a short command ("stop", "go")
 
 
 def rms(frame: np.ndarray) -> float:
@@ -58,6 +59,10 @@ class AudioEngine:
         self.mode = "always"
         self.silence_frames = max(1, silence_ms // FRAME_MS)
         self.min_speech_frames = max(1, min_speech_ms // FRAME_MS)
+        # One-word commands ("stop", "go", "next") are often only 150-220 ms of clear speech: 23% of real
+        # captures were thrown away as too short. Down to 120 ms they are kept, marked short, and the app only
+        # accepts them if the words are a known short command, so clicks and coughs still do nothing.
+        self.min_short_frames = max(1, 120 // FRAME_MS)
         self.max_frames = int(max_seconds * 1000 / FRAME_MS)
         self.calibrate_frames = calibrate_ms // FRAME_MS
         self.min_threshold, self.max_threshold = min_threshold, max_threshold
@@ -240,12 +245,12 @@ class AudioEngine:
         self._ring.clear()
         logger.debug("Capture ended: {:.1f}s, {} voiced frames (need {}), barge={}", len(frames) * FRAME_MS / 1000,
                      voiced_frames, self.min_speech_frames, self._capture_barge)
-        if voiced_frames < self.min_speech_frames:
+        if voiced_frames < self.min_short_frames or (voiced_frames < self.min_speech_frames and self._capture_barge):
             self.emit("noise", self._capture_barge)  # True: a very short interrupt ("stop")
             return
         audio = np.concatenate(frames).astype(np.float32) / 32768.0
         self.emit("utterance", Utterance(audio, self._capture_barge, self._capture_after_wake,
-                                         voiced_frames * FRAME_MS))
+                                         voiced_frames * FRAME_MS, short=voiced_frames < self.min_speech_frames))
 
     # ------------------------------------------------------------------ microphone thread
     def start(self) -> None:

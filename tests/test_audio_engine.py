@@ -55,8 +55,14 @@ def test_pause_shorter_than_silence_window_does_not_split_sentence():
 
 def test_short_noise_is_not_an_utterance():
     eng, ev = make(min_speech_ms=400)
-    feed(eng, frames(VOICE, 120) + frames(QUIET, 900))
+    feed(eng, frames(VOICE, 60) + frames(QUIET, 900))  # a click
     assert "utterance" not in kinds(ev) and "noise" in kinds(ev)
+
+
+def test_a_short_word_is_kept_but_marked_short():
+    eng, ev = make(min_speech_ms=400)
+    feed(eng, frames(VOICE, 180) + frames(QUIET, 900))  # "go": the app accepts it only if it's a command
+    assert [u.short for u in utterances(ev)] == [True]
 
 
 def test_echo_while_speaking_is_ignored():

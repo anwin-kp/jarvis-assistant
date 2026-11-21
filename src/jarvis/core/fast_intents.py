@@ -22,7 +22,8 @@ class FastIntents:
         r = re.compile
         self.rules = [
             (r(r"(?:pause|stop)(?: the)?(?: music| song| video| playback| media| it)?"), self._media("play_pause", "Paused.")),
-            (r(r"(?:resume|play|unpause)(?: the)? ?(?:music|song|playback|it)?"), self._media("play_pause", "Playing.")),
+            (r(r"(?:resume|play|unpause|continue)(?: the)? ?(?:music|song|playback|it)?"),
+             self._media("play_pause", "Playing.")),
             (r(r"(?:next|skip)(?: the)?(?: song| track| video| this song| this track| this)?|play the next (?:song|track)"),
              self._media("next", "Skipping.")),
             (r(r"(?:previous|last|go back)(?: the)?(?: song| track)?|play the (?:previous|last) (?:song|track)"),
