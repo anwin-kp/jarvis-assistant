@@ -1,0 +1,30 @@
+id: email-tidy
+title: Mark emails read, archive or trash them
+status: verified
+source: curated
+triggers:
+- mark all my unread emails as read
+- mark them as read
+- mark that email as unread
+- archive these emails
+- move the promo emails to trash
+what: Changes emails in Gmail - read/unread, archive (out of the inbox), or trash (recoverable for 30 days).
+steps:
+- 'all unread: mark_emails_read(ids=all)'
+- 'specific ones: list_unread_emails first, then mark_emails_read(ids=<ids>, read=true|false)'
+- 'archive: archive_email(ids=<ids>)'
+- 'trash: trash_email(ids=<ids>) - it asks the user first'
+tools:
+- mark_emails_read
+- list_unread_emails
+- archive_email
+- trash_email
+verify:
+- mark_emails_read's result says '(checked: N unread left in the inbox)'; tell the user that number
+errors:
+- symptom: "ERROR: JARVIS doesn't have permission to change emails yet"
+  recovery: tell the user to run .\jarvis.ps1 google-login once
+- symptom: approval declined (trash)
+  recovery: do nothing; don't retry
+safety: Read/unread and archive are reversible (no approval). Trash always asks; permanent delete is impossible.
+  Never say emails were changed unless the tool's result says so.

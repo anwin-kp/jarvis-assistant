@@ -17,7 +17,7 @@ from jarvis.tools.registry import Risk, ToolRegistry
 from jarvis.tools.web_tools import untrusted
 
 SCOPES = [
-    "https://www.googleapis.com/auth/gmail.readonly",
+    "https://www.googleapis.com/auth/gmail.modify",  # read + mark read/unread, archive, trash (never delete)
     "https://www.googleapis.com/auth/gmail.compose",
     "https://www.googleapis.com/auth/calendar.events",
 ]
@@ -30,11 +30,24 @@ def is_configured() -> bool:
     return CREDENTIALS.exists() and TOKEN.exists()
 
 
+def missing_scopes() -> set[str]:
+    """Permissions JARVIS needs that the saved sign-in doesn't have."""
+    import json
+
+    try:
+        granted = set(json.loads(TOKEN.read_text(encoding="utf-8")).get("scopes") or [])
+    except (OSError, ValueError):
+        return set(SCOPES)
+    return set(SCOPES) - granted
+
+
 def get_credentials(interactive: bool = False):
     from google.auth.transport.requests import Request
     from google.oauth2.credentials import Credentials
 
     creds = Credentials.from_authorized_user_file(str(TOKEN), SCOPES) if TOKEN.exists() else None
+    if interactive and creds and missing_scopes():
+        creds = None  # signed in before a permission was added (e.g. gmail.modify): ask Google for it now
     if creds and creds.valid:
         return creds
     if creds and creds.expired and creds.refresh_token:
@@ -49,7 +62,7 @@ def get_credentials(interactive: bool = False):
     from google_auth_oauthlib.flow import InstalledAppFlow
 
     flow = InstalledAppFlow.from_client_secrets_file(str(CREDENTIALS), SCOPES)
-    creds = flow.run_local_server(port=0, open_browser=True)
+    creds = flow.run_local_server(port=0, open_browser=True, prompt="consent")  # always show the permission list
     TOKEN.write_text(creds.to_json(), encoding="utf-8")
     return creds
 
@@ -106,6 +119,70 @@ def register(reg: ToolRegistry) -> None:
         msg = _service("gmail", "v1").users().messages().get(userId="me", id=email_id, format="full").execute()
         text = f"From: {_header(msg, 'from')}\nSubject: {_header(msg, 'subject')}\n\n{_body_text(msg['payload'])}"
         return untrusted("gmail", text[:5000])
+
+    def _modify(action):
+        """Run a mailbox change; an old sign-in (read-only) gets a clear instruction instead of an error."""
+        try:
+            return action()
+        except Exception as e:
+            if "insufficient" in str(e).lower() or getattr(getattr(e, "resp", None), "status", 0) == 403:
+                return ("ERROR: JARVIS doesn't have permission to change emails yet. The user needs to sign in "
+                        "again once: .\\jarvis.ps1 google-login")
+            raise
+
+    def _unread_ids(gm, limit: int = 500) -> list[str]:
+        ids, token = [], None
+        while len(ids) < limit:
+            page = gm.users().messages().list(userId="me", q="is:unread in:inbox", maxResults=100,
+                                              pageToken=token).execute()
+            ids += [m["id"] for m in page.get("messages", [])]
+            token = page.get("nextPageToken")
+            if not token:
+                break
+        return ids[:limit]
+
+    def _ids(gm, ids: str) -> list[str]:
+        if ids.strip().lower() in ("all", "all unread", "all_unread", "everything", "every"):
+            return _unread_ids(gm)
+        return [i.strip() for i in ids.replace(";", ",").split(",") if i.strip()]
+
+    @reg.tool("mark_emails_read", "Mark emails as read (or unread with read=false). ids: comma-separated ids from "
+              "list_unread_emails, or 'all' for every unread email in the inbox.",
+              {"ids": {"type": "string"}, "read": {"type": "boolean", "description": "default true"}},
+              required=["ids"], group="email")
+    def mark_emails_read(ids: str, read: bool = True):
+        def go():
+            gm = _service("gmail", "v1")
+            id_list = _ids(gm, ids)
+            if not id_list:
+                return "No unread emails to mark." if read else "No email ids given."
+            key = "removeLabelIds" if read else "addLabelIds"
+            gm.users().messages().batchModify(userId="me", body={"ids": id_list[:1000], key: ["UNREAD"]}).execute()
+            left = len(_unread_ids(gm))
+            return (f"Marked {len(id_list)} email(s) as {'read' if read else 'unread'} "
+                    f"(checked: {left} unread left in the inbox).")
+        return _modify(go)
+
+    @reg.tool("archive_email", "Archive emails (remove from the inbox; still in All Mail). ids: comma-separated ids.",
+              {"ids": {"type": "string"}}, group="email")
+    def archive_email(ids: str):
+        def go():
+            gm = _service("gmail", "v1")
+            id_list = _ids(gm, ids)
+            gm.users().messages().batchModify(userId="me", body={"ids": id_list, "removeLabelIds": ["INBOX"]}).execute()
+            return f"Archived {len(id_list)} email(s) (still in All Mail)."
+        return _modify(go)
+
+    @reg.tool("trash_email", "Move emails to the Trash (recoverable for 30 days). ids: comma-separated ids.",
+              {"ids": {"type": "string"}}, risk=Risk.CONFIRM, group="email")
+    def trash_email(ids: str):
+        def go():
+            gm = _service("gmail", "v1")
+            id_list = [i for i in _ids(gm, ids) if i]
+            for i in id_list:
+                gm.users().messages().trash(userId="me", id=i).execute()
+            return f"Moved {len(id_list)} email(s) to the Trash (recoverable for 30 days)."
+        return _modify(go)
 
     @reg.tool("draft_email", "Create an email draft (not sent). Returns the draft id.",
               {"to": {"type": "string"}, "subject": {"type": "string"}, "body": {"type": "string"}},
