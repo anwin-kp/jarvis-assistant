@@ -111,3 +111,30 @@ def test_distant_speech_is_kept_but_silence_and_gibberish_are_not():
     assert not keep_segment(0.85, -1.3)  # probably silence AND low confidence
     assert keep_segment(0.85, -0.4)  # confident words are kept
     assert not keep_segment(0.0, -2.4)  # gibberish
+
+
+def test_own_voice_coming_back_is_recognised_as_echo():
+    from jarvis.__main__ import echo_of
+
+    said = ["You have no unread emails.", "The time in Tokyo is 1:38 AM."]
+    assert echo_of("You have no", said) and echo_of("the time in time.", said)
+    assert not echo_of("Stop.", said)  # one-word commands are never echo
+    assert not echo_of("play my Mix-Up Mash playlist", said) and not echo_of("what's the weather like?", said)
+
+
+def test_no_self_interrupt_from_late_loud_echo():
+    import numpy as np
+
+    from jarvis.audio.engine import AudioEngine
+
+    events = []
+    eng = AudioEngine(lambda k, d: events.append(k), is_speech=lambda f: True, calibrate_ms=300,
+                      sounds_like_jarvis=lambda a: False)
+    quiet = np.zeros(480, np.int16)
+    loud_echo = (np.ones(480) * 0.25 * 32767).astype(np.int16)  # Bluetooth echo arriving 0.4 s late, very loud
+    for _ in range(20):
+        eng.process(quiet)
+    eng.set_speaking(True)
+    for f in [quiet] * 13 + [loud_echo] * 60:
+        eng.process(f)
+    assert "barge" not in events

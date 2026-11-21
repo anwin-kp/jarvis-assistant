@@ -2,6 +2,7 @@
 Run:  .\\jarvis.ps1 start   (or: uv run python -m jarvis)"""
 
 import argparse
+import collections
 import json
 import os
 import queue
@@ -232,6 +233,7 @@ class App:
         self._spoke_at = 0.0  # when JARVIS last finished speaking
         self._last_heard = 0.0  # when JARVIS last accepted something you said
         self._caption_busy = False  # a live caption draft is running
+        self._spoken: collections.deque = collections.deque(maxlen=12)  # (time, sentence) JARVIS said recently
         self._stt_q: queue.Queue = queue.Queue()  # utterances waiting for speech recognition
         self._streamed: list[str] = []
         self.args = args
@@ -502,6 +504,11 @@ class App:
             self.voice.add_vocabulary(words)
             logger.info("Speech recognition vocabulary: +{} names", len(set(words)))
 
+    def _is_echo(self, text: str) -> bool:
+        """The mic picked up JARVIS's own voice from the speaker ("You have no" from "You have no unread emails")."""
+        recent = [s for t, s in self._spoken if time.monotonic() - t < 20]
+        return bool(recent) and echo_of(text, recent)
+
     def _addressed(self, text: str, utt) -> bool:
         """Always-listening hears everyone in the room. After a quiet minute it needs its name ("Jarvis, ...");
         within the minute after a reply, follow-ups need no name. Wake word / push-to-talk are always for it."""
@@ -566,6 +573,12 @@ class App:
                 self.interrupt(text, force=True)  # "stop" is for JARVIS's voice, not your music
                 self._publish("user", text=text)
                 self._state("ready")
+                continue
+            if self._is_echo(text):
+                logger.info("Heard my own voice, ignored: {!r}", text[:60])
+                self._publish("user_cancel")
+                if not self.busy.is_set():
+                    self._state("ready")
                 continue
             if not self._addressed(text, utt):
                 logger.info("Not for me (no 'Jarvis' after a quiet minute): {}", text[:80])
@@ -638,6 +651,7 @@ class App:
                     if self.engine:
                         self.engine.set_speaking(True)  # mic now only accepts you talking over JARVIS
                     try:
+                        self._spoken.append((time.monotonic(), text))  # to recognise its own echo
                         tts.speak(text, should_stop=lambda: self._barged)
                     finally:
                         self._current_tts = None
@@ -1078,6 +1092,21 @@ HEARD_FIXES = [
     (re.compile(r"^\W*(?:bosta|posta|pasta|bostah|postah|pose the|paws the)\W+music(?:al)?\b\W*$", re.I),
      "Pause the music"),
 ]
+
+
+def echo_of(text: str, spoken: list[str]) -> bool:
+    """Is this transcript JARVIS's own recent speech coming back through the mic? (2+ words, mostly found in what
+    it just said, or nearly the same as one of its sentences.) One-word commands like "stop" are never echo."""
+    import difflib
+
+    words = re.findall(r"[a-z0-9']+", text.lower())
+    if len(words) < 2:
+        return False
+    said = " ".join(spoken).lower()
+    vocab = set(re.findall(r"[a-z0-9']+", said))
+    if sum(w in vocab for w in words) / len(words) >= 0.75:
+        return True
+    return any(difflib.SequenceMatcher(None, " ".join(words), s.lower()).ratio() > 0.6 for s in spoken)
 
 
 def normalize_heard(text: str) -> str:
