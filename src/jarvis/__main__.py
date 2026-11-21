@@ -139,9 +139,22 @@ class Voice:
             text, lang = self.local_stt.transcribe(audio, self.cfg.get("language"))
             self.last_engine = self.local_stt.device
         text = normalize_heard(text)
+        if self.lexicon is not None:
+            text = self.lexicon.correct(text)
         self.last_lang = lang if text else self.last_lang
         self._save(audio, text, lang)
         return text
+
+    lexicon = None  # stt.lexicon.Lexicon: ranked personal names + after-recognition correction
+
+    def set_lexicon(self, lex) -> None:
+        """Your ranked names: the cloud recogniser gets only names you've said (or non-private ones), the local
+        one gets everything; misheard names are corrected after recognition."""
+        base = self.cfg.get("vocabulary") or ""
+        self.local_stt.vocabulary = lex.prompt(base, cloud=False)
+        if self.stt is not self.local_stt:
+            self.stt.vocabulary = lex.prompt(base, cloud=True)
+        self.lexicon = lex
 
     def add_vocabulary(self, words: list[str]) -> None:
         """Names JARVIS knows (people, places, playlists) help recognition ("Siemens Goa", not "Siemens Gore")."""
@@ -487,24 +500,42 @@ class App:
             self._stt_q.put(data)
 
     def _personal_vocabulary(self) -> None:
-        """Teach speech recognition the names in your life: people/places/companies from what JARVIS knows about
-        you, and your Spotify playlists (so "Mix-Up Mash" isn't heard as "Mixup Mesh")."""
-        words: list[str] = []
-        for f in self.memory.list_facts():
+        """Teach speech recognition the names in your life, ranked by how often you say them and how often they
+        get misheard: people/places/companies from what JARVIS knows about you, apps, your Spotify artists and
+        playlists, and the people you email / meet (from Gmail and Calendar headers; private: local only)."""
+        if not self.voice:
+            return
+        from jarvis.memory import personal_data
+        from jarvis.stt.lexicon import Lexicon
+
+        lex = Lexicon(DATA / "vocabulary-stats.json")
+        facts = self.memory.list_facts()
+
+        lex.add(re.split(r"[.,]\s*", self.cfg.get("vocabulary") or ""), "config")
+        own = set()
+        for f in facts:
             body = re.sub(r"^\[\w+\]\s*", "", f["fact"])
-            words += [w for w in re.findall(r"\b[A-Z][\w'-]+(?:\s[A-Z][\w'-]+)*", body)
-                      if w not in COMMON_CAPS and len(w) > 2]
-        # app names too ("notepad" was heard as "not padder")
-        words += [a.title() for a in (self.cfg.get("security", {}).get("app_allowlist") or {}) if len(a) > 3]
-        sp = getattr(self.reg, "spotify", None)
-        if sp:
+            lex.add(proper_names(body), "fact")
+            if f["fact"].startswith("[identity]"):
+                own |= set(proper_names(body))
+        lex.add([a.title() for a in (self.cfg.get("security", {}).get("app_allowlist") or {}) if len(a) > 3], "app")
+        google_ok = "list_events" in self.reg.names()
+        data = personal_data.refresh(self.memory, DATA / "personal-names.json", getattr(self.reg, "spotify", None),
+                                     google_ok, own)
+        lex.add(data.get("playlist", []), "playlist")
+        lex.add(data.get("artist", []), "artist")
+        lex.add(data.get("person", []), "person", private=True)
+        lex.add(data.get("event", []), "event", private=True)
+        said = [m[2] for m in self.memory.messages_after(0, 5000) if m[1] == "user"]
+        for f in (DATA / "voice-log").glob("*.json"):
             try:
-                words += [pl["name"] for pl in sp.my_playlists()[:20]]
-            except Exception as e:
-                logger.debug("Playlists for vocabulary: {}", e)
-        if words and self.voice:
-            self.voice.add_vocabulary(words)
-            logger.info("Speech recognition vocabulary: +{} names", len(set(words)))
+                said.append(json.loads(f.read_text(encoding="utf-8")).get("text", ""))
+            except (OSError, ValueError):
+                pass
+        lex.count_said(said)
+        self.voice.set_lexicon(lex)
+        logger.info("Speech vocabulary: {} names ranked ({} said before, {} fixed before)", len(lex.terms),
+                    sum(1 for v in lex.said.values() if v), len(lex.fixes))
 
     def _is_echo(self, text: str) -> bool:
         """The mic picked up JARVIS's own voice from the speaker ("You have no" from "You have no unread emails")."""
@@ -1077,6 +1108,18 @@ def single_instance(name: str = "Local\\JARVIS-assistant-instance") -> bool:
 
     _INSTANCE_LOCK = win32event.CreateMutex(None, False, name)
     return win32api.GetLastError() != winerror.ERROR_ALREADY_EXISTS
+
+
+def proper_names(text: str) -> list[str]:
+    """Names in a fact: capitalised words, but not one that's capitalised only because it starts a sentence
+    ("Audio setup: ...", "Core skills ...") unless it's part of a longer name ("Siemens Goa")."""
+    out = []
+    for m in re.finditer(r"\b[A-Z][\w'-]+(?:\s[A-Z][\w'-]+)*", text):
+        w, before = m.group(), text[:m.start()].rstrip()
+        starts = not before or before[-1] in ".:;!?("
+        if w not in COMMON_CAPS and len(w) > 2 and not (starts and " " not in w):
+            out.append(w)
+    return out
 
 
 COMMON_CAPS = {"Is", "Has", "Likes", "Works", "Lives", "Prefers", "From", "Uses", "Speaks", "Built", "Also",
