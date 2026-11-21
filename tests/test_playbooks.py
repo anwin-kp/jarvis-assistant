@@ -38,17 +38,24 @@ def real_tool_names():
     return reg, set(reg.names())
 
 
+# Registered only once the account is connected (Google login, Spotify client id): absent on CI machines.
+OPTIONAL_TOOLS = {"list_unread_emails", "read_email", "draft_email", "send_draft", "list_events", "create_event",
+                  "spotify_play", "spotify_control", "spotify_now_playing", "spotify_volume", "spotify_queue",
+                  "spotify_like_current", "spotify_my_playlists"}
+DANGER_TOOLS = {"delete_file", "empty_recycle_bin", "kill_process", "shutdown_pc", "restart_pc", "send_draft"}
+
+
 def test_every_curated_card_is_valid_and_uses_real_tools():
     reg, names = real_tool_names()
     files = sorted(CURATED.glob("*.yaml"))
     assert len(files) >= 20
     for f in files:
         data = yaml.safe_load(f.read_text(encoding="utf-8"))
-        assert validate(data, names) == [], f.name
-        danger = [t for t in data["tools"] if reg.get(t).risk.value == "danger"]
+        assert validate(data, names | OPTIONAL_TOOLS) == [], f.name  # a typo'd tool name still fails
+        danger = [t for t in data["tools"] if t in DANGER_TOOLS or (reg.get(t) and reg.get(t).risk.value == "danger")]
         if danger:  # a playbook can't talk the AI out of an approval
             assert "DANGER" in data["safety"] and "approval" in data["safety"], f.name
-    assert len(load_cards(CURATED, names)) == len(files)
+    assert len(load_cards(CURATED, names | OPTIONAL_TOOLS)) == len(files)
 
 
 def test_validation_catches_bad_cards():
