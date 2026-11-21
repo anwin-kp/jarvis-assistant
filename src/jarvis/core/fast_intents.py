@@ -15,6 +15,30 @@ def normalize(text: str) -> str:
     return re.sub(r"\s+", " ", t).strip(".!?, ")
 
 
+def _sound(s: str) -> str:
+    """Spelling folded toward sound: "not padder" -> "notpader", "spotty fly" -> "spotyfly"."""
+    s = re.sub(r"[^a-z]", "", s.lower()).replace("ph", "f").replace("ck", "k")
+    s = s[:1] + s[1:].replace("y", "i")  # "fly" ~ "fi"
+    return re.sub(r"(.)\1+", r"\1", s)
+
+
+def heard_app(said: str, apps) -> str | None:
+    """The known app a (mis)heard name means: exact, else the one clear sound-alike ("not padder" -> notepad).
+    Strict on purpose: a wrong guess would open or close the wrong app, so near ties go to the AI instead."""
+    import difflib
+
+    said = said.lower().strip()
+    if said in apps:
+        return said
+    s = _sound(said)
+    if len(s) < 4:
+        return None
+    scored = sorted(((difflib.SequenceMatcher(None, s, _sound(a)).ratio(), a) for a in apps), reverse=True)
+    if not scored or scored[0][0] < 0.8 or (len(scored) > 1 and scored[0][0] - scored[1][0] < 0.1):
+        return None
+    return scored[0][1]
+
+
 class FastIntents:
     def __init__(self, reg, cfg: dict):
         self.reg = reg
@@ -46,7 +70,8 @@ class FastIntents:
             (r(r"(?:turn off |disable |stop |exit )gaming mode|gaming mode off"),
              self._tool("set_gaming_mode", {"on": False}, None)),
             (r(r"(?:open|launch|start|run) (?:the )?(.+?)(?: app| application)?"), self._open),
-            (r(r"(?:close|quit|exit|kill) (?:the )?(.+?)(?: app| application)?"), self._close),
+            # "closed"/"clothes": how "close" is often transcribed
+            (r(r"(?:close|closed|clothes|quit|exit|kill) (?:the )?(.+?)(?: app| application)?"), self._close),
             (r(r"(?:never ?mind,? )?(?:cancel|abort|stop) (?:the )?(?:shutdown|shut down|restart)|(?:never ?mind,? )?(?:don'?t|do not) (?:shut ?down|restart)(?: the (?:pc|computer|laptop))?"),
              self._tool("cancel_shutdown", {}, None)),
             (r(r"(?:switch|go|change) to (?:the )?(.+?)(?: window)?|(?:bring up|focus(?: on)?) (?:the )?(.+?)(?: window)?"), self._switch),
@@ -125,8 +150,8 @@ class FastIntents:
         return None if r.error else f"Switched to {name}."  # no such window: let the AI decide (maybe open it)
 
     def _close(self, m, confirm):
-        name = m.group(1).strip()
-        if name not in self.apps:
+        name = heard_app(m.group(1), self.apps)
+        if not name:
             return None  # "close this tab", "close the window": the AI decides
         r = self.reg.execute("close_app", {"name": name}, confirm) if self.reg.get("close_app") else None
         if r is None:
@@ -135,7 +160,7 @@ class FastIntents:
         return f"Closed {name}." if text.startswith("Closed") else text.replace(" Tell the user to check it.", "")
 
     def _open(self, m, confirm):
-        name = m.group(1).strip()
-        if name not in self.apps:
+        name = heard_app(m.group(1), self.apps)
+        if not name:
             return None  # unknown app: let the AI handle it (it may be a file, website, ...)
         return self._run("open_app", {"name": name}, confirm, f"Opening {name}.")
