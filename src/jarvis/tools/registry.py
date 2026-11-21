@@ -32,6 +32,7 @@ class Tool:
     group: str
     func: Callable[..., Any]
     read_only: bool = False  # True = never changes anything (still runs in dry-run mode)
+    remember_last: str = ""  # "disk" / "memory": offline, answer with the last good result (tools/last_known.py)
 
 
 @dataclass
@@ -98,6 +99,7 @@ class ToolRegistry:
         risk: Risk = Risk.SAFE,
         group: str = "core",
         read_only: bool = False,
+        remember_last: str = "",
     ):
         """Decorator: register a function as a model-callable tool."""
         if read_only and risk is not Risk.SAFE:
@@ -111,7 +113,7 @@ class ToolRegistry:
         def deco(func):
             if name in self._tools:
                 raise ValueError(f"Tool {name!r} registered twice")
-            self._tools[name] = Tool(name, description, params, risk, group, func, read_only)
+            self._tools[name] = Tool(name, description, params, risk, group, func, read_only, remember_last)
             return func
 
         return deco
@@ -195,4 +197,23 @@ class ToolRegistry:
             text = out
         else:
             text = json.dumps(out, default=str, ensure_ascii=False)
-        return ToolResult(text[:MAX_OUTPUT_CHARS], error=status != "ok"), args, status
+        if tool.remember_last and self.last_known is not None:
+            text, status = self._offline_fallback(tool, args, text, status)
+        return ToolResult(text[:MAX_OUTPUT_CHARS], error=status not in ("ok", "offline")), args, status
+
+    last_known = None  # LastKnown (set by app.build)
+
+    def _offline_fallback(self, tool: Tool, args: dict, text: str, status: str) -> tuple[str, str]:
+        """Remember good results; when the internet is down, answer with the last one (saying how old it is)."""
+        from jarvis.tools.last_known import internet_up
+
+        failed = status != "ok" or text.startswith("ERROR")
+        if not failed:
+            self.last_known.put(tool.name, args, text, tool.remember_last)
+            return text, status
+        if internet_up():
+            return text, status  # a real error, not the connection: never cover it with old data
+        if old := self.last_known.get(tool.name, args):
+            logger.info("tool={} offline: answered with the last known result", tool.name)
+            return old, "offline"
+        return "ERROR: there's no internet connection right now, and I have no earlier result for this.", status
