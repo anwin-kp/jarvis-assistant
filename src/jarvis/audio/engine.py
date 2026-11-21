@@ -36,7 +36,8 @@ FRAME_MS = 30
 
 PARTIAL_EVERY = 33  # frames (~1 s) between live caption drafts
 ECHO_LEARN_FRAMES = 30  # 0.9 s at the start of a reply: echo learning, no interrupts
-ECHO_WINDOW = 50  # 1.5 s of recent levels for the echo estimate
+ECHO_WINDOW = 63  # ~1.9 s of recent levels for the echo estimate
+ECHO_RECENT_SKIP = 13  # ...minus the newest 0.4 s (a possible interruption)
 
 
 @dataclass
@@ -199,7 +200,11 @@ class AudioEngine:
         # estimate near 0 while the real echo was 0.2-0.5 and JARVIS interrupted itself). The 75th percentile of
         # the last 1.5 s: your own short interruption (~300 ms) barely moves it.
         self._echo_recent.append(level)
-        self._echo = float(np.percentile(self._echo_recent, 75))
+        # 90th percentile: the headset driver gates quiet sound to exact silence, so echo arrives as loud
+        # bursts between zeros; the 75th landed on the silence (echo 0.0000) and bursts still interrupted.
+        # Only audio from before the last 0.4 s: your own interruption must not raise its own bar.
+        past = list(self._echo_recent)[:-ECHO_RECENT_SKIP] or [0.0]
+        self._echo = float(np.percentile(past, 90))
         if self._echo_learn > 0:
             self._echo_learn -= 1
             return  # still learning the echo (Bluetooth delay): no interrupts yet
