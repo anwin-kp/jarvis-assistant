@@ -260,12 +260,26 @@ def register(reg: ToolRegistry, rss_feeds: list[str]) -> None:
     @reg.tool("news_headlines", "Get the latest news headlines.", {}, group="web", read_only=True,
               remember_last="disk")
     def news_headlines():
+        from concurrent.futures import ThreadPoolExecutor
+
         import feedparser
 
+        def fetch(url: str) -> list[str]:
+            # feedparser's own download has no timeout: one stalled feed used to hang the whole turn (and the
+            # morning briefing). Download with a timeout, all feeds at once, then parse.
+            try:
+                r = requests.get(url, headers=UA, timeout=8)
+                r.raise_for_status()
+            except requests.RequestException as e:
+                logger.debug("News feed {} failed: {}", url, e)
+                return []
+            return [f"- {e.title}" for e in feedparser.parse(r.content).entries[:6] if e.get("title")]
+
         items = []
-        for url in rss_feeds:
-            feed = feedparser.parse(url)
-            items += [f"- {e.title}" for e in feed.entries[:6]]
+        if rss_feeds:
+            with ThreadPoolExecutor(max_workers=min(4, len(rss_feeds))) as pool:
+                for got in pool.map(fetch, rss_feeds):
+                    items += got
         if not items:
             return "ERROR: no headlines: the news feeds didn't respond."
         return untrusted("rss", "\n".join(items))

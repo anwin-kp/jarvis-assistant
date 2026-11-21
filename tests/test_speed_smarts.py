@@ -34,7 +34,8 @@ def test_normalize():
 def test_fast_intents():
     reg, calls = make_reg()
     fast = FastIntents(reg, {"security": {"app_allowlist": {"notepad": "notepad.exe"}}})
-    assert fast.try_handle("Jarvis, pause the music", OK) == "Paused."
+    assert fast.try_handle("Jarvis, pause the music", OK) == "ok"  # the tool's own (checked) answer
+    assert ("media_control", {"action": "pause"}) in calls
     assert fast.try_handle("skip this song", OK) == "Skipping."
     assert fast.try_handle("set the volume to 35%", OK) == "Volume 35 percent."
     assert fast.try_handle("turn the volume up", OK) == "Volume 60 percent."

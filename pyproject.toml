@@ -57,6 +57,7 @@ dependencies = [
     "winrt-windows-foundation-collections>=4!10.0.28000.2957",
     "winrt-windows-globalization>=4!10.0.28000.2957",
     "winrt-windows-graphics-imaging>=4!10.0.28000.2957",
+    "winrt-windows-media-control>=4!10.0.28000.2957",
     "winrt-windows-media-ocr>=4!10.0.28000.2957",
     "winrt-windows-storage>=4!10.0.28000.2957",
     "winrt-windows-storage-streams>=4!10.0.28000.2957",

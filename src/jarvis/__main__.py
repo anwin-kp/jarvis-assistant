@@ -822,18 +822,22 @@ class App:
         if self.tray:
             self.tray.notify(f"Approval needed: {tool.name} (see the JARVIS window)")
         self._say("I need your approval in the console.")
+        later = []  # a reminder, phone message or voice turn that arrives meanwhile waits; it used to be dropped
         try:
             while True:
                 event = self.q.get()
                 if event[0] == "quit":
-                    self.q.put(event)
+                    later.insert(0, event)
                     return False
                 if event[0] == "answer":  # HUD Approve / Deny button
                     return bool(event[1])
-                if event[0] == "text":
-                    return event[1].lower() in ({"yes"} if need == "yes" else {"y", "yes"})
+                if event[0] == "text" and len(event) < 3:  # (a message with attachments is a new turn)
+                    return event[1].strip().lower() in ({"yes"} if need == "yes" else {"y", "yes"})
+                later.append(event)
         finally:
             self._awaiting_confirm = False
+            for event in later:
+                self.q.put(event)
 
     # ------------------------------------------------------------ turns
     def voice_turn(self, text: str, after_wake: bool) -> bool:

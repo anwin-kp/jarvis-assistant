@@ -78,7 +78,7 @@
 - {say: "what buttons are in this window?", expect: [list_ui_elements, look_at_screen]}
 - {say: "in calculator press seven", expect: [click_ui_element, list_ui_elements, operate_app]}
 # --- from real use (jarvis.review, 2026-11-21) ---
-- {say: "Hey Jarvis, it's not playing", expect: [spotify_now_playing, spotify_control, spotify_play]}
+- {say: "Hey Jarvis, it's not playing", expect: [spotify_now_playing, spotify_control, spotify_play, now_playing]}
 - {say: "Start playing", expect: [spotify_control, media_control]}
 - {say: "Open Spotify and play Mixup Mesh.", expect: [spotify_play]}
 - {say: "And now play the mixup match", expect: [spotify_play]}
@@ -89,3 +89,5 @@
 - {say: "check my email", expect: [list_unread_emails]}
 - {say: "Mark all my unread emails as read", expect: [mark_emails_read]}
 - {say: "archive the emails from LinkedIn", expect: [list_unread_emails, archive_email]}
+- {say: "what song is playing right now", expect: [now_playing, spotify_now_playing]}
+- {say: "resume the video", expect: [media_control]}

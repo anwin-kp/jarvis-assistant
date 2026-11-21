@@ -658,6 +658,7 @@ dependencies = [
     { name = "winrt-windows-foundation-collections" },
     { name = "winrt-windows-globalization" },
     { name = "winrt-windows-graphics-imaging" },
+    { name = "winrt-windows-media-control" },
     { name = "winrt-windows-media-ocr" },
     { name = "winrt-windows-storage" },
     { name = "winrt-windows-storage-streams" },
@@ -725,6 +726,7 @@ requires-dist = [
     { name = "winrt-windows-foundation-collections", specifier = ">=4!10.0.28000.2957" },
     { name = "winrt-windows-globalization", specifier = ">=4!10.0.28000.2957" },
     { name = "winrt-windows-graphics-imaging", specifier = ">=4!10.0.28000.2957" },
+    { name = "winrt-windows-media-control", specifier = ">=4!10.0.28000.2957" },
     { name = "winrt-windows-media-ocr", specifier = ">=4!10.0.28000.2957" },
     { name = "winrt-windows-storage", specifier = ">=4!10.0.28000.2957" },
     { name = "winrt-windows-storage-streams", specifier = ">=4!10.0.28000.2957" },
@@ -2109,6 +2111,21 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/40/44/5e7a1ee1120a78db48d53da831bfb039617322dabbe2a3a51abf19ef807a/winrt_windows_graphics_imaging-4!10.0.28000.2957.tar.gz", hash = "sha256:c73b020093a2bfaa42fee0fa1f92a3b72ef363452a9a3cb147b44ad07bcc5a11", size = 19769, upload-time = "2026-10-31T23:44:39.805Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/be/be/d11c554f17aa976c80a063f5b8239d143ec94e6cf82774955d20eb8ff4d0/winrt_windows_graphics_imaging-4!10.0.28000.2957-py3-none-any.whl", hash = "sha256:af6f0b463cb0588b014e0a0c82d76e27c73be372d06d6cb2c25b63c573b204ac", size = 22021, upload-time = "2026-10-31T23:39:57.393Z" },
+]
+
+[[package]]
+name = "winrt-windows-media-control"
+version = "4!10.0.28000.2957"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "winrt-runtime" },
+    { name = "winrt-windows-foundation" },
+    { name = "winrt-windows-foundation-collections" },
+    { name = "winrt-windows-storage-streams" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/3e/a5/189c5a5b6c177ef60c6eadf1d137a48730b3c632cfb60cb3bb31839aeb3e/winrt_windows_media_control-4!10.0.28000.2957.tar.gz", hash = "sha256:6d2fd258eef4fc87a54094f5690c8964b40866c372e4c2c6f1a9e9bd546e7005", size = 11337, upload-time = "2026-10-31T23:44:58.847Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/bc/c1/c55c7e9df5b64a77c750783431743eda0becde5db4183b0956d0f58ac091/winrt_windows_media_control-4!10.0.28000.2957-py3-none-any.whl", hash = "sha256:5d010ccf64e39040b0550c7b8f6cf8015e558542bd3887cc424f32096e61410e", size = 14628, upload-time = "2026-10-31T23:40:22.506Z" },
 ]
 
 [[package]]

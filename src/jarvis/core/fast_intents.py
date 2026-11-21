@@ -45,9 +45,9 @@ class FastIntents:
         self.apps = {k.lower() for k in (cfg.get("security", {}).get("app_allowlist") or {})}
         r = re.compile
         self.rules = [
-            (r(r"(?:pause|stop)(?: the)?(?: music| song| video| playback| media| it)?"), self._media("play_pause", "Paused.")),
+            (r(r"(?:pause|stop)(?: the)?(?: music| song| video| playback| media| it)?"), self._media("pause", None)),
             (r(r"(?:resume|play|unpause|continue|start playing|keep playing)(?: the)? ?(?:music|song|playback|it)?"),
-             self._media("play_pause", "Playing.")),
+             self._media("play", None)),
             (r(r"(?:next|skip)(?: the)?(?: song| track| video| this song| this track| this)?|play the next (?:song|track)"),
              self._media("next", "Skipping.")),
             (r(r"(?:previous|last|go back)(?: the)?(?: song| track)?|play the (?:previous|last) (?:song|track)"),
