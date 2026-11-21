@@ -9,11 +9,12 @@ KEYWORDS: dict[str, list[str]] = {
         "turn it down", "brightness", "brighter", "dimmer", "too bright", "lock", "process", "cpu", "ram",
         "memory usage",
         "battery", "shutdown", "restart", "reboot", "powershell", "command", "ip address", "network",
-        "open", "close", "launch", "start", "quit", "kill", "app", "program",
+        "open", "close", "launch", "start", "quit", "kill", "app", "program", "internet", "online", "offline",
+        "connection", "connected", "ping", "my ip",
     ],
     "files": [
         "file", "folder", "document", "pdf", "docx", "photo", "picture", "download", "desktop",
-        "delete", "move", "rename", "find my", "where is",
+        "delete", "move", "rename", "find my", "where is", "recent", "latest file", "last file", "just downloaded",
     ],
     "web": [
         "search", "google", "look up", "weather", "temperature", "rain", "news", "headline",
@@ -51,6 +52,13 @@ KEYWORDS: dict[str, list[str]] = {
              "statement", "warranty"],
     "browser": ["website", "browser", "web page", "webpage", "site", "click", "fill", "form", "sign up", "log in",
                 "order", "book a", "on amazon", "on flipkart", "checkout"],
+    "tabs": ["tab", "tabs"],
+    "utility": ["calculate", "plus", "minus", "times", "multiplied", "divided", "percent", "square root",
+                "squared", "how much is", "convert", "in km", "in miles", "kg", "pounds", "celsius", "fahrenheit",
+                "degrees", "inches", "feet", "cm", "liters", "litres", "ml", "cups", "mph", "km/h", "gb", "mb",
+                "currency", "exchange rate", "dollar", "rupee", "usd", "inr", "eur", "euro", "gbp",
+                "days until", "days since", "days left", "how many days", "days from", "weeks until",
+                "define", "definition", "meaning of", "what does", "synonym"],
     "memory": ["remember", "forget", "recall", "my name", "my favorite", "do you know", "facts", "about me"],
     "interview": ["know me", "get to know", "interview me", "about myself", "learn about me", "ask me about"],
 }
@@ -72,6 +80,7 @@ def _mentions(text: str, word: str) -> bool:
     return re.search(pattern, text) is not None
 
 
+MATH = re.compile(r"\d\s*(?:[-+*/x×÷^]\s*[\d(]|%)")
 DOMAIN = re.compile(r"\b[a-z0-9-]+\.(?:com|in|org|net|io|co|ai|dev|app|me|uk|gov|edu|info|tv)\b")
 
 
@@ -80,6 +89,8 @@ def pick_groups(text: str) -> set[str]:
     groups = set(ALWAYS) | {g for g, words in KEYWORDS.items() if any(_mentions(t, w) for w in words)}
     if DOMAIN.search(t):  # "open amazon.in and search..." is a website task
         groups.add("browser")
+    if MATH.search(t):  # "15% of 2400", "12*7": exact maths
+        groups.add("utility")
     if groups == ALWAYS:
         groups.add("web")  # general questions often need a search
     return groups
