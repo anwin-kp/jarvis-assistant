@@ -231,6 +231,7 @@ class App:
         self._current_tts = None  # the voice speaking right now (so interrupt stops exactly that one)
         self._spoke_at = 0.0  # when JARVIS last finished speaking
         self._last_heard = 0.0  # when JARVIS last accepted something you said
+        self._caption_busy = False  # a live caption draft is running
         self._stt_q: queue.Queue = queue.Queue()  # utterances waiting for speech recognition
         self._streamed: list[str] = []
         self.args = args
@@ -473,6 +474,8 @@ class App:
                 self._publish("user", text="(stop)")
             if not self.busy.is_set():
                 self._state("ready")
+        elif kind == "partial":
+            self._draft_caption(data)
         elif kind == "utterance":
             self._state("thinking")
             if not data.barge:  # (an interrupt already showed its bubble)
@@ -506,6 +509,25 @@ class App:
         if time.monotonic() - max(self._spoke_at, self._last_heard) < window:
             return True
         return bool(NAME.search(text)) or self.fast.matches(text)
+
+    def _draft_caption(self, audio) -> None:
+        """Live captions: the local Whisper (on the GPU, ~0.2 s) drafts what you're saying while you talk; Groq still
+        makes the final transcript. One draft at a time; skipped while gaming (GPU) or without the local model."""
+        if self._caption_busy or not self.voice or self.gaming.active:
+            return
+        self._caption_busy = True
+
+        def run():
+            try:
+                text, _ = self.voice.local_stt.transcribe(audio)
+                if text:
+                    self._publish("user_partial", text=text)
+            except Exception as e:
+                logger.debug("Live caption failed: {}", e)
+            finally:
+                self._caption_busy = False
+
+        threading.Thread(target=run, daemon=True, name="caption").start()
 
     def _stt_worker(self) -> None:
         """Speech recognition runs here, not in the main loop, so 'stop' works even while JARVIS is busy."""
