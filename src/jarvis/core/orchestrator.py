@@ -80,7 +80,8 @@ class Orchestrator:
             personal.append(f"The user is currently in or near: {where} (approximate).")
         if facts := self.memory.profile(query):
             personal.append("What you know about the user (use it naturally, without being asked; categories "
-                            f"in brackets):\n{facts}")
+                            "in brackets; [lessons] are corrections the user gave you: always follow them):\n"
+                            f"{facts}")
         if sums := self.memory.recent_summaries():
             personal.append("Summaries of recent earlier conversations:\n" + "\n".join(f"- {s}" for s in sums))
         prompt = self.persona
@@ -161,6 +162,9 @@ class Orchestrator:
             from jarvis.llm.cloud_brain import PRIVATE_GROUPS
 
             kw["private"] = private or bool(asked & PRIVATE_GROUPS)
+            from jarvis.llm.cloud_brain import ACTION_GROUPS
+
+            kw["action"] = bool(asked & ACTION_GROUPS)
         reply = strip_filler(self.brain.respond(messages, tools, confirm, **kw) or "(no reply)")
 
         # Safety net: small models sometimes say "remembered" without calling the tool.

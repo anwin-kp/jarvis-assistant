@@ -59,7 +59,13 @@ def register(reg: ToolRegistry) -> None:
               {"on": {"type": "boolean"}}, group="pc")
     def _dark(on: bool):
         set_dark_mode(bool(on))
-        return f"{'Dark' if on else 'Light'} mode on."
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+                             r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize")
+        light = winreg.QueryValueEx(key, "AppsUseLightTheme")[0]
+        winreg.CloseKey(key)
+        if bool(light) == bool(on):
+            return f"WARNING: tried to switch to {'dark' if on else 'light'} mode but Windows didn't change."
+        return f"{'Dark' if on else 'Light'} mode on (checked)."
 
     @reg.tool("set_radio", "Turn Wi-Fi or Bluetooth on or off.",
               {"kind": {"type": "string", "enum": ["wifi", "bluetooth"]}, "on": {"type": "boolean"}},

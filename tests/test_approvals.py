@@ -25,3 +25,12 @@ def test_risky_step_asks_and_refuses_without_a_prompt():
     seen = []
     reg.confirm_fn = lambda tool, args: seen.append(args["action"]) or True
     assert reg.ask("click 'Buy now'") is True and seen == ["click 'Buy now'"]
+
+
+def test_wait_for_polls_until_true_or_timeout():
+    from jarvis.tools.registry import wait_for
+
+    n = []
+    assert wait_for(lambda: n.append(1) or (len(n) >= 3 and "ok"), timeout=2, every=0.01) == "ok"
+    assert wait_for(lambda: None, timeout=0.05, every=0.01) is None
+    assert wait_for(lambda: 1 / 0, timeout=0.05, every=0.01) is None  # errors count as "not yet"

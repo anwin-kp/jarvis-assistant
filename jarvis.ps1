@@ -15,6 +15,8 @@
     .\jarvis.ps1 eval             # score how well JARVIS understands requests (local, ~3 min)
     .\jarvis.ps1 autostart-on     # start JARVIS (minimized) when you log in to Windows
     .\jarvis.ps1 autostart-off
+    .\jarvis.ps1 review           # find last week's turns that went wrong (report in data
+eview)
     .\jarvis.ps1 shortcut         # add JARVIS (and Kill JARVIS) to the Desktop and Start menu
     .\jarvis.ps1 enroll-voice     # record your voiceprint (for voice.voice_id)
     .\jarvis.ps1 spotify-login    # connect Spotify (after: set-key spotify_client_id)
@@ -25,7 +27,7 @@
 #>
 param(
     [Parameter(Position = 0)]
-    [ValidateSet('start', 'stop', 'restart', 'status', 'free', 'stop-all', 'logs', 'test', 'autostart-on', 'autostart-off', 'google-login', 'set-key', 'shortcut', 'enroll-voice', 'eval', 'spotify-login', 'help')]
+    [ValidateSet('start', 'stop', 'restart', 'status', 'free', 'stop-all', 'logs', 'test', 'autostart-on', 'autostart-off', 'google-login', 'set-key', 'shortcut', 'enroll-voice', 'eval', 'review', 'voice-test', 'spotify-login', 'help')]
     [string]$Command = 'help',
     [switch]$DryRun,
     [switch]$Text,
@@ -234,6 +236,8 @@ switch ($Command) {
     'autostart-on'  { Set-Autostart $true }
     'autostart-off' { Set-Autostart $false }
     'shortcut'      { New-Shortcuts }
+    'voice-test'    { Stop-Jarvis; Push-Location $Root; try { & $Python -W ignore -m jarvis.voicetest } finally { Pop-Location }; Write-Host '  Start JARVIS again with: .\jarvis.ps1 start' }
+    'review'        { Push-Location $Root; try { $env:PYTHONIOENCODING = 'utf-8'; & $Python -W ignore -m jarvis.review } finally { Pop-Location } }
     'eval'          { Push-Location $Root; try { $env:PYTHONIOENCODING = 'utf-8'; & $Python -W ignore -m jarvis.evals } finally { Pop-Location } }
     'spotify-login' { Push-Location $Root; try { & $Python -W ignore -m jarvis.integrations.spotify } finally { Pop-Location } }
     'enroll-voice'  { Push-Location $Root; try { & $Python -W ignore -m jarvis.audio.voiceid } finally { Pop-Location } }
@@ -254,9 +258,9 @@ switch ($Command) {
         if ($Name -eq 'spotify_client_id' -and $plain -match '(?<![0-9a-fA-F])([0-9a-fA-F]{32})(?![0-9a-fA-F])') { $plain = $Matches[1].ToLower() }  # extra text pasted along: keep just the ID
         if ($plain.Length -lt 16) { throw "That key is only $($plain.Length) characters - it looks incomplete. Nothing was saved. Tip: copy the key, then run: .\jarvis.ps1 set-key $Name -FromClipboard" }
         # check the format, so a wrong clipboard can't be saved by mistake
-        $formats = @{ groq = '^gsk_\S{20,}$'; spotify_client_id = '^[0-9a-f]{32}$' }
+        $formats = @{ groq = '^gsk_\S{20,}$'; gemini = '^AIza[0-9A-Za-z_-]{30,}$'; spotify_client_id = '^[0-9a-f]{32}$' }
         if ($formats.ContainsKey($Name) -and $plain -notmatch $formats[$Name]) {
-            $hint = @{ groq = 'a Groq key starts with gsk_'; spotify_client_id = 'a Spotify Client ID is 32 characters (0-9, a-f), from the app Settings page' }[$Name]
+            $hint = @{ groq = 'a Groq key starts with gsk_'; gemini = 'a Gemini key starts with AIza (copy the key itself, not the command)'; spotify_client_id = 'a Spotify Client ID is 32 characters (0-9, a-f), from the app Settings page' }[$Name]
             throw "That doesn't look right ($($plain.Length) characters; $hint). Nothing was saved."
         }
         $keyName = if ($Name -eq 'spotify_client_id') { 'spotify_client_id' } else { "${Name}_api_key" }

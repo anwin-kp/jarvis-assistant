@@ -22,7 +22,7 @@ import requests
 from loguru import logger
 
 from jarvis.core.config import DATA, get_secret
-from jarvis.tools.registry import ToolRegistry
+from jarvis.tools.registry import ToolRegistry, wait_for
 
 API = "https://api.spotify.com/v1"
 AUTH_URL = "https://accounts.spotify.com/authorize"
@@ -234,7 +234,14 @@ def register(reg: ToolRegistry, sp: Spotify) -> None:
                 sp.play(context_uri=top["uri"])
             return f"Playing {kind} {_describe(top)}."
 
-        return run(go)
+        result = run(go)
+        if result.startswith(("ERROR", "Your Liked Songs is empty")):
+            return result
+        playing = wait_for(lambda: (np := sp.now_playing()) and np.get("is_playing") and np.get("item"))
+        if playing:
+            return f"{result} Checked: now playing {_describe(playing)}."
+        return (f"{result} WARNING: Spotify hasn't started playing yet (checked for 4 s). Tell the user it may "
+                "need a moment, or that Spotify didn't respond.")
 
     @reg.tool("spotify_control", "Control Spotify playback: pause, resume, next, previous, shuffle_on, shuffle_off, "
               "repeat_on, repeat_off.",

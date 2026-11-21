@@ -33,7 +33,7 @@ def is_sleep_command(text: str) -> bool:
     return bool(_SLEEP.match(text.strip()))
 
 
-_STOP = re.compile(r"^\W*(?:(?:hey\W+)?jarvis\W*)?(?:ok(?:ay)?\W+)?(stop|stop it|stop talking|cancel|enough|"
+_STOP = re.compile(r"^\W*(?:(?:hey\W+)?jarvis\W*)?(?:ok(?:ay)?\W+)?(stop|stop it|stop talking|go|cancel|enough|"
                    r"shut up|be quiet|quiet|silence|that's enough|thats enough|never ?mind|wait)(\W+jarvis)?\W*$", re.I)
 
 

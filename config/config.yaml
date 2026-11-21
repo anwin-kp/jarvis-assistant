@@ -9,11 +9,13 @@ llm:
   think: false           # Qwen3 "thinking" mode; false = faster replies
   keep_alive: -1         # keep the model loaded while JARVIS runs (instant replies); gaming mode / Free GPU unload it
   semantic_tools: true   # choose tools by meaning (small local embedding model on the CPU)
-  max_steps: 6           # max tool-call rounds per request
+  max_steps: 8           # max tool-call rounds per request (multi-step tasks)
   mode: smart            # smart = local, but hard questions use the free cloud model if a key is set | local | cloud_first
   cloud:                 # optional free tier; needs a key: .\jarvis.ps1 set-key groq
     provider: groq       # groq | gemini | openrouter
     model: openai/gpt-oss-120b   # see console.groq.com/docs/models; gemini: gemini-2.5-flash, openrouter: a ":free" model
+    fallbacks:           # tried in order when the one above is rate limited / down (free keys: set-key gemini)
+      - {provider: gemini, model: gemini-3.5-flash-lite, reasoning_effort: low}  # 2.5 is retired for new keys
     use_in_gaming_mode: true         # while gaming, use the cloud (if a key is set) instead of the slow CPU
 
 history_turns: 8         # how many previous exchanges the model sees
@@ -53,6 +55,8 @@ voice:
     threshold: 0.45      # higher = stricter
   wake_word: true        # also load "Hey Jarvis" (wake_word mode, and waking up after "go to sleep")
   wake_threshold: 0.5    # 0.3 = more sensitive, 0.7 = fewer false wakes
+  addressed_window_s: 60 # always-listening: after this long without talking to JARVIS, it needs its name
+                         #   ("Jarvis, ...") so it ignores other people and the TV. 0 = answer everything
   follow_up_seconds: 4   # after a spoken reply, keep listening this long without the wake word
 
 tray: true               # system-tray icon

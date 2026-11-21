@@ -171,8 +171,9 @@ class AudioEngine:
             return
         voiced = level >= self.threshold and self.is_speech(frame)
         self._start_run = self._start_run + 1 if voiced else 0
-        if self._start_run >= 2:  # 60 ms of speech: start capturing (with ~300 ms pre-roll)
-            self._begin_capture(list(self._ring)[-10:], barge=False, after_wake=self._request_after_wake)
+        if self._start_run >= 2:  # 60 ms of speech: start capturing, with ~600 ms from before it: quiet first
+            # sounds ("s", "p", "th") stay under the threshold for a while and were cut ("Stop" -> "Go")
+            self._begin_capture(list(self._ring)[-20:], barge=False, after_wake=self._request_after_wake)
 
     def _set_threshold(self, levels) -> None:
         # median of mostly-quiet frames = the room's background; speech must be clearly above it
