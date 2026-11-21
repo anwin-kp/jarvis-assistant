@@ -131,8 +131,14 @@ class Spotify:
 
     # ------------------------------------------------------------------ API
     def _call(self, method: str, path: str, **kw):
-        r = self.http.request(method, API + path, headers={"Authorization": f"Bearer {self._access()}"},
-                              timeout=15, **kw)
+        try:
+            r = self.http.request(method, API + path, headers={"Authorization": f"Bearer {self._access()}"},
+                                  timeout=15, **kw)
+        except requests.ConnectionError:
+            # Spotify drops idle keep-alive connections: the first call after a quiet spell failed with
+            # "Remote end closed connection without response". One retry gets a fresh connection.
+            r = self.http.request(method, API + path, headers={"Authorization": f"Bearer {self._access()}"},
+                                  timeout=15, **kw)
         if r.status_code == 404 and "NO_ACTIVE_DEVICE" in r.text:
             raise SpotifyError("NO_ACTIVE_DEVICE")
         if r.status_code == 403 and "PREMIUM" in r.text.upper():
