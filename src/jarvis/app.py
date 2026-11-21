@@ -122,4 +122,8 @@ def build(dry_run: bool = False):
 
         orch.semantic = SemanticGroups(reg, embed)
     memory_tools.register_interview(reg, orch)
+    from jarvis.tasks import playbooks
+
+    reg.playbooks = playbooks.Playbooks(embed, set(reg.names()) | {"find_task_playbook"})
+    playbooks.register(reg, reg.playbooks)
     return cfg, orch, brain, reg, memory, roots

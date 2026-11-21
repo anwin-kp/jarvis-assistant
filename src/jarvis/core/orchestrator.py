@@ -147,6 +147,17 @@ class Orchestrator:
         user_msg = {"role": "user", "content": f"[Local time: {now}] {text}"}
         words = text if route_text is None else route_text
         messages = [{"role": "system", "content": self.system_prompt(words)}, *self.history, user_msg]
+        books = getattr(self.reg, "playbooks", None)
+        if books:
+            books.next_turn(words)  # a correction now teaches the playbook used last turn
+            try:
+                playbook = books.for_prompt(words)
+            except Exception as e:  # embedding model unavailable: work without
+                logger.debug("Playbook lookup failed: {}", e)
+                playbook = None
+            if playbook:
+                messages[0]["content"] += "\n\n" + playbook + "\nFollow this playbook, then verify as it says."
+            self.reg.trace = []
         asked = pick_groups(words)  # what the words explicitly ask for
         groups = set(asked)
         if self.interview:
@@ -165,7 +176,12 @@ class Orchestrator:
             from jarvis.llm.cloud_brain import ACTION_GROUPS
 
             kw["action"] = bool(asked & ACTION_GROUPS)
-        reply = strip_filler(self.brain.respond(messages, tools, confirm, **kw) or "(no reply)")
+        try:
+            reply = strip_filler(self.brain.respond(messages, tools, confirm, **kw) or "(no reply)")
+        finally:
+            if books:
+                books.observe(words, self.reg.trace or [])
+                self.reg.trace = None
 
         # Safety net: small models sometimes say "remembered" without calling the tool.
         fact = explicit_remember_request(text)

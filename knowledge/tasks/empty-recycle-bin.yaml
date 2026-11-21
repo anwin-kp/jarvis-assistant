@@ -1,0 +1,18 @@
+id: empty-recycle-bin
+title: Empty the Recycle Bin
+triggers:
+- empty the recycle bin
+- clear the trash
+what: Permanently deletes everything in the Recycle Bin.
+steps:
+- empty_recycle_bin
+tools:
+- empty_recycle_bin
+verify:
+- the result confirms it was emptied
+errors:
+- symptom: approval declined
+  recovery: do nothing
+safety: 'DANGER: permanent; always needs the user''s approval. Never done as part of another task.'
+status: verified
+source: curated

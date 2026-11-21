@@ -1,0 +1,22 @@
+id: weather
+title: Weather here or somewhere else
+triggers:
+- what's the weather like
+- will it rain today
+- weather in Bangalore
+what: Current weather and today's forecast.
+steps:
+- 'here: get_weather (no city)'
+- 'elsewhere: get_weather(city=<place>, country=<if said>)'
+tools:
+- get_weather
+verify:
+- answer with the place name the tool returned
+errors:
+- symptom: couldn't find a place
+  recovery: ask for the city
+- symptom: weather services not responding
+  recovery: say so; try again in a minute
+safety: safe.
+status: verified
+source: curated

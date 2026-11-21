@@ -1,0 +1,25 @@
+id: set-volume
+title: Change or mute the PC volume
+triggers:
+- set the volume to 30
+- it's too loud
+- turn it up a bit
+- mute the sound
+- unmute
+what: Sets the Windows speaker volume or mute.
+steps:
+- 'absolute: set_volume(percent=N)'
+- 'relative (''too loud'', ''a bit louder''): get_volume, then set_volume(percent=current -/+ 10..20)'
+- 'mute/unmute: set_mute(muted=true|false)'
+tools:
+- set_volume
+- get_volume
+- set_mute
+verify:
+- set_volume's result says '(checked)'
+errors:
+- symptom: 'WARNING: asked for X% but the volume is Y%'
+  recovery: tell the user; another app may control volume
+safety: safe, no approval. 'Too loud' means lower it, never mute unless asked.
+status: verified
+source: curated

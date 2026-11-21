@@ -1,0 +1,23 @@
+id: app-task
+title: Do a multi-step task inside an app
+triggers:
+- in calculator press 12 times 7
+- in Settings turn on night light
+- in the Settings app tell me my display scale
+- open gmail in chrome and search invoices
+what: Operates any Windows app by looking at it and clicking/typing like a person.
+steps:
+- operate_app(app=<app>, task=<the whole task in plain words>)
+tools:
+- operate_app
+verify:
+- the summary describes what is on screen at the end; report that, never guess
+errors:
+- symptom: 'ERROR: the task failed partway'
+  recovery: say it didn't work; don't invent the result
+- symptom: rate limited / slow
+  recovery: it waits by itself; tell the user it's still working
+safety: No approval for the task itself; it asks before risky clicks (buy, pay, delete, send) and closing windows,
+  and never types into password fields.
+status: verified
+source: curated

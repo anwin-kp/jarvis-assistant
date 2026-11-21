@@ -1,0 +1,21 @@
+id: check-email
+title: Check my email
+triggers:
+- check my email
+- do I have new mail
+- read my unread emails
+what: Lists unread Gmail messages and reads one if asked.
+steps:
+- list_unread_emails(max_results=10)
+- 'to read one: read_email(email_id=<id>)'
+tools:
+- list_unread_emails
+- read_email
+verify:
+- the list comes from the tool, never from memory
+errors:
+- symptom: not logged in to Google
+  recovery: tell the user to run .\jarvis.ps1 google-login
+safety: 'private: stays on the local model. Never send email without the user''s approval.'
+status: verified
+source: curated

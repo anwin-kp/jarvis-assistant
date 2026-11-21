@@ -20,6 +20,9 @@ def run(limit: int | None = None, verbose: bool = False, use_fast: bool = True) 
 
     logger.remove()
     app.DATA = Path(tempfile.mkdtemp())
+    from jarvis.tasks import playbooks  # test traffic must never teach JARVIS: learn into the temp folder
+
+    playbooks.LEARNED, playbooks.NOTES = app.DATA / "tasks" / "learned", app.DATA / "tasks" / "notes"
     cfg, orch, brain, reg, memory, _ = app.build(dry_run=True)
     from jarvis.core.fast_intents import FastIntents
 

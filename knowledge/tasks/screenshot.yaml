@@ -1,0 +1,19 @@
+id: screenshot
+title: Take a screenshot
+triggers:
+- take a screenshot
+- capture my screen
+- screenshot this
+what: Saves a screenshot of the screen to the Pictures folder.
+steps:
+- take_screenshot
+tools:
+- take_screenshot
+verify:
+- the result gives the saved file path
+errors:
+- symptom: error saving
+  recovery: tell the user the path problem
+safety: safe. The screenshot stays on this PC.
+status: verified
+source: curated

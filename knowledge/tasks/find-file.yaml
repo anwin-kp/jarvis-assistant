@@ -1,0 +1,21 @@
+id: find-file
+title: Find and open a file
+triggers:
+- find my resume
+- where is the invoice PDF
+- open my latest screenshot
+what: Searches the allowed folders for a file and opens it.
+steps:
+- search_files(query=<name words>, folder=<if known>)
+- open_file(path=<chosen result>)
+tools:
+- search_files
+- open_file
+verify:
+- open_file's result confirms it opened
+errors:
+- symptom: nothing found
+  recovery: list_allowed_folders and tell the user where you can look
+safety: read-only search; only allowed folders.
+status: verified
+source: curated
