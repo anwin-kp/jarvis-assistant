@@ -394,6 +394,13 @@ class App:
         from jarvis import review
 
         if summary := review.run_weekly():
+            from jarvis.core.routines import weekly_note
+
+            try:
+                if note := weekly_note(DATA / "jarvis.db"):  # suggestions only: JARVIS never acts on a routine itself
+                    summary += " " + note
+            except Exception:
+                logger.exception("Routine check failed")
             logger.info(summary)
             self.q.put(("notice", summary))
 

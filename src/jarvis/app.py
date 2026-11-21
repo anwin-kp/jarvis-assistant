@@ -134,6 +134,9 @@ def build(dry_run: bool = False):
     orch.history_file = DATA / "conversation.json"  # the conversation continues after a restart
     if n := orch.restore(cfg.get("history_keep_hours", 12)):
         logger.info("Continuing the conversation ({} messages)", n)
+    from jarvis.tools.vision_tools import active_window_text
+
+    orch.window_fn = active_window_text  # "what's this error?": which window "this" is (local prompts only)
     if (cfg.get("location") or {}).get("in_prompt", True):
         orch.location_fn = locator.city  # "Panaji, Goa, India": lets "near me" questions work
     if cfg["llm"].get("semantic_tools", True):
