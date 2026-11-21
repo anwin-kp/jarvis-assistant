@@ -66,6 +66,16 @@ def newest_files(folder: Path, limit: int = 10) -> list[Path]:
     return sorted(files, key=lambda p: p.stat().st_mtime, reverse=True)[:limit]
 
 
+def old_files(folder: Path, days: int) -> list[Path]:
+    """Files (not folders) directly in `folder`, last changed more than `days` days ago; never partial downloads."""
+    cutoff = time.time() - days * 86400
+    try:
+        return sorted((p for p in folder.iterdir() if p.is_file() and p.stat().st_mtime < cutoff
+                       and p.suffix.lower() not in (".crdownload", ".part", ".ini")), key=lambda p: p.stat().st_mtime)
+    except OSError:
+        return []
+
+
 def _age(ts: float) -> str:
     s = time.time() - ts
     if s < 3600:
@@ -136,6 +146,35 @@ def register(reg: ToolRegistry) -> None:
         folder = resolve_root(where if where in ("downloads", "desktop", "documents") else "downloads")
         files = newest_files(folder, limit)
         return [f"{p}  ({_age(p.stat().st_mtime)})" for p in files] or f"No files in {folder}."
+
+    @reg.tool("clean_old_downloads", "Move files in the Downloads folder older than N days (default 30) to the "
+              "Recycle Bin. Shows what it will move and asks the user first; folders are left alone.",
+              {"older_than_days": {"type": "integer"}}, required=[], group="files")
+    def clean_old_downloads(older_than_days: int = 30):
+        from send2trash import send2trash
+
+        from jarvis.tools.file_tools import resolve_root
+
+        days = max(1, int(older_than_days or 30))
+        folder = resolve_root("downloads")
+        old = old_files(folder, days)
+        if not old:
+            return f"Nothing to clean: no files in {folder} older than {days} days."
+        size = sum(p.stat().st_size for p in old)
+        sample = ", ".join(p.name for p in old[:3]) + (f" and {len(old) - 3} more" if len(old) > 3 else "")
+        if not reg.ask(f"move {len(old)} files ({size / 2**20:,.0f} MB) older than {days} days from Downloads to the "
+                       f"Recycle Bin: {sample}"):
+            return "Not cleaned: you didn't approve it. Nothing was moved."
+        moved, failed = 0, 0
+        for p in old:
+            try:
+                send2trash(str(p))
+                moved += 1
+            except OSError:
+                failed += 1  # open in another app
+        left = len(old_files(folder, days))
+        text = f"Moved {moved} old download(s) ({size / 2**20:,.0f} MB) to the Recycle Bin (checked: {left} left)."
+        return text + (f" {failed} couldn't be moved (in use)." if failed else "") + " Restore them from the Bin."
 
     @reg.tool("open_in_browser", "Just SHOW a web page in the user's own browser (a new tab, signed in as them): "
               "browser = chrome, edge, brave, firefox, or empty for the default. To search, click or type on a "

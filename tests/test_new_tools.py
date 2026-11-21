@@ -193,3 +193,54 @@ def test_tab_requests_are_instant():
     assert fast.try_handle("switch to my gmail tab", ok) == "Switched to gmail."
     n = len(calls)
     assert fast.try_handle("close all tabs", ok) is None and len(calls) == n  # not a title: the AI asks
+
+
+def test_window_layouts_fill_the_work_area():
+    from jarvis.tools.window_tools import layout_rects
+
+    area = (0, 0, 2560, 1504)
+    assert layout_rects(area, 2) == [(0, 0, 1280, 1504), (1280, 0, 2560, 1504)]
+    assert layout_rects(area, 2, "stacked") == [(0, 0, 2560, 752), (0, 752, 2560, 1504)]
+    three = layout_rects(area, 3)
+    assert three[0] == (0, 0, 1280, 1504) and three[2] == (1280, 752, 2560, 1504)
+    assert len(layout_rects(area, 4)) == 4 and layout_rects(area, 1) == [area]
+
+
+def test_time_left_for_timers():
+    from datetime import datetime, timedelta
+
+    from jarvis.scheduler.reminders import time_left
+
+    now = datetime(2026, 11, 21, 12, 0, 0)
+    assert time_left(now + timedelta(minutes=4, seconds=20), now) == "in 4 min"
+    assert time_left(now + timedelta(hours=2, minutes=5), now) == "in 2 h 5 min"
+    assert time_left(now + timedelta(days=3, hours=1), now) == "in 3 days 1 h"
+    assert time_left(now - timedelta(minutes=1), now) == "due now"
+
+
+def test_clean_old_downloads_asks_with_details_and_moves_only_old_files(tmp_path, monkeypatch):
+    import os
+    import time
+
+    from jarvis.tools import desk_tools, file_tools
+    from jarvis.tools.registry import ToolRegistry
+
+    old, new = tmp_path / "old.zip", tmp_path / "new.pdf"
+    for p in (old, new, tmp_path / "half.crdownload"):
+        p.write_bytes(b"x" * 1000)
+    os.utime(old, (time.time() - 40 * 86400,) * 2)
+    os.utime(tmp_path / "half.crdownload", (time.time() - 40 * 86400,) * 2)
+    (tmp_path / "old-folder").mkdir()
+    monkeypatch.setattr(file_tools, "resolve_root", lambda name: tmp_path)
+    trashed = []
+    monkeypatch.setattr("send2trash.send2trash", lambda p: (trashed.append(p), os.remove(p)))
+
+    reg, asked = ToolRegistry(), []
+    desk_tools.register(reg)
+    reg.confirm_fn = lambda tool, args: (asked.append(args["action"]), False)[1]  # the user says no
+    assert reg.get("clean_old_downloads").func(30).startswith("Not cleaned") and old.exists()
+    assert "1 files" in asked[0] and "old.zip" in asked[0]
+    reg.confirm_fn = lambda tool, args: True
+    out = reg.get("clean_old_downloads").func(30)
+    assert out.startswith("Moved 1 old download(s)") and "checked: 0 left" in out
+    assert not old.exists() and new.exists() and (tmp_path / "half.crdownload").exists()

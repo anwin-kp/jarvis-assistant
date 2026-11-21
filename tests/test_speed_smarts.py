@@ -85,3 +85,24 @@ def test_fast_intents_matches_without_side_effects():
     assert fast.matches("next song") and fast.matches("Jarvis, pause")
     assert not fast.matches("He's moved") and not fast.matches("tell me about Kerala")
     assert calls == []
+
+
+def test_mark_as_read_is_instant_even_when_misheard_as_red():
+    from jarvis.__main__ import normalize_heard
+
+    reg, calls = make_reg()
+
+    @reg.tool("mark_emails_read", "", {"ids": {"type": "string"}, "read": {"type": "boolean"}}, required=["ids"])
+    def mark(ids, read=True):
+        calls.append(("mark", ids, read))
+        return "Marked 7 email(s) as read (checked: 0 unread left in the inbox)."
+
+    fast = FastIntents(reg, {})
+    assert normalize_heard("Mark all of them as red.") == "Mark all of them as read."
+    assert normalize_heard("the car is red") == "the car is red"  # only after "mark ... as"
+    for said in ["Mark all of them as red", "mark them as read", "Jarvis, mark all my unread emails as read",
+                 "mark everything as read", "mark my emails read"]:
+        n = len(calls)
+        assert fast.try_handle(said, OK).startswith("Marked 7"), said
+        assert calls[n:] == [("mark", "all", True)], said
+    assert fast.try_handle("mark this as important", OK) is None

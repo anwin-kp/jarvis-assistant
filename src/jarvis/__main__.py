@@ -724,11 +724,27 @@ class App:
         """Streaming: speak each sentence as soon as the model finishes writing it."""
         if self._first_word is None:
             self._first_word = time.perf_counter()
-        if self._barged:
+        if self._barged or not self._within_budget(sentence):
             return
         self._streamed.append(sentence)
         self._state("speaking")
         self._speech_q.put(sentence)
+
+    # Long spoken replies get talked over: in a week, 64% of 31-60-word replies were interrupted vs 24% of short
+    # ones. Speak about voice.max_spoken_words (whole sentences), then "More on screen." - unless you asked for
+    # detail. The full reply is always on screen.
+    _budget: int | None = None
+    _spoken_words = 0
+    _cut = False
+
+    def _within_budget(self, sentence: str) -> bool:
+        if self._budget is None:
+            return True
+        if self._cut or (self._spoken_words and self._spoken_words >= self._budget):
+            self._cut = True
+            return False
+        self._spoken_words += len(sentence.split())
+        return True
 
     def _say(self, text: str) -> None:
         """Speak and wait until done (the audio engine ignores JARVIS's own voice and its echo)."""
@@ -747,6 +763,12 @@ class App:
         if self._barged:  # you interrupted: stop talking and listen
             self._barged = False
             return
+        if self._budget is not None:
+            from jarvis.llm.ollama_brain import SENTENCE_END
+
+            rest = " ".join(s for s in SENTENCE_END.split(rest) if s.strip() and self._within_budget(s))
+            if self._cut:
+                rest = (rest + " More on screen.").strip()
         self._say(rest if len(rest.strip(" .,!?")) > 1 else "")
 
     def _gaming_changed(self, active: bool, reason: str) -> None:
@@ -908,6 +930,7 @@ class App:
         if show:
             self._publish("user", text=text)
         self._barged = False
+        self._budget, self._spoken_words, self._cut = spoken_budget(words, self.cfg), 0, False
         start = time.perf_counter()
         quick = self.fast.try_handle(text, self.confirm) if route_text is None else None  # instant commands
         if quick is not None:
@@ -1154,7 +1177,23 @@ HEARD_FIXES = [
     (re.compile(r"^\s*hej\b", re.I), "Hey"),  # "Hey" -> Swedish "Hej" (JARVIS then answered in Swedish)
     (re.compile(r"^\W*(?:bosta|posta|pasta|bostah|postah|pose the|paws the)\W+music(?:al)?\b\W*$", re.I),
      "Pause the music"),
+    # "mark them as read" -> "...as red": JARVIS then said it can't mark emails as red (4 tries, 2026-11-21)
+    (re.compile(r"\b(mark\b[^.?!]{0,40}?\bas) red\b", re.I), r"\1 read"),
 ]
+
+
+_NUM = r"(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|a few|several)"
+DETAIL = re.compile(
+    rf"\b(?:in detail|detailed|details|in full|full (?:list|answer|story|details)|explain|elaborate|step by step|"
+    rf"read (?:it|them|me|out|all|the whole)|tell me more|more about|briefing|summari[sz]e|"
+    rf"{_NUM} (?:\w+ )?(?:sentences?|facts?|points?|things?|ways?|steps?|reasons?|examples?|tips?|ideas?|lines?|"
+    rf"paragraphs?|options?|items?))\b", re.I)
+
+
+def spoken_budget(text: str, cfg: dict) -> int | None:
+    """How many words to speak before "More on screen." (None = all: you asked for detail, or the limit is off)."""
+    limit = int((cfg.get("voice") or {}).get("max_spoken_words", 35) or 0)
+    return None if limit <= 0 or DETAIL.search(text or "") else limit
 
 
 def echo_of(text: str, spoken: list[str]) -> bool:
