@@ -197,6 +197,17 @@
   body.overlay[data-corner$="r"] .ov-hint { right:22px; left:auto; } body.overlay[data-corner$="l"] .ov-hint { left:22px; right:auto; }
   body.overlay[data-corner^="b"] .ov-hint { bottom:calc(var(--ov-r, 210px) + 52px); top:auto; }
   body.overlay[data-corner^="t"] .ov-hint { top:calc(var(--ov-r, 210px) + 52px); bottom:auto; }
+  /* center: the reactor in the middle of the screen, replies just below it, the text box at the bottom */
+  body.overlay[data-corner="c"] .center { left:50%; right:auto; top:calc(50% - var(--ov-r, 210px) / 2 - 24px);
+                                          bottom:auto; transform:translateX(-50%); }
+  body.overlay[data-corner="c"] .right { left:50%; right:auto; transform:translateX(-50%); height:auto;
+                                         top:calc(50% + var(--ov-r, 210px) / 2 + 52px); bottom:16px; }
+  body.overlay[data-corner="c"].ov-active .right { bottom:86px; }
+  body.overlay[data-corner="c"] #log { justify-content:flex-start; }
+  body.overlay[data-corner="c"] .ov-hint { left:50%; right:auto; transform:translateX(-50%); bottom:auto;
+                                           top:calc(50% + var(--ov-r, 210px) / 2 + 26px); }
+  body.overlay[data-corner="c"].ov-active .bottom { left:50%; right:auto; transform:translateX(-50%);
+                                                    width:min(var(--ov-w, 460px), 92vw); top:auto; bottom:16px; }
   #ov-gear { display:none; } body.overlay.ov-active #ov-gear { display:inline-block; }
   #ov-set { position:fixed; inset:0; z-index:9; display:none; place-items:center; }
   #ov-set.open { display:grid; }
@@ -258,8 +269,9 @@
   </section>
   <div id="ov-set"><section class="panel">
     <div class="ptitle">Overlay position &amp; size <small>SAVED</small></div>
-    <div class="row"><label>CORNER</label>
+    <div class="row"><label>POSITION</label>
       <button data-k="corner" data-v="tl">↖ Top left</button><button data-k="corner" data-v="tr">↗ Top right</button>
+      <button data-k="corner" data-v="c">◎ Center</button>
       <button data-k="corner" data-v="bl">↙ Bottom left</button><button data-k="corner" data-v="br">↘ Bottom right</button></div>
     <div class="row"><label>REACTOR</label>
       <button data-k="size" data-v="s">Small</button><button data-k="size" data-v="m">Medium</button>
@@ -537,8 +549,10 @@ function ovApply(st) {
   // the whole see-through window every frame (~27% GPU for a full-screen one). Tell the Qt window how wide.
   const maxw = Math.round(screen.availWidth * 0.42), ovR = OV_SIZES[st.size] || 210;
   b.style.setProperty("--ov-maxw", maxw + "px");
-  const strip = ovR + 40 + Math.min(OV_WIDTHS[st.width] || 460, maxw) + 28;
-  overlayRequest(`strip-${(st.corner || "br").endsWith("l") ? "l" : "r"}-${strip}`);
+  const msgW = Math.min(OV_WIDTHS[st.width] || 460, maxw), corner = st.corner || "br";
+  const side = corner === "c" ? "c" : corner.endsWith("l") ? "l" : "r";
+  const strip = side === "c" ? Math.max(ovR + 20, msgW) + 28 : ovR + 40 + msgW + 28;  // centre: one column
+  overlayRequest(`strip-${side}-${strip}`);
   document.querySelectorAll("#ov-set [data-k]").forEach((x) => x.classList.toggle("on", st[x.dataset.k] === x.dataset.v));
   void r;
 }
