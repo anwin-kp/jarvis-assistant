@@ -83,6 +83,10 @@ class FastIntents:
             (r(r"(?:close|closed|clothes|quit|exit|kill) (?:the )?(.+?)(?: app| application)?"), self._close),
             (r(r"(?:never ?mind,? )?(?:cancel|abort|stop) (?:the )?(?:shutdown|shut down|restart)|(?:never ?mind,? )?(?:don'?t|do not) (?:shut ?down|restart)(?: the (?:pc|computer|laptop))?"),
              self._tool("cancel_shutdown", {}, None)),
+            # "mark all of them as read" (after a list), "mark my emails as read": every unread email, checked
+            (r(r"mark (?:all (?:of )?)?(?:them|those|these|everything|all|(?:all )?(?:of )?(?:my |the )?(?:unread )?"
+               r"(?:e-?mails?|mails?|messages?)(?: in (?:my|the) inbox)?) (?:as )?(?:read|red)"),
+             self._tool("mark_emails_read", {"ids": "all", "read": True}, None)),
             (r(r"(?:switch|go|change) to (?:the )?(.+?)(?: window)?|(?:bring up|focus(?: on)?) (?:the )?(.+?)(?: window)?"), self._switch),
         ]
 

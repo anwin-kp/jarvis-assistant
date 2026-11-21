@@ -1152,6 +1152,8 @@ HEARD_FIXES = [
     (re.compile(r"^\s*hej\b", re.I), "Hey"),  # "Hey" -> Swedish "Hej" (JARVIS then answered in Swedish)
     (re.compile(r"^\W*(?:bosta|posta|pasta|bostah|postah|pose the|paws the)\W+music(?:al)?\b\W*$", re.I),
      "Pause the music"),
+    # "mark them as read" -> "...as red": JARVIS then said it can't mark emails as red (4 tries, 2026-11-21)
+    (re.compile(r"\b(mark\b[^.?!]{0,40}?\bas) red\b", re.I), r"\1 read"),
 ]
 
 
