@@ -13,6 +13,9 @@
     .\jarvis.ps1 logs [-Follow]   # show the log file
     .\jarvis.ps1 test             # run unit tests and lint
     .\jarvis.ps1 eval             # score how well JARVIS understands requests (local, ~3 min)
+    .\jarvis.ps1 eval --local-model qwen3:4b   # compare another local model on the same cases
+    .\jarvis.ps1 eval-add         # add the week's reviewed failures to your personal eval (data\evals)
+    .\jarvis.ps1 release-check    # lint + tests + eval >= 95% (run before a release)
     .\jarvis.ps1 autostart-on     # start JARVIS (minimized) when you log in to Windows
     .\jarvis.ps1 autostart-off
     .\jarvis.ps1 review           # find last week's turns that went wrong (report in data
@@ -27,7 +30,7 @@ eview)
 #>
 param(
     [Parameter(Position = 0)]
-    [ValidateSet('start', 'stop', 'restart', 'status', 'free', 'stop-all', 'logs', 'test', 'autostart-on', 'autostart-off', 'google-login', 'set-key', 'shortcut', 'enroll-voice', 'eval', 'review', 'voice-test', 'tasks', 'spotify-login', 'help')]
+    [ValidateSet('start', 'stop', 'restart', 'status', 'free', 'stop-all', 'logs', 'test', 'autostart-on', 'autostart-off', 'google-login', 'set-key', 'shortcut', 'enroll-voice', 'eval', 'eval-add', 'release-check', 'review', 'voice-test', 'tasks', 'spotify-login', 'help')]
     [string]$Command = 'help',
     [switch]$DryRun,
     [switch]$Text,
@@ -237,7 +240,19 @@ switch ($Command) {
     'voice-test'    { Stop-Jarvis; Push-Location $Root; try { & $Python -W ignore -m jarvis.voicetest } finally { Pop-Location }; Write-Host '  Start JARVIS again with: .\jarvis.ps1 start' }
     'tasks'         { Push-Location $Root; try { $env:PYTHONIOENCODING = 'utf-8'; & $Python -W ignore -m jarvis.tasks @(@($Name, $Arg) | Where-Object { $_ }) } finally { Pop-Location } }
     'review'        { Push-Location $Root; try { $env:PYTHONIOENCODING = 'utf-8'; & $Python -W ignore -m jarvis.review } finally { Pop-Location } }
-    'eval'          { Push-Location $Root; try { $env:PYTHONIOENCODING = 'utf-8'; & $Python -W ignore -m jarvis.evals } finally { Pop-Location } }
+    'eval'          { Push-Location $Root; try { $env:PYTHONIOENCODING = 'utf-8'; & $Python -W ignore -m jarvis.evals @(@($Name, $Arg) | Where-Object { $_ }) } finally { Pop-Location } }
+    'eval-add'      { Push-Location $Root; try { $env:PYTHONIOENCODING = 'utf-8'; & $Python -W ignore -m jarvis.review --add @(@($Name) | Where-Object { $_ }) } finally { Pop-Location } }
+    'release-check' {
+        # before a release: lint + tests + the eval on the local model (public + your own cases) must pass
+        Push-Location $Root
+        try {
+            $env:PYTHONIOENCODING = 'utf-8'
+            & $Python -m ruff check src tests; if ($LASTEXITCODE) { throw 'Lint failed.' }
+            & $Python -m pytest -q; if ($LASTEXITCODE) { throw 'Tests failed.' }
+            & $Python -W ignore -m jarvis.evals --local --min-accuracy 95; if ($LASTEXITCODE) { throw 'Eval below 95%.' }
+            Write-Ok 'Release check passed.'
+        } finally { Pop-Location }
+    }
     'spotify-login' { Push-Location $Root; try { & $Python -W ignore -m jarvis.integrations.spotify } finally { Pop-Location } }
     'enroll-voice'  { Push-Location $Root; try { & $Python -W ignore -m jarvis.audio.voiceid } finally { Pop-Location } }
     'set-key'       {

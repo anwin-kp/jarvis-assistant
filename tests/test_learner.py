@@ -95,11 +95,12 @@ def test_weekly_review_runs_once_a_week(monkeypatch, tmp_path):
     from jarvis import review
 
     monkeypatch.setattr(review, "LAST_RUN", tmp_path / "last-run.txt")
+    monkeypatch.setattr(review, "HISTORY", tmp_path / "history.json")
     fake = [{"signals": ["tool_error"]}, {"signals": ["stopped"]}, {"signals": []}]
     monkeypatch.setattr(review, "turns", lambda days: fake)
     monkeypatch.setattr(review, "report", lambda days: review.DATA / "review" / "r.md")
     first = review.run_weekly()
-    assert first.startswith("Weekly self-check: 3 turns, 1 went wrong (tool error 1)")
+    assert first.startswith("Weekly self-check: 3 turns, 1 went wrong (33%, target < 15%): tool error 1")
     assert review.run_weekly() is None  # not due again for a week
 
 
