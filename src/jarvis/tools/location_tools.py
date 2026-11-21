@@ -101,7 +101,7 @@ def register(reg: ToolRegistry, cfg: dict) -> Locator:
 
     @reg.tool("get_my_location", "Where the user is right now (city, region, country, coordinates). Use for "
               "'where am I', and before answering anything 'near me' / 'around here' / 'local'.",
-              {}, group="web", read_only=True)
+              {}, group="web", read_only=True, remember_last="disk")
     def get_my_location():
         loc = locator.get()
         if not loc:

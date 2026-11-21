@@ -100,7 +100,7 @@ def _day_range(day: str) -> tuple[datetime, datetime]:
 def register(reg: ToolRegistry) -> None:
     @reg.tool("list_unread_emails", "List recent unread emails (sender, subject, snippet, id).",
               {"max_results": {"type": "integer", "description": "1-15, default 5"}}, required=[],
-              group="email", read_only=True)
+              group="email", read_only=True, remember_last="memory")  # email: never written to disk
     def list_unread_emails(max_results: int = 5):
         gm = _service("gmail", "v1")
         ids = gm.users().messages().list(userId="me", q="is:unread in:inbox",
@@ -202,7 +202,7 @@ def register(reg: ToolRegistry) -> None:
         return "Email sent."
 
     @reg.tool("list_events", "List calendar events for a day: 'today', 'tomorrow' or a date (YYYY-MM-DD).",
-              {"day": {"type": "string"}}, group="email", read_only=True)
+              {"day": {"type": "string"}}, group="email", read_only=True, remember_last="memory")
     def list_events(day: str):
         begin, end = _day_range(day)
         items = _service("calendar", "v3").events().list(
