@@ -1,0 +1,21 @@
+id: play-song
+title: Play a song, artist or album
+triggers:
+- play Believer by Imagine Dragons
+- play some Arijit Singh
+- play the album Thriller
+what: Plays a song/artist/album on Spotify (YouTube only if the user asks for YouTube).
+steps:
+- spotify_play(kind=song|artist|album, query=<name>)
+- 'only if the user said YouTube: play_youtube(query=<name>)'
+tools:
+- spotify_play
+- play_youtube
+verify:
+- 'the result says ''Checked: now playing ...'''
+errors:
+- symptom: 'ERROR: nothing found on Spotify'
+  recovery: ask for the exact title, or offer YouTube
+safety: safe, no approval.
+status: verified
+source: curated

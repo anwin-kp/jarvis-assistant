@@ -26,10 +26,24 @@ See [JARVIS_PLAN.md](JARVIS_PLAN.md) for the architecture and roadmap.
 | Proactive | Warns about low battery and low disk space |
 | Personality | `default`, `butler`, `casual`, `terse` (or write your own) |
 | Smart home | Home Assistant lights, switches, fans and more, *optional* (locks and alarms are never allowed) |
+| Hands-free | Always listening (no button), "Jarvis, go to sleep", optional wake word, interrupt by talking (headset), voice ID (only obeys you) |
+| Languages | Speak English, Hindi, Malayalam, Telugu, Marathi and more; JARVIS answers in a matching voice |
+| Media & windows | Play/pause/next, play on YouTube, Spotify search, switch/snap/minimize windows, show desktop |
+| Clipboard & typing | Summarize/translate what you copied, copy results, type text into any app |
+| PC toggles | Dark mode, Wi-Fi/Bluetooth, screenshots, empty recycle bin, open Settings pages |
+| Notes | "Take a note…", journal and search, saved as Markdown in Documents\JARVIS Notes |
+| Screen | "What's this error on my screen?" via Windows' built-in OCR (offline) |
+| Your documents | Ask questions about your PDFs/Word/text files (local semantic search) |
+| Browser agent | JARVIS drives its own Edge window to open sites, read, click and fill forms (always asks first, never types passwords) |
+| Extensible | Drop-in plugins (`plugins/`), any MCP server (`mcp_servers`), Telegram phone remote |
+| Proactive | Low battery/disk, break reminders, upcoming meetings |
 | Cloud fallback | Free Groq / Gemini / OpenRouter tiers, *optional*; files, email and memory always stay local |
 | Safety | Permission tiers (safe / confirm / danger), keyboard or HUD approvals, audit log, dry-run, kill switch |
 
 ## Install
+
+> **New here?** [SETUP.md](SETUP.md) walks you through everything: requirements, install, which free API keys
+> unlock which features, Gmail/Spotify/Telegram setup, privacy and troubleshooting.
 
 Requirements: Windows 10/11, an NVIDIA GPU with ~6 GB+ VRAM recommended (it also runs on CPU, more slowly).
 
@@ -38,11 +52,28 @@ winget install Python.Python.3.12 astral-sh.uv Ollama.Ollama
 git clone https://github.com/anwin-kp/jarvis-assistant.git
 cd jarvis-assistant
 uv sync
-ollama pull qwen3:8b
-.\jarvis.ps1 start
+ollama pull qwen3:8b        # optional: start-jarvis downloads it if missing
+.\start-jarvis.ps1
 ```
 
 The first start downloads the speech models (~550 MB) and voice (~60 MB).
+
+## Start and stop
+
+Run `.\jarvis.ps1 shortcut` once: it adds a **JARVIS** icon to your Desktop and Start menu (and **Kill JARVIS**
+to the Start menu). Clicking it starts everything silently in the background, and the only thing you see is the
+HUD. Clicking it again while JARVIS runs just reopens the HUD.
+
+
+| | Double-click | Or run |
+|---|---|---|
+| **Start** | **JARVIS** shortcut, or `start-jarvis.cmd` | `.\start-jarvis.ps1 [-Console] [-DryRun] [-Text]` (`-Console` shows the terminal) |
+| **Kill** (emergency stop) | `kill-jarvis.cmd` | `.\kill-jarvis.ps1` or say **"Jarvis, shut down"** / **"Shutdown Jarvis"**, or type `/kill` |
+
+**start-jarvis** starts Ollama if needed, downloads the AI model if it's missing, opens JARVIS in its own
+window and waits until JARVIS reports it's ready (it tells you if startup fails, and the JARVIS window stays
+open to show the error). **kill-jarvis** immediately force-stops JARVIS, its window, the HUD, the AI model in
+GPU memory and Ollama, then verifies nothing is left. It's self-contained and logged to `data/logs/kill-jarvis.log`.
 
 ## Use
 
@@ -56,7 +87,7 @@ Console commands: `/help`, `/briefing`, `/gaming`, `/persona <name>`, `/private`
 ## Control: `jarvis.ps1`
 
 ```powershell
-.\jarvis.ps1 start [-DryRun] [-Text] [-Minimized]   # start (Ollama is started if needed)
+.\jarvis.ps1 start [-DryRun] [-Text] [-Minimized]   # same as start-jarvis.ps1
 .\jarvis.ps1 status            # JARVIS / Ollama / model / GPU memory
 .\jarvis.ps1 free              # unload the AI model from the GPU
 .\jarvis.ps1 stop | restart | stop-all
@@ -66,9 +97,6 @@ Console commands: `/help`, `/briefing`, `/gaming`, `/persona <name>`, `/private`
 .\jarvis.ps1 google-login                             # connect Gmail/Calendar
 .\jarvis.ps1 set-key groq|gemini|openrouter|home_assistant
 ```
-
-**Emergency stop:** double-click **`kill-switch.cmd`** (or run `.\kill-switch.ps1`). It force-kills JARVIS
-and Ollama and frees GPU memory. It is self-contained and logged to `data/logs/killswitch.log`.
 
 ## Optional setup
 
@@ -122,8 +150,9 @@ src/jarvis/
   integrations/    Google (Gmail/Calendar), Home Assistant
   ui/              HUD (FastAPI + web page), tray icon
 tests/
-jarvis.ps1         control script
-kill-switch.ps1    emergency stop
+start-jarvis.ps1   start script (+ start-jarvis.cmd for double-click)
+kill-jarvis.ps1    emergency stop (+ kill-jarvis.cmd)
+jarvis.ps1         all other control commands
 ```
 
 ## Development

@@ -4,6 +4,7 @@ import ctypes
 
 import psutil
 
+from jarvis.agent.uia import on_uia_thread
 from jarvis.tools.registry import Risk, ToolRegistry
 
 # Processes JARVIS must never terminate.
@@ -68,10 +69,10 @@ def register(reg: ToolRegistry) -> None:
         rows = []
         for p in procs:
             try:
-                mem = p.info["memory_info"]
+                mem = p.info.get("memory_info")  # missing when the process exited mid-scan (KeyError before)
                 rows.append({
-                    "pid": p.info["pid"],
-                    "name": p.info["name"],
+                    "pid": p.info.get("pid"),
+                    "name": p.info.get("name"),
                     "memory_mb": round(mem.rss / 2**20) if mem else 0,
                     "cpu_percent": p.cpu_percent(None) if sort_by == "cpu" else None,
                 })
@@ -93,6 +94,8 @@ def register(reg: ToolRegistry) -> None:
         name = p.name()
         if name.lower() in PROTECTED or int(pid) in (0, 4):
             raise PermissionError(f"{name} is a protected system process")
+        if p.pid == __import__("os").getpid():
+            raise PermissionError("that's JARVIS itself (to stop JARVIS, say 'Jarvis, shut down')")
         p.kill()
         return f"Killed {name} (PID {pid})."
 
@@ -102,6 +105,7 @@ def register(reg: ToolRegistry) -> None:
         return "Screen locked."
 
     @reg.tool("get_volume", "Get the current speaker volume and mute state.", {}, group="system", read_only=True)
+    @on_uia_thread  # pycaw uses COM: same thread as all other COM automation
     def get_volume():
         vol = _speakers_volume()
         return {"percent": round(vol.GetMasterVolumeLevelScalar() * 100), "muted": bool(vol.GetMute())}
@@ -112,13 +116,17 @@ def register(reg: ToolRegistry) -> None:
         {"percent": {"type": "integer"}},
         group="system",
     )
+    @on_uia_thread  # pycaw uses COM: same thread as all other COM automation
     def set_volume(percent: int):
         percent = max(0, min(int(percent), 100))
         vol = _speakers_volume()
         vol.SetMasterVolumeLevelScalar(percent / 100, None)
         if percent > 0 and vol.GetMute():
             vol.SetMute(0, None)
-        return f"Volume set to {percent}%."
+        now = round(vol.GetMasterVolumeLevelScalar() * 100)
+        if abs(now - percent) > 2:
+            return f"WARNING: asked for {percent}% but the volume is {now}%."
+        return f"Volume set to {percent}% (checked)."
 
     @reg.tool(
         "set_mute",
@@ -126,6 +134,7 @@ def register(reg: ToolRegistry) -> None:
         {"muted": {"type": "boolean"}},
         group="system",
     )
+    @on_uia_thread  # pycaw uses COM: same thread as all other COM automation
     def set_mute(muted: bool):
         _speakers_volume().SetMute(1 if muted else 0, None)
         return "Muted." if muted else "Unmuted."
@@ -148,7 +157,8 @@ def register_power(reg: ToolRegistry) -> None:
     import subprocess
 
     def _shutdown(*args: str) -> None:
-        subprocess.run(["shutdown", *args], check=True, capture_output=True)
+        subprocess.run(["shutdown", *args], check=True, capture_output=True,
+                       creationflags=subprocess.CREATE_NO_WINDOW)
 
     @reg.tool(
         "shutdown_pc",

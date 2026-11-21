@@ -14,7 +14,9 @@ ALLOWED_PREFIXES = (
 BLOCKED = re.compile(
     r"remove-|del\b|rm\b|rmdir|format-volume|format\s|set-|new-|stop-|start-|restart-|invoke-expression|\biex\b|"
     r"invoke-webrequest|\biwr\b|invoke-restmethod|\birm\b|downloadstring|-encodedcommand|-enc\b|\breg\b|bcdedit|"
-    r"diskpart|cipher|takeown|icacls|shutdown|[;&|`>]|\$\(",
+    # no subexpressions, script blocks, variables or .NET calls either: "Get-Date -Format ([Diagnostics.Process]::
+    # Start('x'))" passed the read-only prefix check and would have run a program
+    r"diskpart|cipher|takeown|icacls|shutdown|[;&|`><(){}\[\]$@]|::",
     re.IGNORECASE,
 )
 

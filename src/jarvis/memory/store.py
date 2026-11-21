@@ -18,6 +18,8 @@ CREATE TABLE IF NOT EXISTS facts(
 CREATE TABLE IF NOT EXISTS summaries(
   id INTEGER PRIMARY KEY, ts TEXT DEFAULT (datetime('now','localtime')), summary TEXT);
 
+CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT);
+
 CREATE TABLE IF NOT EXISTS audit_log(
   id INTEGER PRIMARY KEY, ts TEXT DEFAULT (datetime('now','localtime')),
   tool TEXT, args TEXT, risk TEXT, status TEXT);
@@ -80,10 +82,101 @@ class Memory:
             + [f"{ts} {role}: {text[:300]}" for ts, role, text in msgs]
         )
 
-    def profile(self, limit: int = 30) -> str:
+    def semantic_recall(self, query: str, k: int = 5) -> list[str]:
+        """Facts and conversation summaries ranked by meaning (needs self.embed)."""
+        embed = getattr(self, "embed", None)
+        if embed is None:
+            return []
+        import numpy as np
+
         with self.lock:
-            rows = self.db.execute("SELECT fact FROM facts ORDER BY id LIMIT ?", (limit,)).fetchall()
-        return "\n".join(f"- {r[0]}" for r in rows)
+            items = [f"fact: {r[0]}" for r in self.db.execute("SELECT fact FROM facts ORDER BY id DESC LIMIT 200")]
+            items += [f"summary {ts}: {s}" for ts, s in
+                      self.db.execute("SELECT ts, summary FROM summaries ORDER BY id DESC LIMIT 200")]
+        if not items:
+            return []
+        cache = self.__dict__.setdefault("_vec_cache", {})
+        new = [t for t in items if t not in cache]
+        if new:
+            for t, v in zip(new, embed([f"search_document: {t}" for t in new]), strict=True):
+                cache[t] = v / (np.linalg.norm(v) + 1e-9)
+        q = embed([f"search_query: {query}"])[0]
+        q = q / (np.linalg.norm(q) + 1e-9)
+        scored = sorted(items, key=lambda t: -float(cache[t] @ q))
+        return [t for t in scored[:k] if float(cache[t] @ q) > 0.5]
+
+    # ------------------------------------------------------------ learning about the user
+    def get_meta(self, key: str, default: str = "") -> str:
+        with self.lock:
+            row = self.db.execute("SELECT value FROM meta WHERE key=?", (key,)).fetchone()
+        return row[0] if row else default
+
+    def set_meta(self, key: str, value: str) -> None:
+        with self.lock:
+            self.db.execute("INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)", (key, str(value)))
+            self.db.commit()
+
+    def messages_after(self, after_id: int, limit: int = 16) -> list[tuple[int, str, str]]:
+        with self.lock:
+            return self.db.execute("SELECT id, role, text FROM messages WHERE id > ? ORDER BY id LIMIT ?",
+                                   (after_id, limit)).fetchall()
+
+    def _similar_fact(self, fact: str, threshold: float = 0.9) -> int | None:
+        """id of an existing fact that says the same thing (by meaning), if any."""
+        facts = self.list_facts()
+        low = fact.lower().strip(" .")
+        for f in facts:
+            if f["fact"].lower().strip(" .") == low:
+                return f["id"]
+        embed = getattr(self, "embed", None)
+        if embed is None or not facts:
+            return None
+        import numpy as np
+
+        # every learned fact used to re-embed ALL known facts (hundreds of texts per check while learning from a
+        # document); known facts' vectors are kept, only new texts are embedded
+        cache = self.__dict__.setdefault("_fact_vecs", {})
+        texts = [f["fact"] for f in facts] + [fact]
+        new = [t for t in dict.fromkeys(texts) if t not in cache]
+        if new:
+            for t, v in zip(new, embed([f"search_document: {t}" for t in new]), strict=True):
+                v = np.asarray(v, dtype=float)
+                cache[t] = v / (np.linalg.norm(v) + 1e-9)
+        vecs = np.asarray([cache[t] for t in texts])
+        scores = vecs[:-1] @ vecs[-1]
+        best = int(np.argmax(scores))
+        return facts[best]["id"] if float(scores[best]) >= threshold else None
+
+    def learn(self, fact: str) -> bool:
+        """Add a fact unless one with the same meaning exists. Returns True if added."""
+        fact = " ".join(fact.split())
+        if len(fact) < 6 or self._similar_fact(fact) is not None:
+            return False
+        return self.remember(fact) == "Saved."
+
+    def replace_fact(self, fact_id: int, fact: str) -> bool:
+        with self.lock:
+            cur = self.db.execute("UPDATE OR IGNORE facts SET fact=?, ts=datetime('now','localtime') WHERE id=?",
+                                  (" ".join(fact.split()), fact_id))
+            self.db.commit()
+        return bool(cur.rowcount)
+
+    def profile(self, query: str = "", core: int = 25, relevant: int = 10) -> str:
+        """What the AI is told about the user: everything while it's short; otherwise the core facts
+        (who/where/work/people/preferences) plus the ones most related to the current message."""
+        facts = self.list_facts()
+        if len(facts) > core + relevant:
+            core_cats = ("[lessons]", "[identity]", "[people]", "[places]", "[work]", "[preferences]")
+            chosen = [f for f in facts if f["fact"].lower().startswith(core_cats)][-core:]
+            picked = {f["id"] for f in chosen}
+            if query and getattr(self, "embed", None):
+                for hit in self.semantic_recall(query, k=relevant + len(picked)):
+                    f = next((f for f in facts if f["fact"] == hit.removeprefix("fact: ")), None)
+                    if f and f["id"] not in picked and len(chosen) < core + relevant:
+                        chosen.append(f)
+                        picked.add(f["id"])
+            facts = chosen or facts[-(core + relevant):]
+        return "\n".join(f"- {f['fact']}" for f in facts)
 
     def add_summary(self, summary: str) -> None:
         with self.lock:

@@ -23,7 +23,12 @@ def register(reg: ToolRegistry, memory: Memory) -> None:
         read_only=True,
     )
     def recall(query: str):
-        return memory.recall(query) or "Nothing found."
+        try:
+            by_meaning = memory.semantic_recall(query)
+        except Exception:
+            by_meaning = []
+        hits = list(dict.fromkeys(by_meaning + memory.recall(query)))  # meaning first, then exact words
+        return hits[:12] or "Nothing found."
 
     @reg.tool(
         "list_facts",
@@ -44,3 +49,25 @@ def register(reg: ToolRegistry, memory: Memory) -> None:
     )
     def forget(fact_id: int):
         return memory.forget(int(fact_id))
+
+
+def register_interview(reg: ToolRegistry, orch) -> None:
+    """'Get to know me': JARVIS asks about the user one question at a time and saves the answers."""
+
+    @reg.tool("start_interview", "Start getting to know the user: when they say 'get to know me', 'ask me about "
+              "myself', 'interview me', 'learn about me'. Then ask your first question.", {}, group="interview")
+    def start_interview():
+        orch.interview = True
+        known = len(memory_facts(orch))
+        return (f"Get-to-know-you mode is on ({known} facts known so far). Now greet them briefly and ask your "
+                "first question about a topic you don't know yet.")
+
+    @reg.tool("end_interview", "End get-to-know-you mode (the user said stop / that's enough, or all topics "
+              "are covered).", {}, group="interview")
+    def end_interview():
+        orch.interview = False
+        return f"Get-to-know-you mode is off. You now know {len(memory_facts(orch))} facts about the user."
+
+
+def memory_facts(orch) -> list:
+    return orch.memory.list_facts()

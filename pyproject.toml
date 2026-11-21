@@ -1,6 +1,6 @@
 [project]
 name = "jarvis"
-version = "1.0.0"
+version = "1.1.0"
 description = "A free, local-first JARVIS-style personal AI assistant for Windows, powered by Ollama."
 readme = "README.md"
 license = "MIT"
@@ -25,26 +25,42 @@ dependencies = [
     "google-auth-oauthlib>=1.5.0",
     "keyring>=25.7.0",
     "loguru>=0.8.0",
+    "mcp>=2.3.0",
     "numpy>=2.5.5",
     "ollama>=0.6.3",
     "openwakeword>=0.6",
     "pillow>=13.0.0",
     "piper-tts>=1.8.0",
+    "playwright>=1.65.2",
     "psutil>=7.2.2",
     "pycaw>=20260927",
+    "pypdf>=7.1.1",
     "pystray>=0.19.5",
+    "python-docx>=1.2.0",
     "pyttsx3>=2.99",
     "pywin32>=312",
+    "pywinauto>=0.6.9",
     "pyyaml>=6.0.3",
     "requests>=2.34.2",
     "screen-brightness-control>=0.27.2",
     "send2trash>=2.2.0",
+    "sherpa-onnx>=2.0.2",
     "sounddevice>=0.5.6",
     "trafilatura>=2.3.1",
     "uvicorn>=0.54.0",
     "webrtcvad-wheels>=2.0.14.post1",
     "websockets>=17.4",
     "win11toast>=0.36.3",
+    "winrt-windows-devices-geolocation>=4!10.0.28000.2957",
+    "winrt-windows-devices-radios>=4!10.0.28000.2957",
+    "winrt-windows-foundation>=4!10.0.28000.2957",
+    "winrt-windows-foundation-collections>=4!10.0.28000.2957",
+    "winrt-windows-globalization>=4!10.0.28000.2957",
+    "winrt-windows-graphics-imaging>=4!10.0.28000.2957",
+    "winrt-windows-media-control>=4!10.0.28000.2957",
+    "winrt-windows-media-ocr>=4!10.0.28000.2957",
+    "winrt-windows-storage>=4!10.0.28000.2957",
+    "winrt-windows-storage-streams>=4!10.0.28000.2957",
 ]
 
 [project.urls]
@@ -69,6 +85,9 @@ src = ["src", "tests"]
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP"]
 ignore = ["E731"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/jarvis/core/fast_intents.py" = ["E501"]  # regex rule table
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

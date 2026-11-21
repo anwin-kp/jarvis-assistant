@@ -33,7 +33,7 @@ class FakeLocal:
     model = "local-model"
     last_tool_calls: list = []
 
-    def respond(self, messages, tools, confirm):
+    def respond(self, messages, tools, confirm, **kw):
         return "local answer"
 
 
@@ -75,3 +75,17 @@ def test_router_local_mode_without_key(monkeypatch):
     reg = make_reg()
     r = Router(FakeLocal(), CloudBrain(reg, "groq", "m"), reg, mode="cloud_first")
     assert not r._use_cloud(reg.schemas({"core"})) and r.model == "local-model"
+
+
+def test_smart_mode_routes_by_intent_and_hides_private_tools(monkeypatch):
+    monkeypatch.setattr(cb, "get_secret", lambda name: "key")
+    reg = make_reg()
+    cloud = CloudBrain(reg, "groq", "m")
+    seen = []
+    cloud.respond = lambda m, tools, c, **kw: seen.append([t["function"]["name"] for t in tools]) or "cloud answer"
+    r = Router(FakeLocal(), cloud, reg, mode="smart")
+    all_tools = reg.schemas()  # includes the private files tool, offered "just in case"
+    assert r.respond([], all_tools, OK, think=True, private=False) == "cloud answer"
+    assert seen == [["get_time"]]  # the cloud never receives private tools
+    assert r.respond([], all_tools, OK, think=True, private=True) == "local answer"  # you asked for your files
+    assert r.respond([], all_tools, OK, think=False, private=False) == "local answer"  # easy: stays local

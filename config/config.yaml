@@ -7,12 +7,19 @@ llm:
   num_ctx: 8192          # Ollama's default is small; tool schemas + history need room
   temperature: 0.3
   think: false           # Qwen3 "thinking" mode; false = faster replies
-  keep_alive: 10m        # unload from VRAM after 10 idle minutes (frees the GPU for games)
-  max_steps: 6           # max tool-call rounds per request
-  mode: local            # local = everything on this PC | cloud_first = free cloud model, local fallback
+  keep_alive: -1         # keep the model loaded while JARVIS runs (instant replies); gaming mode / Free GPU unload it
+  semantic_tools: true   # choose tools by meaning (small local embedding model on the CPU)
+  max_steps: 8           # max tool-call rounds per request (multi-step tasks)
+  mode: smart            # smart = local, but hard questions use the free cloud model if a key is set | local | cloud_first
   cloud:                 # optional free tier; needs a key: .\jarvis.ps1 set-key groq
     provider: groq       # groq | gemini | openrouter
-    model: llama-3.3-70b-versatile   # gemini: gemini-2.5-flash, openrouter: a ":free" model
+    model: openai/gpt-oss-120b   # see console.groq.com/docs/models; gemini: gemini-2.5-flash, openrouter: a ":free" model
+    fallbacks:           # tried in order when the one above is rate limited / down (free keys: set-key gemini)
+      # each Groq model has its own free 8k tokens/minute: two more fast (<1 s) models before Gemini
+      - {provider: groq, model: openai/gpt-oss-20b}
+      - {provider: groq, model: qwen/qwen3.8-27b}
+      # Gemini has slow spells (10-80 s): give up after 10 s and let the local model answer
+      - {provider: gemini, model: gemini-3.5-flash-lite, reasoning_effort: low, timeout: 10}
     use_in_gaming_mode: true         # while gaming, use the cloud (if a key is set) instead of the slow CPU
 
 history_turns: 8         # how many previous exchanges the model sees
@@ -20,19 +27,40 @@ idle_summary_minutes: 10 # after this idle time the conversation is summarized i
 
 voice:
   enabled: true          # false = text only (or start with --text)
-  stt_model: small       # tiny | base | small | medium | large-v3 (bigger = more accurate, slower)
+  stt_engine: groq       # groq = Whisper large-v3-turbo on Groq (accurate; audio is sent to Groq) | local
+  groq_stt_model: whisper-large-v3-turbo
+  stt_model: small       # local Whisper (offline fallback)       # tiny | base | small | medium | large-v3 (bigger = more accurate, slower)
   stt_device: cuda       # cuda | cpu (falls back to cpu automatically)
-  stt_compute_type: float16
+  stt_compute_type: float16   # int8_float16 isn't supported on RTX 50-series
   language: null         # null = auto-detect, or e.g. "en", "hi", "ml"
-  silence_ms: 800        # stop recording after this much silence
+  vocabulary: "Jarvis, Kochi, Kerala, Thrissur, Trivandrum, Kozhikode, Bangalore, Spotify, YouTube, WhatsApp. Stop. Pause. Next. Cancel. Yes. No."   # names/places you say often (helps recognition)
+  silence_ms: 750        # pause that ends your sentence (too low cuts you off mid-sentence)
+  keep_recordings: 50    # keep your last N utterances in data/voice-log (local) to measure accuracy; 0 = off
   max_seconds: 15
   tts_engine: piper      # piper (natural, offline) | sapi (built-in Windows voices)
   piper_voice: en_GB-alan-medium   # any voice from huggingface.co/rhasspy/piper-voices (auto-downloads)
   tts_speed: 1.0
   tts_rate: 185          # SAPI speaking speed
   tts_voice: null        # SAPI: part of a Windows voice name, e.g. "David" or "Zira"
-  wake_word: true        # say "Hey Jarvis" to talk hands-free
+  listen_mode: always    # always = just talk (no button, no wake word) | wake_word = say "Hey Jarvis" | push
+  min_speech_ms: 250     # ignore sounds shorter than this (clicks); one-word commands like "stop" are ~300 ms
+  languages: [en]       # languages you speak, e.g. [en, hi, ml] (prevents mis-detection on short phrases)
+  voices:                # reply voice per spoken language (free Piper voices, downloaded on first use)
+    en: en_GB-alan-medium
+    hi: hi_IN-rohan-medium
+    ml: ml_IN-arjun-medium
+    te: te_IN-venkatesh-medium
+    mr: mr_IN-google-medium
+  barge_in: true         # talk over JARVIS to interrupt it (echo from speakers is filtered out)
+  barge_in_rms: 0.02     # minimum loudness to interrupt (adapts upward to JARVIS's echo)
+  echo_tail_ms: 700      # keep ignoring JARVIS's voice this long after it stops (Bluetooth speakers lag)
+  voice_id:              # only obey your voice; enroll first: .\jarvis.ps1 enroll-voice
+    enabled: false
+    threshold: 0.45      # higher = stricter
+  wake_word: true        # also load "Hey Jarvis" (wake_word mode, and waking up after "go to sleep")
   wake_threshold: 0.5    # 0.3 = more sensitive, 0.7 = fewer false wakes
+  addressed_window_s: 60 # always-listening: after this long without talking to JARVIS, it needs its name
+                         #   ("Jarvis, ...") so it ignores other people and the TV. 0 = answer everything
   follow_up_seconds: 4   # after a spoken reply, keep listening this long without the wake word
 
 tray: true               # system-tray icon
@@ -41,6 +69,17 @@ proactive:              # JARVIS speaks up on its own
   enabled: true
   battery_percent: 15    # warn when unplugged and at or below this
   disk_free_gb: 10       # warn when drive C has less free space
+  break_reminder_minutes: 120   # suggest a break after this much continuous work (0 = off)
+  meeting_reminder_minutes: 10  # announce calendar events this long before (needs Google login)
+
+memory:                 # getting to know you (all local; see the Memory panel in the HUD)
+  learn: true           # learn lasting facts about you from conversations, while JARVIS is idle
+  learn_idle_seconds: 15
+  share_with_cloud: false  # include what JARVIS knows about you when a question goes to the cloud model
+
+location:               # where you are: weather / "near me" without naming a place
+  home: null            # optional exact place, e.g. "Panaji, Goa" (overrides Windows location)
+  in_prompt: true       # tell the AI your approximate city (city only, never coordinates)
 
 home_assistant:         # optional smart home; token: .\jarvis.ps1 set-key home_assistant
   url: null             # e.g. http://homeassistant.local:8123
@@ -53,8 +92,9 @@ hud:
 
 briefing:
   enabled: true
-  time: "08:30"          # daily briefing (weather, tasks, reminders, news); fires once per day
-  city: null             # e.g. "Kochi, India" for the weather part
+  time: "08:30"          # daily briefing (weather, tasks, reminders, news): once a day, the first time you're
+  until: "14:00"         #   at the PC between these times (keyboard/mouse in the last minute)
+  city: null             # null = where you are (location); or e.g. "Kochi, India"
 
 gaming:
   auto_detect: true      # free the GPU automatically while one of these games runs
@@ -69,6 +109,12 @@ gaming:
     - r5apex.exe
 
 security:
+  # Tools that just run, without asking. Anything not listed that changes things asks first.
+  # Deleting files, emptying the bin, killing processes, shutdown/restart and sending email ALWAYS ask.
+  # Clicks and key presses still ask when the target is risky ("Buy", "Pay", "Delete", "Send", Alt+F4...).
+  no_approval: [operate_app, press_keys, click_ui_element, type_into_ui_field, type_text, browser_click,
+                browser_type, close_app, close_window, create_event, create_folder, draft_email, delete_task,
+                set_radio, forget, close_browser_tabs]
   shell_enabled: false   # true = allow read-only PowerShell commands (always asks first)
   # Folders JARVIS may read/search. Known-folder names are resolved via Windows
   # (handles OneDrive redirection); you can also add full paths.
@@ -90,6 +136,39 @@ security:
     edge: msedge.exe
     vs code: code
     spotify: "spotify:"
+
+documents:              # "ask your documents" (local semantic search)
+  enabled: true
+  folders: [documents]   # known names or full paths; PDFs, Word, .txt and .md are indexed
+  index_on_start: true   # re-scan in the background at startup (only changed files are processed)
+  model: nomic-embed-text  # small local embedding model (~270 MB, downloaded automatically)
+
+telegram:               # phone remote; token: .\jarvis.ps1 set-key telegram
+  enabled: true
+  allowed_chat_id: null  # message your bot once; JARVIS shows your chat id. Only this chat is answered.
+
+mcp_servers: {}          # connect MCP servers; their tools become JARVIS tools. Example:
+#  github:
+#    command: npx
+#    args: ["-y", "@modelcontextprotocol/server-github"]
+#    env: {GITHUB_PERSONAL_ACCESS_TOKEN: "..."}
+#    keywords: [github, repo, issue, pull request]
+#    trust: confirm       # confirm = ask before every call | read_only = no approval needed
+
+browser:
+  enabled: true          # browser agent (its own Edge window); clicking/typing always asks first
+
+vision:                 # "look at my screen": screenshot + question to a free vision model (Groq)
+  enabled: true          # false = never send screenshots; local text reading (OCR) only
+  model: qwen/qwen3.8-27b
+
+operator:               # operate_app: multi-step tasks in any app (sees the window, clicks/types like a person)
+  enabled: true
+  model: qwen/qwen3.8-27b  # vision + tools model on Groq
+  max_steps: 15
+
+notes:
+  folder: null           # null = Documents\JARVIS Notes
 
 web:
   rss_feeds:

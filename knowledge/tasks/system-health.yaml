@@ -1,0 +1,22 @@
+id: system-health
+title: Check how the PC is doing
+triggers:
+- why is my PC slow
+- how much RAM is used
+- what's using my CPU
+- battery level
+what: Reports CPU, RAM, disk, battery and the heaviest processes.
+steps:
+- get_system_info
+- 'if slow/heavy: list_processes(sort_by=memory|cpu, limit=5)'
+tools:
+- get_system_info
+- list_processes
+verify:
+- numbers come from the tools
+errors:
+- symptom: a process looks stuck
+  recovery: offer to close the app; killing a process needs approval
+safety: read-only. Never kill processes without asking.
+status: verified
+source: curated

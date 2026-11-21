@@ -1,0 +1,22 @@
+id: shutdown-pc
+title: Shut down or cancel a shutdown
+triggers:
+- shut down the laptop in 10 minutes
+- turn off the PC
+- don't shut down
+- cancel the shutdown
+what: Schedules a Windows shutdown, or cancels one.
+steps:
+- shutdown_pc(delay_minutes=N, default 1)
+- 'cancel: cancel_shutdown'
+tools:
+- shutdown_pc
+- cancel_shutdown
+verify:
+- tell the user the exact time it will shut down, and how to cancel
+errors:
+- symptom: approval declined
+  recovery: do nothing; don't retry
+safety: 'DANGER: always needs the user''s approval; unsaved work is lost. Never chain it with other steps.'
+status: verified
+source: curated

@@ -24,7 +24,7 @@ class Tray:
         self.a = actions
         item = pystray.MenuItem
         menu = pystray.Menu(
-            item("Wake word (Hey Jarvis)", lambda: self.a["toggle_wake"](),
+            item("Hands-free listening", lambda: self.a["toggle_wake"](),
                  checked=lambda _: self.a["state"]()["wake"]),
             item("Speak replies", lambda: self.a["toggle_speech"](), checked=lambda _: self.a["state"]()["speech"]),
             item("Gaming mode", lambda: self.a["gaming"](), checked=lambda _: self.a["state"]()["gaming"]),
