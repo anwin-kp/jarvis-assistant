@@ -89,3 +89,15 @@ def test_a_correction_becomes_a_lesson(tmp_path):
     Learner(mem, chat, lambda: False).step()
     assert mem.list_facts()[0]["fact"].startswith("[lessons]")
     assert "[lessons]" in mem.profile("anything", core=1, relevant=0)
+
+
+def test_weekly_review_runs_once_a_week(monkeypatch, tmp_path):
+    from jarvis import review
+
+    monkeypatch.setattr(review, "LAST_RUN", tmp_path / "last-run.txt")
+    fake = [{"signals": ["tool_error"]}, {"signals": ["stopped"]}, {"signals": []}]
+    monkeypatch.setattr(review, "turns", lambda days: fake)
+    monkeypatch.setattr(review, "report", lambda days: review.DATA / "review" / "r.md")
+    first = review.run_weekly()
+    assert first.startswith("Weekly self-check: 3 turns, 1 went wrong (tool error 1)")
+    assert review.run_weekly() is None  # not due again for a week
