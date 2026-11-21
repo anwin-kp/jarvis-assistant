@@ -494,6 +494,8 @@ class App:
             body = re.sub(r"^\[\w+\]\s*", "", f["fact"])
             words += [w for w in re.findall(r"\b[A-Z][\w'-]+(?:\s[A-Z][\w'-]+)*", body)
                       if w not in COMMON_CAPS and len(w) > 2]
+        # app names too ("notepad" was heard as "not padder")
+        words += [a.title() for a in (self.cfg.get("security", {}).get("app_allowlist") or {}) if len(a) > 3]
         sp = getattr(self.reg, "spotify", None)
         if sp:
             try:
