@@ -30,6 +30,19 @@ def next_due(due: datetime, repeat: str, now: datetime) -> datetime | None:
     return nxt
 
 
+def time_left(due: datetime, now: datetime) -> str:
+    """'in 4 min' / 'in 2 h 5 min' / 'in 3 days' (timers: "how long is left?")."""
+    s = int((due - now).total_seconds())
+    if s <= 0:
+        return "due now"
+    if s < 60:
+        return f"in {s} s"
+    m, h, d = s // 60 % 60, s // 3600 % 24, s // 86400
+    if d:
+        return f"in {d} day{'s' * (d != 1)}" + (f" {h} h" if h else "")
+    return "in " + (f"{h} h " if h else "") + f"{m} min"
+
+
 def fmt(dt: datetime) -> str:
     return dt.strftime("%a %d %b %H:%M")
 
@@ -59,7 +72,9 @@ class Reminders:
     def pending(self) -> list[dict]:
         with self.lock:
             rows = self.db.execute("SELECT id, text, due, repeat FROM reminders WHERE active=1 ORDER BY due").fetchall()
-        return [{"id": i, "text": t, "when": fmt(datetime.fromisoformat(d)), "repeat": r} for i, t, d, r in rows]
+        now = datetime.now()
+        return [{"id": i, "text": t, "when": fmt(due := datetime.fromisoformat(d)), "in": time_left(due, now),
+                 "repeat": r} for i, t, d, r in rows]
 
     def cancel(self, rid: int) -> bool:
         with self.lock:

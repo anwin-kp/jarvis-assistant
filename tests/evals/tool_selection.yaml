@@ -103,3 +103,6 @@
 - {say: "is my internet working", expect: [network_status]}
 - {say: "open the file I just downloaded", expect: [recent_files]}
 - {say: "open youtube.com in chrome", expect: [open_in_browser, browser_open]}
+- {say: "put chrome on the left and vs code on the right", expect: [arrange_windows]}
+- {say: "clear my downloads older than 30 days", expect: [clean_old_downloads]}
+- {say: "how long is left on my timer", expect: [list_reminders]}
