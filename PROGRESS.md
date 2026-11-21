@@ -32,14 +32,20 @@ Compact state for continuing work without re-reading the codebase. Update it wit
 ## Done (PRs)
 #26–#41 voice engine, Spotify, vision, operator, HUD attachments, location, cut-in, memory/learner ·
 #43 cloud actions + fallback · #44 verified actions · #45 review + voice fixes · #46 lessons + plan-then-do ·
-#47 Gemini flash-lite · #48 voice test + 600 ms pre-roll · #49 short words · #50 task playbooks · #51 read-only tools don't back claims · #52 email modify · #54 Spotify retry + cloud handover · #55 smaller cloud requests · #56 offline tasks (local eval, offline Spotify) · #57 distant speech kept · #58 weekly self-check · #59 live captions · #60 briefing when you sit down · #61 conversation survives restarts ·
+#47 Gemini flash-lite · #48 voice test + 600 ms pre-roll · #49 short words · #50 task playbooks · #51 read-only tools don't back claims · #52 email modify · #54 Spotify retry + cloud handover · #55 smaller cloud requests · #56 offline tasks (local eval, offline Spotify) · #57 distant speech kept · #58 weekly self-check · #59 live captions · #60 briefing when you sit down · #61 conversation survives restarts · #63-#67 smoke-test fixes (self-echo, gated-mic echo, operator Gemini fallback, list_processes) ·
 overlay branch: transparent overlay, Ctrl+Alt+J/H/D, auto-hide over fullscreen/gaming, position & size settings (gear), tray Overlay submenu.
 
 ## Backlog (highest impact first)
 1. Act on the weekly self-check summary (HUD notice + data/review/): fix the top failure classes.
 2. Tools that need internet fail offline (weather, web, email): consider cached last-known answers.
 
+## Testing
+- Live smoke test (14 real commands via the HUD websocket, safe/reversible): check replies, timings,
+  `Barge-in accepted` / `Heard my own voice` / `status=error` counts in the log since the last restart.
+
 ## Known issues
 - Groq free tier: 8k tokens/min per model. Cloud requests send ~10 tools (playbook + closest by meaning) and the
   last 3 exchanges; a mid-task 429 hands over to Gemini as plain text. Operator screenshots are ~4k tokens.
+- Loud Bluetooth speaker + gated headset mic: the echo can be louder than the user's voice; talking over
+  JARVIS then needs a louder voice (HUD Stop always works).
 - Windows location is IP-based (~20 km) on this PC; `location.home` overrides.
