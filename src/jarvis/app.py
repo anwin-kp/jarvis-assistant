@@ -104,8 +104,12 @@ def build(dry_run: bool = False):
     reg.gaming = gaming.GamingMode(brain, gcfg.get("processes", []), gcfg.get("auto_detect", True))
     gaming.register(reg, reg.gaming)
     bcfg = cfg.get("briefing", {})
+    from jarvis.core.proactive import idle_seconds
+
     reg.reminders = reminders.Reminders(memory, lambda kind, text: None,
-                                        bcfg.get("time") if bcfg.get("enabled", True) else None)
+                                        bcfg.get("time") if bcfg.get("enabled", True) else None,
+                                        briefing_until=bcfg.get("until", "14:00"),
+                                        present_fn=lambda: idle_seconds() < 60)  # briefing when you sit down
     reminders.register(reg, reg.reminders)
 
     from jarvis.integrations import home_assistant
