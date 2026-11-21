@@ -1,0 +1,23 @@
+id: dark-mode
+title: Switch dark mode or screen brightness
+triggers:
+- make everything dark
+- my eyes hurt
+- turn on dark mode
+- switch to light mode
+- the screen is too bright
+what: Switches Windows between dark and light mode, and/or changes screen brightness.
+steps:
+- set_dark_mode(on=true|false)
+- 'too bright / eyes hurt: also set_brightness(percent=30..50)'
+tools:
+- set_dark_mode
+- set_brightness
+verify:
+- set_dark_mode's result says '(checked)'
+errors:
+- symptom: 'WARNING: Windows didn''t change'
+  recovery: tell the user; open_settings(page=personalization)
+safety: safe, no approval.
+status: verified
+source: curated

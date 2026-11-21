@@ -1,0 +1,20 @@
+id: radio-toggle
+title: Turn Wi-Fi or Bluetooth on or off
+triggers:
+- turn off bluetooth
+- turn on wifi
+- disable wi-fi
+what: Switches the Wi-Fi or Bluetooth radio.
+steps:
+- set_radio(kind=wifi|bluetooth, on=true|false)
+tools:
+- set_radio
+verify:
+- the result confirms the new state
+errors:
+- symptom: radio not found / access denied
+  recovery: open_settings(page=wifi|bluetooth) for the user
+safety: Turning Wi-Fi OFF cuts the internet (and JARVIS's cloud features); say so before doing it. Bluetooth off
+  disconnects the speaker/headset.
+status: verified
+source: curated

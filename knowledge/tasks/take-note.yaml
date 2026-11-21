@@ -1,0 +1,21 @@
+id: take-note
+title: Write down or find a note
+triggers:
+- 'take a note: buy milk'
+- write this down
+- what did I note about the SSD
+what: Saves a note, or searches notes.
+steps:
+- 'save: take_note(text=..., title=<short>)'
+- 'find: search_notes(query=...)'
+tools:
+- take_note
+- search_notes
+verify:
+- take_note returns the saved note's title
+errors:
+- symptom: no notes found
+  recovery: say so; offer to list recent notes
+safety: 'private: stays on this PC.'
+status: verified
+source: curated

@@ -1,0 +1,22 @@
+id: open-app
+title: Open an application
+triggers:
+- open notepad
+- launch calculator
+- start Chrome
+- open VS Code
+what: Starts a Windows application from the known app list.
+steps:
+- open_app(name=<app>)
+tools:
+- open_app
+verify:
+- 'the result says ''(checked: its window is open)'''
+errors:
+- symptom: 'ERROR: not in my app list'
+  recovery: tell the user the known apps; they can add it in config.yaml
+- symptom: no window appeared yet
+  recovery: say it may still be loading
+safety: safe, no approval.
+status: verified
+source: curated
