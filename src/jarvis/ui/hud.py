@@ -53,6 +53,7 @@ class Hud:
         self.mode = "window"  # hud.mode: window (Edge app window) | overlay (transparent desktop overlay)
         self.token = secrets.token_urlsafe(24)
         self.clients: set = set()
+        self.no_stats: set = set()  # connected views that don't show the CPU/GPU gauges (the overlay)
         self.history: deque = deque(maxlen=150)
         self.latest: dict = {}  # last state/flags/stats, replayed to new windows
         self.loop: asyncio.AbstractEventLoop | None = None
@@ -72,11 +73,17 @@ class Hud:
         for ws in list(self.clients):
             asyncio.ensure_future(self._send(ws, event))
 
+    @property
+    def shows_stats(self) -> bool:
+        """Is a window that shows the CPU/GPU gauges connected? (nvidia-smi costs ~70 ms per call)"""
+        return bool(set(self.clients) - self.no_stats)
+
     async def _send(self, ws, event: dict) -> None:
         try:
             await ws.send_json(event)
         except Exception:
             self.clients.discard(ws)
+            self.no_stats.discard(ws)
 
     # ------------------------------------------------------------ server
     def _make_app(self):
@@ -136,6 +143,8 @@ class Hud:
                 return
             await ws.accept()
             self.clients.add(ws)
+            if ws.query_params.get("view") == "overlay":
+                self.no_stats.add(ws)
             for event in [*self.history, *self.latest.values()]:
                 await ws.send_json(event)
             try:
@@ -171,6 +180,7 @@ class Hud:
                 pass
             finally:
                 self.clients.discard(ws)
+                self.no_stats.discard(ws)
 
         return app
 

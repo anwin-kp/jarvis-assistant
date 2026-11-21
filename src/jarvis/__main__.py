@@ -641,6 +641,8 @@ class App:
         import psutil
 
         while not self.quit.wait(3):
+            if self.hud and not self.hud.shows_stats:
+                continue  # no window shows the gauges (HUD closed / overlay only): don't measure
             try:
                 gpu = None
                 r = subprocess.run(["nvidia-smi", "--query-gpu=utilization.gpu,memory.used,memory.total",
