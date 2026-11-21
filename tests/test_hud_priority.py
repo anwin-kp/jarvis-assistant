@@ -79,3 +79,26 @@ def test_measured_mishearings_are_corrected():
 
     assert normalize_heard("Bosta Music") == "Pause the music" and normalize_heard("Posta musical.") != "Posta musical."
     assert is_stop_command("Go.") and is_stop_command("stop") and not is_stop_command("go to sleep")
+
+
+def test_short_words_are_kept_but_only_as_commands():
+    import numpy as np
+
+    from jarvis.__main__ import SHORT_WORDS
+    from jarvis.audio.engine import AudioEngine
+
+    for w in ("Stop.", "Go.", "Continue", "next", "Yes.", "pause", "Thanks, Jarvis."):
+        assert SHORT_WORDS.match(w), w
+    for w in ("Thank you for watching.", "Uh", "the", "Bye bye bye"):
+        assert not SHORT_WORDS.match(w), w
+
+    events = []
+    eng = AudioEngine(lambda kind, data: events.append((kind, data)), min_speech_ms=250)
+    frame = np.zeros(480, np.int16)
+    for voiced, want in ((6, "short utterance"), (2, "noise"), (10, "utterance")):  # 180 ms / 60 ms / 300 ms
+        events.clear()
+        eng._frames, eng._voiced, eng._capture_barge, eng._capture_after_wake = [frame] * 20, voiced, False, False
+        eng._finish_capture()
+        kind, data = events[-1]
+        got = "noise" if kind == "noise" else ("short utterance" if data.short else "utterance")
+        assert got == want, (voiced, got)
