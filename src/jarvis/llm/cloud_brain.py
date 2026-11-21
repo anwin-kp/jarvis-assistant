@@ -106,6 +106,13 @@ def personal_context(messages: list[dict], keep: bool) -> list[dict]:
     return out
 
 
+def recent(messages: list[dict], turns: int = 3) -> list[dict]:
+    """System prompt + the last few exchanges: every cloud step resends the whole conversation."""
+    head = [m for m in messages[:1] if m.get("role") == "system"]
+    body = messages[len(head):]
+    return head + body[-(2 * turns + 1):]
+
+
 def as_text_history(messages: list[dict]) -> list[dict]:
     """Hand a half-done turn to another provider: tool calls and results become plain text (Gemini rejects tool-call
     records written by another model: "missing a thought_signature"). It reads what already ran and finishes."""
@@ -250,11 +257,14 @@ class Router:
         return self.mode == "cloud_first" or (self.gaming and self.cloud_in_gaming)
 
     def respond(self, messages: list[dict], tools: list[dict], confirm: ConfirmFn, on_sentence=None,
-                think: bool = False, private: bool | None = None, action: bool = False) -> str:
+                think: bool = False, private: bool | None = None, action: bool = False,
+                cloud_tools: list[dict] | None = None) -> str:
         if self._use_cloud(tools, think, private, action):
             try:
-                public_tools = [t for t in tools or [] if not self._is_private(t)]  # the cloud never gets private tools
-                reply = self.cloud.respond(personal_context(messages, self.share_personal), public_tools, confirm)
+                offered = cloud_tools if cloud_tools is not None else tools
+                public_tools = [t for t in offered or [] if not self._is_private(t)]  # never private tools
+                msgs = recent(personal_context(messages, self.share_personal))
+                reply = self.cloud.respond(msgs, public_tools, confirm)
                 self.last_tool_calls, self.last_backend = self.cloud.last_tool_calls, "cloud"
                 return reply
             except CloudUnavailable as e:

@@ -30,6 +30,18 @@ class SemanticGroups:
         self._matrix = m / (np.linalg.norm(m, axis=1, keepdims=True) + 1e-9)
         self._names = names
 
+    def rank_tools(self, text: str, k: int = 10) -> list[str]:
+        """The k tools whose descriptions are closest to the request (for small cloud requests)."""
+        try:
+            if self._matrix is None or len(self._names) != len(self.reg.names()):
+                self._build()
+            q = self.embed([f"search_query: {text}"])[0]
+            scores = self._matrix @ (q / (np.linalg.norm(q) + 1e-9))
+            return [self._names[i] for i in np.argsort(-scores)[:k]]
+        except Exception as e:
+            logger.debug("Semantic tool ranking unavailable: {}", e)
+            return []
+
     def pick(self, text: str) -> set[str]:
         try:
             if self._matrix is None or len(self._names) != len(self.reg.names()):
