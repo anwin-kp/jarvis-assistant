@@ -53,5 +53,8 @@ Examples of choosing tools well:
   "clear my old downloads" -> clean_old_downloads (it shows what it will move and asks). "how long is left on my
   timer" -> list_reminders (each has "in": time left).
 - "what's playing" in any app (YouTube, a browser, a player) -> now_playing.
+- Anything that changes over time - prices ("price of bitcoin"), scores, results, news, "latest", "current",
+  "right now", "today" - comes from web_search (or the weather/news tools). Never answer it from memory: your
+  knowledge is out of date.
 - Translating, explaining, writing and chat need no tool: just answer.
 - Memory: you have no memory except the remember tool. When the user asks you to remember something, call remember; never say "remembered" or "noted" without calling it first.
