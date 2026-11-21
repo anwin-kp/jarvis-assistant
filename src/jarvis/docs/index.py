@@ -18,7 +18,25 @@ CREATE TABLE IF NOT EXISTS doc_chunks(id INTEGER PRIMARY KEY, path TEXT, chunk I
 CREATE INDEX IF NOT EXISTS doc_chunks_path ON doc_chunks(path);
 """
 EXTENSIONS = {".pdf", ".docx", ".txt", ".md"}
-SKIP_DIRS = {"node_modules", ".git", ".venv", "__pycache__", "AppData", "$RECYCLE.BIN"}
+SKIP_DIRS = {"node_modules", ".git", ".venv", "__pycache__", "AppData", "$RECYCLE.BIN", "My Games",
+             "Rockstar Games", "Custom Office Templates", "WindowsPowerShell", "Zoom"}
+# app/launcher data inside Documents (Rockstar's launcher cache filled the index with word lists)
+SKIP_DIR_WORDS = ("cache", "service worker", "logs", "crash", "telemetry", "renderer", "zxcvbn")
+
+
+def skip_dir(name: str) -> bool:
+    low = name.lower()
+    return (name in SKIP_DIRS or name.startswith(".") or low in ("temp", "tmp")
+            or any(w in low for w in SKIP_DIR_WORDS))
+
+
+def is_prose(text: str) -> bool:
+    """Human writing, not a word list / data dump / licence (a .txt of one word per line is not a document)."""
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    if not lines:
+        return False
+    single = sum(1 for ln in lines if " " not in ln)
+    return single / len(lines) < 0.6
 MAX_FILE_MB = 25
 
 
@@ -96,10 +114,11 @@ class DocIndex:
     def _files(self):
         for root in self.folders:
             for dirpath, dirnames, filenames in os.walk(root):
-                dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS and not d.startswith(".")]
+                dirnames[:] = [d for d in dirnames if not skip_dir(d)]
                 for f in filenames:
                     p = Path(dirpath) / f
-                    if p.suffix.lower() in EXTENSIONS and not f.startswith("~$") and is_local(p):
+                    if (p.suffix.lower() in EXTENSIONS and not f.startswith(("~$", "LICENSE", "license"))
+                            and is_local(p)):
                         yield p
 
     def index(self) -> str:
@@ -117,7 +136,11 @@ class DocIndex:
                     st = p.stat()
                     if st.st_size > MAX_FILE_MB * 2**20 or known.get(key) == st.st_mtime:
                         continue
-                    chunks = chunk_text(extract_text(p))
+                    text = extract_text(p)
+                    if p.suffix.lower() in (".txt", ".md") and not is_prose(text):
+                        seen.discard(key)  # not a document: dropped from the index below
+                        continue
+                    chunks = chunk_text(text)
                     vecs = [self.embed([f"search_document: {c}" for c in chunks[i:i + 32]])
                             for i in range(0, len(chunks), 32)]
                     with self.lock:
