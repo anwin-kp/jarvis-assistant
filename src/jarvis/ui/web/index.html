@@ -163,26 +163,47 @@
   body.overlay, body.overlay .app { background:transparent !important; }
   body.overlay #hex, body.overlay .top, body.overlay .left, body.overlay .wave, body.overlay .status .m { display:none; }
   body.overlay .app { display:block; padding:0; height:100%; }
-  body.overlay .center { position:fixed; right:14px; bottom:10px; width:230px; height:auto; }
-  body.overlay #reactor { width:210px; }
+  body.overlay .center { position:fixed; width:calc(var(--ov-r, 210px) + 20px); height:auto; }
+  body.overlay #reactor { width:var(--ov-r, 210px); }
   body.overlay .status { margin-top:-10px; }
   body.overlay .status .s { font-size:11px; letter-spacing:.45em; }
-  body.overlay .right { position:fixed; right:250px; bottom:22px; width:min(460px, 42vw); height:72vh; background:transparent;
+  body.overlay .right { position:fixed; width:min(var(--ov-w, 460px), 42vw); height:72vh; background:transparent;
                         border:0; box-shadow:none; clip-path:none; contain:none; }
   body.overlay .right::before, body.overlay .right::after, body.overlay .right .ptitle { display:none; }
   body.overlay #log { justify-content:flex-end; overflow:hidden; padding:0 4px; }
   body.overlay .msg { background:rgba(4,16,30,.82); backdrop-filter:blur(8px); box-shadow:0 4px 24px rgba(0,0,0,.35); }
-  body.overlay:not(.ov-active) .msg { animation:rise .3s ease, ovfade 1.2s ease 16s forwards; }
+  body.overlay:not(.ov-active) .msg { animation:rise .3s ease, ovfade 1.2s ease var(--ov-fade, 16s) forwards; }
+  body.overlay[data-fade="never"]:not(.ov-active) .msg { animation:rise .3s ease; }
   body.overlay:not(.ov-active) .notice, body.overlay:not(.ov-active) .composer,
   body.overlay:not(.ov-active) .bottom { display:none; }
   @keyframes ovfade { to { opacity:0; visibility:hidden; } }
   body.overlay.ov-active .right { background:rgba(2,8,16,.72); backdrop-filter:blur(10px); border:1px solid var(--line); }
   body.overlay.ov-active #log { overflow:auto; padding:10px 14px; }
-  body.overlay.ov-active .bottom { position:fixed; right:250px; top:16px; width:auto; padding:10px; background:rgba(2,8,16,.72);
+  body.overlay.ov-active .bottom { position:fixed; width:auto; padding:10px; background:rgba(2,8,16,.72);
                                    backdrop-filter:blur(10px); border:1px solid var(--line); }
-  body.overlay .ov-hint { position:fixed; right:22px; bottom:262px; font:500 9px var(--hdr); letter-spacing:.25em;
+  body.overlay .ov-hint { position:fixed; font:500 9px var(--hdr); letter-spacing:.25em;
                           color:var(--dim); text-shadow:0 0 6px #000; opacity:.8; }
   body:not(.overlay) .ov-hint { display:none; }
+  /* overlay position (corner) and size: set from the overlay's settings (gear button) */
+  body.overlay[data-corner$="r"] .center { right:14px; left:auto; } body.overlay[data-corner$="l"] .center { left:14px; right:auto; }
+  body.overlay[data-corner^="b"] .center { bottom:10px; top:auto; } body.overlay[data-corner^="t"] .center { top:10px; bottom:auto; }
+  body.overlay[data-corner$="r"] .right, body.overlay[data-corner$="r"].ov-active .bottom { right:calc(var(--ov-r, 210px) + 40px); left:auto; }
+  body.overlay[data-corner$="l"] .right, body.overlay[data-corner$="l"].ov-active .bottom { left:calc(var(--ov-r, 210px) + 40px); right:auto; }
+  body.overlay[data-corner^="b"] .right { bottom:22px; top:auto; } body.overlay[data-corner^="t"] .right { top:22px; bottom:auto; }
+  body.overlay[data-corner^="t"] #log { justify-content:flex-start; }
+  body.overlay[data-corner^="b"].ov-active .bottom { top:16px; bottom:auto; }
+  body.overlay[data-corner^="t"].ov-active .bottom { bottom:16px; top:auto; }
+  body.overlay[data-corner$="r"] .ov-hint { right:22px; left:auto; } body.overlay[data-corner$="l"] .ov-hint { left:22px; right:auto; }
+  body.overlay[data-corner^="b"] .ov-hint { bottom:calc(var(--ov-r, 210px) + 52px); top:auto; }
+  body.overlay[data-corner^="t"] .ov-hint { top:calc(var(--ov-r, 210px) + 52px); bottom:auto; }
+  #ov-gear { display:none; } body.overlay.ov-active #ov-gear { display:inline-block; }
+  #ov-set { position:fixed; inset:0; z-index:9; display:none; place-items:center; }
+  #ov-set.open { display:grid; }
+  #ov-set .panel { width:min(460px, 92vw); padding:6px 4px 14px; }
+  #ov-set .row { display:flex; align-items:center; gap:8px; padding:8px 16px; flex-wrap:wrap; }
+  #ov-set .row label { width:110px; font:500 10px var(--hdr); letter-spacing:.2em; color:var(--dim); }
+  #ov-set .row button { padding:8px 10px; }
+  body:not(.overlay) #ov-gear, body:not(.overlay) #ov-set { display:none !important; }
 
   @media (max-width: 1150px) {
     .app { grid-template-columns:1fr 380px; grid-template-areas:"top top" "center right" "bottom right"; }
@@ -234,6 +255,23 @@
       <input type="file" id="file" multiple hidden>
     </div>
   </section>
+  <div id="ov-set"><section class="panel">
+    <div class="ptitle">Overlay position &amp; size <small>SAVED</small></div>
+    <div class="row"><label>CORNER</label>
+      <button data-k="corner" data-v="tl">↖ Top left</button><button data-k="corner" data-v="tr">↗ Top right</button>
+      <button data-k="corner" data-v="bl">↙ Bottom left</button><button data-k="corner" data-v="br">↘ Bottom right</button></div>
+    <div class="row"><label>REACTOR</label>
+      <button data-k="size" data-v="s">Small</button><button data-k="size" data-v="m">Medium</button>
+      <button data-k="size" data-v="l">Large</button></div>
+    <div class="row"><label>MESSAGES</label>
+      <button data-k="width" data-v="narrow">Narrow</button><button data-k="width" data-v="normal">Normal</button>
+      <button data-k="width" data-v="wide">Wide</button></div>
+    <div class="row"><label>FADE AFTER</label>
+      <button data-k="fade" data-v="8">8 s</button><button data-k="fade" data-v="16">16 s</button>
+      <button data-k="fade" data-v="30">30 s</button><button data-k="fade" data-v="never">Never</button></div>
+    <div class="row"><label>DISPLAY</label><span style="color:var(--dim)">Ctrl+Alt+D moves it to the next display</span></div>
+    <div class="row" style="justify-content:flex-end"><button id="ov-close">Done</button></div>
+  </section></div>
   <div id="viewer"><img alt=""></div>
   <div id="mem"><section class="panel">
     <div class="ptitle">What I know about you <small id="mem-count"></small></div>
@@ -255,6 +293,7 @@
       <button data-cmd="/briefing">Briefing</button>
       <button id="b-memory" title="What JARVIS knows about you">Memory</button>
       <button id="b-stop" class="warn hidden">■ Stop</button>
+      <button id="ov-gear" title="Overlay position and size">⚙ Overlay</button>
       <button id="b-kill" class="warn">Shut down</button>
     </div>
   </footer>
@@ -475,6 +514,31 @@ document.addEventListener("drop", (ev) => {
   if (ev.dataTransfer?.files?.length) addFiles(ev.dataTransfer.files);
 });
 $("viewer").onclick = () => { $("viewer").style.display = "none"; };
+
+/* ---------- overlay settings: corner, reactor size, message width, fade (saved by JARVIS) ---------- */
+const OV_SIZES = { s: 150, m: 210, l: 290 }, OV_WIDTHS = { narrow: 340, normal: 460, wide: 640 };
+let ovSettings = { corner: "br", size: "m", width: "normal", fade: "16" };
+function ovApply(st) {
+  const b = document.body, r = document.documentElement.style;
+  b.dataset.corner = st.corner; b.dataset.fade = st.fade;
+  b.style.setProperty("--ov-r", (OV_SIZES[st.size] || 210) + "px");
+  b.style.setProperty("--ov-w", (OV_WIDTHS[st.width] || 460) + "px");
+  if (st.fade !== "never") b.style.setProperty("--ov-fade", st.fade + "s");
+  document.querySelectorAll("#ov-set [data-k]").forEach((x) => x.classList.toggle("on", st[x.dataset.k] === x.dataset.v));
+  void r;
+}
+if (OVERLAY) {
+  ovApply(ovSettings);
+  fetch(`/overlay-settings?token=${token}`).then((r) => r.json()).then((st) => { ovSettings = { ...ovSettings, ...st }; ovApply(ovSettings); })
+    .catch(() => {});
+  $("ov-gear").onclick = () => $("ov-set").classList.add("open");
+  $("ov-close").onclick = () => $("ov-set").classList.remove("open");
+  document.querySelectorAll("#ov-set [data-k]").forEach((x) => x.onclick = () => {
+    ovSettings[x.dataset.k] = x.dataset.v; ovApply(ovSettings);
+    fetch(`/overlay-settings?token=${token}`, { method: "POST", headers: { "Content-Type": "application/json" },
+                                                body: JSON.stringify(ovSettings) }).catch(() => {});
+  });
+}
 
 /* ---------- memory panel: what JARVIS knows about you ---------- */
 function memSend(action, extra = {}) { if (ws && ws.readyState === 1) ws.send(JSON.stringify({ action, ...extra })); }

@@ -43,3 +43,13 @@ def test_fullscreen_detection(monkeypatch):
     assert not overlay.fullscreen_in_front(9)
     fake.update(cls="Game", mon_fg=2)  # fullscreen, but on the other display
     assert not overlay.fullscreen_in_front(9)
+
+
+def test_overlay_settings_keep_only_valid_choices(monkeypatch, tmp_path):
+    from jarvis.ui import hud
+
+    monkeypatch.setattr(hud, "OVERLAY_SETTINGS", tmp_path / "s.json")
+    assert hud.load_overlay_settings() == hud.OVERLAY_DEFAULTS
+    out = hud.save_overlay_settings({"corner": "tl", "size": "l", "fade": "never", "evil": "x", "width": "huge"})
+    assert out == {"corner": "tl", "size": "l", "width": "normal", "fade": "never"}
+    assert hud.load_overlay_settings() == out
