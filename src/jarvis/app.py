@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+from loguru import logger
+
 from jarvis.core.config import DATA, ensure_data_dirs, load_config, load_persona
 from jarvis.core.orchestrator import Orchestrator
 from jarvis.llm.ollama_brain import OllamaBrain
@@ -119,6 +121,9 @@ def build(dry_run: bool = False):
         brain.share_personal = bool((cfg.get("memory") or {}).get("share_with_cloud", False))
     orch = Orchestrator(brain, reg, memory, load_persona(cfg.get("persona")), cfg.get("history_turns", 8),
                         cfg.get("idle_summary_minutes", 10))
+    orch.history_file = DATA / "conversation.json"  # the conversation continues after a restart
+    if n := orch.restore(cfg.get("history_keep_hours", 12)):
+        logger.info("Continuing the conversation ({} messages)", n)
     if (cfg.get("location") or {}).get("in_prompt", True):
         orch.location_fn = locator.city  # "Panaji, Goa, India": lets "near me" questions work
     if cfg["llm"].get("semantic_tools", True):
