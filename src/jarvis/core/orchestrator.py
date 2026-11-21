@@ -32,6 +32,10 @@ INTERVIEW = """GET-TO-KNOW-YOU MODE is on: you are getting to know the user so y
   learned, and call end_interview."""
 
 
+# "what's this error", "summarize this page", "what am I looking at": the words point at the active window
+CONTEXT = re.compile(r"\b(?:this|these|here|current(?:ly)?|on (?:my |the )?screen|in front of me|"
+                     r"i'?m (?:looking at|in|on|reading|watching))\b", re.I)
+
 _FILLER = re.compile(
     r"\s*(?:let me know|feel free to|is there anything else|if you need anything|anything else i can)[^.!?]*[.!?]?\s*$",
     re.IGNORECASE,
@@ -66,6 +70,7 @@ class Orchestrator:
         self.history: list[dict] = []  # plain-text turns only
         self.semantic = None  # SemanticGroups
         self.location_fn = None  # () -> "City, Region, Country" (cached) or None
+        self.window_fn = None  # () -> "app: window title" the user is working in, or None
         self.last_think = False
         self.idle_seconds = idle_summary_minutes * 60
         self.last_activity = time.monotonic()
@@ -78,6 +83,13 @@ class Orchestrator:
         personal = []
         if self.location_fn and (where := self.location_fn()):
             personal.append(f"The user is currently in or near: {where} (approximate).")
+        if self.window_fn and query and CONTEXT.search(query):  # private: inside the block the cloud never gets
+            try:
+                if win := self.window_fn():
+                    personal.append(f"The window the user is working in right now: {win} ('this' / 'here' "
+                                    "probably means it; look_at_screen can read it).")
+            except Exception:
+                pass
         if facts := self.memory.profile(query):
             personal.append("What you know about the user (use it naturally, without being asked; categories "
                             "in brackets; [lessons] are corrections the user gave you: always follow them):\n"
