@@ -22,11 +22,15 @@ _DO = (r"(?:check|look|lower|raise|reduce|increase|dim|brighten|turn|set|switch|
        r"mute|unmute|enable|disable|launch|schedule|remind|note|write|type|move|rename|lock|get|fetch|pull up)")
 PROMISES = re.compile(rf"\bI(?:'ll| will|'m going to| am going to)\s+(?:now |just |quickly |go ahead and )?{_DO}\b"
                       rf"|\b(?:let me(?! know)|one moment|just a moment|give me a (?:second|moment))\b", re.IGNORECASE)
+_DOING = (r"(?:closing|opening|launching|starting|stopping|playing|pausing|resuming|muting|unmuting|setting|"
+          r"turning|switching|locking|sending|saving|deleting|moving|minimi[sz]ing|maximi[sz]ing|skipping)")
 CLAIMS_ACTION = re.compile(
     rf"(?:\bI(?:'ve| have| just| also)?\b|\bdone\b[,.!: -]+(?:I've |I )?)\s*{_FILLER}{{0,2}}{_DONE}\b"
     rf"|\b(?:has|have) (?:now |just |successfully )?been {_DONE}\b"
     rf"|\b(?:is|are) now (?:\w+ )?{_DONE}\b"
     rf"|\bsuccessfully {_DONE}\b"
+    # an action in progress, said as the whole answer: "Closing notepad.", "Okay, opening Spotify now."
+    rf"|^\s*(?:(?:ok(?:ay)?|sure|alright|right away)[,.!]?\s*)?{_DOING}\b"
     # reporting what an app/screen shows without having looked ("The display shows 84")
     rf"|\b(?:the )?(?:display|screen|window|app|calculator|page) (?:now )?(?:shows|says|displays|reads)\b",
     re.IGNORECASE,
