@@ -62,6 +62,8 @@ voice:
   addressed_window_s: 60 # always-listening: after this long without talking to JARVIS, it needs its name
                          #   ("Jarvis, ...") so it ignores other people and the TV. 0 = answer everything
   follow_up_seconds: 4   # after a spoken reply, keep listening this long without the wake word
+  max_spoken_words: 35   # speak about this much (whole sentences), then "More on screen." (the HUD shows it all);
+                         #   asking for detail ("explain", "in detail", "five facts") reads everything. 0 = off
 
 tray: true               # system-tray icon
 
