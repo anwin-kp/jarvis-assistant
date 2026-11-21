@@ -102,3 +102,12 @@ def test_short_words_are_kept_but_only_as_commands():
         kind, data = events[-1]
         got = "noise" if kind == "noise" else ("short utterance" if data.short else "utterance")
         assert got == want, (voiced, got)
+
+
+def test_distant_speech_is_kept_but_silence_and_gibberish_are_not():
+    from jarvis.stt.groq_stt import keep_segment
+
+    assert keep_segment(0.00, -1.12)  # mic away from the mouth: real speech, lower confidence (was dropped)
+    assert not keep_segment(0.85, -1.3)  # probably silence AND low confidence
+    assert keep_segment(0.85, -0.4)  # confident words are kept
+    assert not keep_segment(0.0, -2.4)  # gibberish

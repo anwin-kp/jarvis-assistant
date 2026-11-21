@@ -64,7 +64,9 @@ class WhisperSTT:
             segments, info = self.model.transcribe(audio, language=best, beam_size=1, vad_filter=True,
                                                     initial_prompt=self.vocabulary or None)
         # Drop segments Whisper itself thinks are not speech or is very unsure about (noise, TV murmur).
-        kept = [s.text.strip() for s in segments if s.no_speech_prob < 0.6 and s.avg_logprob > -1.0]
+        from jarvis.stt.groq_stt import keep_segment
+
+        kept = [s.text.strip() for s in segments if keep_segment(s.no_speech_prob, s.avg_logprob)]
         text = " ".join(kept).strip()
         if is_hallucination(text):
             return "", info.language

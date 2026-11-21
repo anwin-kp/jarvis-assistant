@@ -15,6 +15,15 @@ LANG_CODES = {"english": "en", "hindi": "hi", "malayalam": "ml", "tamil": "ta", 
               "french": "fr", "german": "de", "arabic": "ar", "chinese": "zh", "japanese": "ja"}
 
 
+def keep_segment(no_speech_prob: float, avg_logprob: float) -> bool:
+    """Whisper's own rule: a segment is silence only if it is probably not speech AND low-confidence. Dropping it
+    for either alone (the old rule) threw away real distant speech: "My mix up mesh" with the mic away from the
+    mouth came back as no_speech 0.00 but logprob -1.12, and was deleted. Below -2.0 it is gibberish anyway."""
+    if avg_logprob < -2.0:
+        return False
+    return not (no_speech_prob > 0.6 and avg_logprob < -1.0)
+
+
 def to_wav(audio: np.ndarray, rate: int = 16000) -> bytes:
     buf = io.BytesIO()
     with wave.open(buf, "wb") as w:
@@ -49,7 +58,7 @@ class GroqSTT:
         segs = j.get("segments") or []
         if segs:
             text = " ".join(s["text"].strip() for s in segs
-                            if s.get("no_speech_prob", 0) < 0.6 and s.get("avg_logprob", 0) > -1.0).strip()
+                            if keep_segment(s.get("no_speech_prob", 0), s.get("avg_logprob", 0))).strip()
         else:
             text = (j.get("text") or "").strip()
         detected = LANG_CODES.get(str(j.get("language", "")).lower(), lang or "en")
