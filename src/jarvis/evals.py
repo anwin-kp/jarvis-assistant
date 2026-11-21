@@ -15,7 +15,7 @@ from loguru import logger
 CASES = Path(__file__).resolve().parents[2] / "tests" / "evals" / "tool_selection.yaml"
 
 
-def run(limit: int | None = None, verbose: bool = False, use_fast: bool = True) -> dict:
+def run(limit: int | None = None, verbose: bool = False, use_fast: bool = True, local_only: bool = False) -> dict:
     import jarvis.app as app
 
     logger.remove()
@@ -24,6 +24,8 @@ def run(limit: int | None = None, verbose: bool = False, use_fast: bool = True) 
 
     playbooks.LEARNED, playbooks.NOTES = app.DATA / "tasks" / "learned", app.DATA / "tasks" / "notes"
     cfg, orch, brain, reg, memory, _ = app.build(dry_run=True)
+    if local_only and hasattr(brain, "cloud"):  # "the cloud is unreachable": everything on the local model
+        brain.cloud = None
     from jarvis.core.fast_intents import FastIntents
 
     fast = FastIntents(reg, cfg)
@@ -64,5 +66,6 @@ if __name__ == "__main__":
     ap.add_argument("--limit", type=int)
     ap.add_argument("-v", "--verbose", action="store_true")
     ap.add_argument("--no-fast", action="store_true", help="disable instant commands (baseline)")
+    ap.add_argument("--local", action="store_true", help="cloud unreachable: local model only")
     a = ap.parse_args()
-    run(a.limit, a.verbose, not a.no_fast)
+    run(a.limit, a.verbose, not a.no_fast, a.local)

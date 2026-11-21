@@ -180,16 +180,90 @@ class Spotify:
     def my_playlists(self) -> list[dict]:
         if self._playlists is None or time.time() - self._playlists_at > 600:
             items, url = [], "/me/playlists?limit=50"
-            while url and len(items) < 500:
-                page = self._call("GET", url)
-                items += [p for p in page.get("items", []) if p]
-                nxt = page.get("next")
-                url = nxt.replace(API, "") if nxt else None
+            try:
+                while url and len(items) < 500:
+                    page = self._call("GET", url)
+                    items += [p for p in page.get("items", []) if p]
+                    nxt = page.get("next")
+                    url = nxt.replace(API, "") if nxt else None
+            except requests.RequestException:
+                if cached := saved_playlists():  # offline: the list saved last time
+                    return cached
+                raise
             self._playlists, self._playlists_at = items, time.time()
+            save_playlists(items)
         return self._playlists
 
     def now_playing(self) -> dict | None:
         return self._call("GET", "/me/player/currently-playing") or None
+
+
+PLAYLISTS_FILE = DATA / "spotify-playlists.json"
+
+
+def save_playlists(items: list[dict]) -> None:
+    """Names and links of the user's playlists, so they can be played without internet."""
+    import json
+
+    try:
+        PLAYLISTS_FILE.write_text(json.dumps([{"name": p["name"], "uri": p["uri"]} for p in items if p.get("uri")],
+                                             ensure_ascii=False), encoding="utf-8")
+    except (OSError, KeyError) as e:
+        logger.debug("Couldn't save playlists: {}", e)
+
+
+def saved_playlists() -> list[dict]:
+    import json
+
+    try:
+        return json.loads(PLAYLISTS_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+
+
+def play_in_app(name: str, uri: str) -> str:
+    """No internet (Spotify's web API unreachable): open the playlist in the Spotify app by its link and press its
+    Play button through Windows accessibility - all on this PC, no cloud. Needs the songs downloaded to play."""
+    import os
+
+    from jarvis.agent.uia import run as on_uia
+    from jarvis.tools.registry import wait_for
+    from jarvis.tools.window_tools import find_window
+
+    os.startfile(uri)
+    win = wait_for(lambda: find_window("spotify"), timeout=12)
+    if not win:
+        return "ERROR: the Spotify app didn't open."
+
+    def press_play():
+        from pywinauto import Desktop
+
+        from jarvis.tools.ui_tools import elements
+
+        app = Desktop(backend="uia").window(handle=win["hwnd"])
+        target = name.lower()
+        for _ in range(16):  # the playlist page takes a moment to load
+            for el in elements(app):
+                label = (el.element_info.name or "").lower()
+                if el.element_info.control_type == "Button" and label.startswith("play") and target in label:
+                    try:
+                        el.invoke()
+                    except Exception:
+                        el.click_input()
+                    return True
+            time.sleep(0.5)
+        return False
+
+    if not on_uia(press_play):
+        return f"Opened your playlist '{name}' in Spotify, but couldn't find its Play button (no internet)."
+    import win32gui
+
+    title = wait_for(lambda: (t := win32gui.GetWindowText(win["hwnd"])) and not t.lower().startswith("spotify") and t,
+                     timeout=6)
+    if title:
+        return f"Playing your playlist '{name}' (offline: started in the Spotify app; checked: now playing {title})."
+    return (f"Pressed Play on '{name}' in the Spotify app, but nothing is playing yet - with no internet, only "
+            "downloaded songs can play.")
 
 
 def _describe(item: dict) -> str:
@@ -240,7 +314,16 @@ def register(reg: ToolRegistry, sp: Spotify) -> None:
                 sp.play(context_uri=top["uri"])
             return f"Playing {kind} {_describe(top)}."
 
-        result = run(go)
+        try:
+            result = run(go)
+        except requests.RequestException:  # no internet: Spotify's web API is unreachable
+            if kind == "my_playlist" and (pls := saved_playlists()):
+                m = best_match(query, [p["name"] for p in pls])
+                if m:
+                    p = pls[m[0]]
+                    return play_in_app(p["name"], p["uri"])
+            return ("ERROR: no internet connection, so Spotify can't be controlled online. Offline I can only start "
+                    "your own playlists (downloaded songs).")
         if result.startswith(("ERROR", "Your Liked Songs is empty")):
             return result
         playing = wait_for(lambda: (np := sp.now_playing()) and np.get("is_playing") and np.get("item"))

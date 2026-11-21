@@ -58,3 +58,27 @@ def test_ui_find_and_describe():
     assert ui_tools.find(els, "mix-up") is els[1]
     assert ui_tools.find(els, "2") is els[2]
     assert ui_tools.find(els, "pause") is None
+
+
+def test_no_internet_plays_my_playlist_in_the_app(monkeypatch, tmp_path):
+    import requests
+
+    monkeypatch.setattr(spm, "PLAYLISTS_FILE", tmp_path / "pl.json")
+    spm.save_playlists([{"name": "Mix-Up Mash", "uri": "spotify:playlist:B"},
+                        {"name": "Sleep", "uri": "spotify:playlist:C"}])
+
+    class Offline(FakeSpotify):
+        def _call(self, method, path, **kw):
+            raise requests.ConnectionError("no internet")
+
+    played = []
+    monkeypatch.setattr(spm, "play_in_app", lambda name, uri: played.append((name, uri)) or f"Playing {name}")
+    sp = Offline([])
+    sp._playlists = None
+    reg = ToolRegistry()
+    spm.register(reg, sp)
+    r = reg.execute("spotify_play", {"query": "mixup mesh", "kind": "my_playlist"}, OK)
+    assert played == [("Mix-Up Mash", "spotify:playlist:B")] and r.text == "Playing Mix-Up Mash"
+    r = reg.execute("spotify_play", {"query": "believer", "kind": "song"}, OK)
+    assert r.text.startswith("ERROR: no internet")
+    assert [p["name"] for p in sp.my_playlists()] == ["Mix-Up Mash", "Sleep"]  # the saved list, offline
