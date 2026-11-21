@@ -88,3 +88,21 @@ def test_text_model_rejection_falls_back_to_the_screenshot_model():
     targets = [Target(f"btn: {i}", "ui", (0, 0, 1, 1)) for i in range(20)]
     assert op._decide("t", [], None, targets) is None  # -> run() asks the vision model with the screenshot
     assert op._decide("t", [], Image.new("RGB", (50, 50)), targets) == ("click", {"target": 0})
+
+
+def test_rate_limited_step_uses_gemini_instead_of_waiting():
+    class Http:
+        def __init__(self):
+            self.urls = []
+
+        def post(self, url, **kw):
+            self.urls.append(url)
+            if "groq" in url:
+                return type("R", (), {"status_code": 429, "headers": {"retry-after": "30"}, "text": "limit"})()
+            body = {"choices": [{"message": {"tool_calls": [{"function": {"name": "done", "arguments": "{}"}}]}}]}
+            return type("R", (), {"status_code": 200, "json": lambda self: body})()
+
+    http = Http()
+    op = Operator("key", http=http, fallback_key="gem")
+    assert op._decide("t", [], Image.new("RGB", (40, 40)), [Target("x", "ui", (0, 0, 1, 1))]) == ("done", {})
+    assert len(http.urls) == 2 and "generativelanguage" in http.urls[1]  # no 30 s wait

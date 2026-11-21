@@ -200,3 +200,23 @@ def test_live_caption_drafts_while_talking():
     partials = [d for k, d in ev if k == "partial"]
     assert 1 <= len(partials) <= 3 and len(partials[-1]) > len(partials[0]) * 0.99
     assert utterances(ev)  # the final utterance still comes
+
+
+def test_gated_echo_bursts_do_not_interrupt():
+    """The headset driver zeroes quiet sound: JARVIS's echo arrives as loud bursts between exact silence."""
+    import numpy as np
+
+    from jarvis.audio.engine import AudioEngine
+
+    events = []
+    eng = AudioEngine(lambda k, d: events.append(k), is_speech=lambda f: True, calibrate_ms=300,
+                      sounds_like_jarvis=lambda a: False)
+    zero = np.zeros(480, np.int16)
+    burst = (np.ones(480) * 0.09 * 32767).astype(np.int16)
+    for _ in range(20):
+        eng.process(zero)
+    eng.set_speaking(True)
+    pattern = ([burst] * 4 + [zero] * 5) * 12  # syllables of echo with gated silence between
+    for f in pattern:
+        eng.process(f)
+    assert "barge" not in events
