@@ -292,7 +292,10 @@ class Operator:
         waited = 0.0
         while True:
             r = self.http.post(GROQ, timeout=60, headers={"Authorization": f"Bearer {self.key}"}, json=body)
-            if getattr(r, "status_code", 200) == 429 and self.fallback_key:
+            short_wait = float((getattr(r, "headers", None) or {}).get("retry-after") or 99) <= 6
+            # Gemini flash-lite is a weaker operator (it read "press 12 times 7" as "press 7 twelve times"): a short
+            # Groq wait is better than a worse step; only long waits go to Gemini.
+            if getattr(r, "status_code", 200) == 429 and self.fallback_key and not short_wait:
                 alt = {k: v for k, v in body.items() if k != "reasoning_effort"}
                 alt.update(model=self.fallback_model, reasoning_effort="low")
                 g = self.http.post(GEMINI, timeout=60, headers={"Authorization": f"Bearer {self.fallback_key}"},
