@@ -53,6 +53,9 @@ uv sync
 .\start-jarvis.ps1
 ```
 
+Not sure everything is in place? `.\jarvis.ps1 doctor` checks Python, packages, Ollama, the AI model, the GPU,
+the microphone and your keys, and tells you the exact next step for anything missing.
+
 When the HUD window opens and you hear **"JARVIS online"**, it works. Say **"Jarvis, what time is it?"**
 
 Then add desktop and Start menu icons (one click to start, plus a **Kill JARVIS** icon):
@@ -223,6 +226,8 @@ Restart after changes: `.\jarvis.ps1 restart`.
 ## 8. Everyday commands
 
 ```powershell
+.\jarvis.ps1 update        # get the latest version (pull, sync packages, restart, show what's new)
+.\jarvis.ps1 doctor        # check the setup and get the next step for anything missing
 .\jarvis.ps1 status        # is JARVIS / Ollama / the model running? GPU memory
 .\jarvis.ps1 restart       # after config changes
 .\jarvis.ps1 logs -Follow  # watch the log (data\logs\jarvis.log)

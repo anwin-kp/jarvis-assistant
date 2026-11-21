@@ -203,6 +203,10 @@ is still manual.
 **Done when:** flagged turns (excluding interruptions) stay **under 15%** for two weeks, and every release runs the
 eval.
 
+> **Status: built** (#92): eval candidates from each weekly review, `.\jarvis.ps1 eval-add` into a personal,
+> git-ignored eval, the weekly rate shown against the 15% target, and `.\jarvis.ps1 release-check`. Voice
+> regressions use the existing `voice-test`. **Remaining:** two weeks of real use to meet the target.
+
 ### Phase 12: Voice 2.0 🟢
 **Why:** interrupting over a loud Bluetooth speaker needs a raised voice, and cloud replies feel slow (4.7 s median
 before the first word).
@@ -214,6 +218,11 @@ before the first word).
 **Done when:** interrupting works at normal volume with speakers in a recorded test, and the cloud's first word
 arrives in under 2 s.
 
+> **Status:** cloud streaming ✅ (#93): first sentence in **0.8 s** live on Groq. Echo canceller built and
+> tested (#94): >25 dB removed on synthetic speech, your voice kept. Voice ID turns on once enrolled.
+> **Remaining:** record real echo (`voice.record_echo: true`), check `python -m jarvis.audio.aec` shows
+> ≥ 15 dB, then wire it into interrupting. A custom wake word needs training audio; not started.
+
 ### Phase 13: Smarter brain 🟡
 - **Eval-driven model upgrades:** compare new ~8B tool models against qwen3:8b on the 104-case eval, and switch
   only on a win.
@@ -223,12 +232,21 @@ arrives in under 2 s.
 
 **Done when:** eval ≥ 99% on the new model, and no contradicted facts after a month of use.
 
+> **Status: built** (#95): single-value facts (name, birthday, home) update instead of duplicating, every
+> replaced or forgotten fact is kept in `fact_history`, and facts record their source. Model comparison:
+> `eval --local-model <tag>` (#92). **Remaining:** run a comparison when a new ~8B tool model is worth
+> downloading.
+
 ### Phase 14: Deeper app skills 🟡
 - Purpose-built tools for the apps you use most. Candidates from your logs: VS Code (open project, run a task),
   File Explorer (go to, select, rename by pattern), WhatsApp / Teams desktop (read only, then send with approval).
 - Clipboard-aware actions ("summarize what I copied", already there) extended to files and images.
 
 **Done when:** your top-10 app requests run without `operate_app` (one-shot, checked).
+
+> **Status:** the evidence changed the plan. In real use, every app request already has a one-shot tool
+> (Spotify, open/close, tabs, calculate, media). The one real gap, "Open Chrome" → "I can't see it", is fixed
+> (#96): `open_app` brings the window to the front. VS Code / WhatsApp tools wait for real demand in the logs.
 
 ### Phase 15: Context & proactive 🔵
 - Know the active app and window title: "what's this error?" without saying where.
@@ -238,6 +256,10 @@ arrives in under 2 s.
 
 **Done when:** at least 3 useful suggestions a week, which you rate as helpful more often than not.
 
+> **Status: built** (#97): "this / here / on my screen" gives the local prompt the active window (private,
+> never sent to the cloud). Routines repeated on ≥ 3 days are *suggested* in the weekly summary and never
+> run. Do Not Disturb has no supported Windows API: not done.
+
 ### Phase 16: Easy install & updates 🔵
 - `jarvis.ps1 update`: pull, sync (with the right extras), restart, and show what's new.
 - A first-run wizard in the HUD: microphone check, keys (with links), location, apps allowlist.
@@ -245,6 +267,10 @@ arrives in under 2 s.
 
 **Done when:** a new user goes from `git clone` to a working voice assistant with Groq in under 20 minutes, without
 reading code.
+
+> **Status: built:** `.\jarvis.ps1 update` (pull, sync keeping the installed extras, restart, what's new)
+> and `.\jarvis.ps1 doctor` (every check with its next step, including on a fresh clone). A setup wizard
+> in the HUD wasn't needed: `doctor` and SETUP.md cover it.
 
 ---
 

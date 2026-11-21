@@ -54,4 +54,4 @@ def test_idle_session_is_summarized(tmp_path):
     assert mem.recent_summaries()[0].endswith("User asked about chai.")
     assert "User asked about chai." in orch.system_prompt()
     assert "chai" in " ".join(mem.recall("chai"))
-    assert set(mem.export()) == {"facts", "summaries", "messages", "audit_log"}
+    assert set(mem.export()) == {"facts", "fact_history", "summaries", "messages", "audit_log"}

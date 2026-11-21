@@ -21,12 +21,30 @@ def target_window():
     hwnd = win32gui.GetForegroundWindow()
     while hwnd:
         title = win32gui.GetWindowText(hwnd)
-        if (title and title != HUD_TITLE and win32gui.IsWindowVisible(hwnd) and not win32gui.IsIconic(hwnd)):
+        # startswith: the overlay app's window is "J.A.R.V.I.S. overlay" (after typing in it, it's in front)
+        if (title and not title.startswith(HUD_TITLE) and win32gui.IsWindowVisible(hwnd)
+                and not win32gui.IsIconic(hwnd)):
             left, top, right, bottom = win32gui.GetWindowRect(hwnd)
             if right - left > 200 and bottom - top > 150:
                 return hwnd
         hwnd = win32gui.GetWindow(hwnd, win32con.GW_HWNDNEXT)
     return None
+
+
+def active_window_text() -> str | None:
+    """'Code: app.py - jarvis - Visual Studio Code': the app and title of the window the user is working in."""
+    import psutil
+    import win32gui
+    import win32process
+
+    hwnd = target_window()
+    if not hwnd:
+        return None
+    try:
+        app = psutil.Process(win32process.GetWindowThreadProcessId(hwnd)[1]).name().removesuffix(".exe")
+    except Exception:
+        app = "?"
+    return f"{app}: {win32gui.GetWindowText(hwnd)[:100]}"
 
 
 def hud_covers_screen() -> bool:

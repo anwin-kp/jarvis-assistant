@@ -12,6 +12,7 @@ import threading
 import time
 from datetime import datetime
 
+import numpy as np
 from loguru import logger
 
 from jarvis.app import build
@@ -86,12 +87,14 @@ class Voice:
         self._tts_cache: dict = {}
         self.voiceid = None
         idcfg = vcfg.get("voice_id") or {}
-        if idcfg.get("enabled"):
+        mode = idcfg.get("enabled", "auto")  # auto = on as soon as you've enrolled your voice
+        if mode is True or str(mode).lower() == "auto":
             from jarvis.audio.voiceid import VoiceID
 
             self.voiceid = VoiceID(DATA / "models" / "voiceid", idcfg.get("threshold", 0.45))
             if not self.voiceid.enrolled:
-                logger.warning("Voice ID is on but no voice is enrolled: run .\\jarvis.ps1 enroll-voice")
+                if mode is True:
+                    logger.warning("Voice ID is on but no voice is enrolled: run .\\jarvis.ps1 enroll-voice")
                 self.voiceid = None
         self.tts = None
         if vcfg.get("tts_engine", "piper") == "piper":
@@ -385,7 +388,7 @@ class App:
                 from jarvis.memory.learner import clean_fact
 
                 if fact := clean_fact(f"[other] In their own words: {text}"):
-                    self.memory.learn(fact)
+                    self.memory.learn(fact, "taught")
         return self.memory.list_facts()
 
     def _weekly_review(self) -> None:
@@ -393,6 +396,13 @@ class App:
         from jarvis import review
 
         if summary := review.run_weekly():
+            from jarvis.core.routines import weekly_note
+
+            try:
+                if note := weekly_note(DATA / "jarvis.db"):  # suggestions only: JARVIS never acts on a routine itself
+                    summary += " " + note
+            except Exception:
+                logger.exception("Routine check failed")
             logger.info(summary)
             self.q.put(("notice", summary))
 
@@ -465,6 +475,14 @@ class App:
             sounds_like_jarvis=self.voice.sounds_like_jarvis,
             wake_detector=self.wake.process if self.wake else None)
         self.engine.set_mode(self._engine_mode())
+        self._echo_rec = None
+        if vcfg.get("record_echo"):  # evidence for echo cancellation: mic + what was played, per reply (local only)
+            from jarvis.audio.aec import EchoRecorder
+
+            self._echo_rec = EchoRecorder(DATA / "voice-log" / "echo")
+            self.engine.tap = lambda f: self._echo_rec.mic(f.astype(np.float32) / 32768)
+            self.voice.tts.on_audio = self._echo_rec.ref
+            logger.info("Recording JARVIS's echo for evaluation (voice.record_echo): data/voice-log/echo")
         self.engine.start()
         threading.Thread(target=self._stt_worker, daemon=True, name="recognition").start()
 
@@ -693,6 +711,8 @@ class App:
                         self._spoke_at = time.monotonic()
                         if self.engine and self._speech_q.unfinished_tasks <= 1:  # no more sentences waiting
                             self.engine.set_speaking(False)
+                            if getattr(self, "_echo_rec", None):
+                                threading.Thread(target=self._echo_rec.flush, daemon=True, name="echo-rec").start()
             except Exception:
                 logger.exception("TTS failed")
             finally:

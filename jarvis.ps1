@@ -13,6 +13,11 @@
     .\jarvis.ps1 logs [-Follow]   # show the log file
     .\jarvis.ps1 test             # run unit tests and lint
     .\jarvis.ps1 eval             # score how well JARVIS understands requests (local, ~3 min)
+    .\jarvis.ps1 eval --local-model qwen3:4b   # compare another local model on the same cases
+    .\jarvis.ps1 eval-add         # add the week's reviewed failures to your personal eval (data\evals)
+    .\jarvis.ps1 release-check    # lint + tests + eval >= 95% (run before a release)
+    .\jarvis.ps1 update           # get the latest version: pull, sync packages (keeps the overlay extra), restart
+    .\jarvis.ps1 doctor           # check the setup: Python, Ollama, model, mic, GPU, keys - with the next step
     .\jarvis.ps1 autostart-on     # start JARVIS (minimized) when you log in to Windows
     .\jarvis.ps1 autostart-off
     .\jarvis.ps1 review           # find last week's turns that went wrong (report in data
@@ -27,7 +32,7 @@ eview)
 #>
 param(
     [Parameter(Position = 0)]
-    [ValidateSet('start', 'stop', 'restart', 'status', 'free', 'stop-all', 'logs', 'test', 'autostart-on', 'autostart-off', 'google-login', 'set-key', 'shortcut', 'enroll-voice', 'eval', 'review', 'voice-test', 'tasks', 'spotify-login', 'help')]
+    [ValidateSet('start', 'stop', 'restart', 'status', 'free', 'stop-all', 'logs', 'test', 'autostart-on', 'autostart-off', 'google-login', 'set-key', 'shortcut', 'enroll-voice', 'eval', 'eval-add', 'release-check', 'update', 'doctor', 'review', 'voice-test', 'tasks', 'spotify-login', 'help')]
     [string]$Command = 'help',
     [switch]$DryRun,
     [switch]$Text,
@@ -174,6 +179,39 @@ function Invoke-Logs {
     else { Get-Content $LogFile -Tail $Lines -Encoding UTF8 }
 }
 
+function Stop-Overlay {
+    # The overlay app (own process) and its Qt web engine hold DLLs open: 'uv sync' can't replace them while they run
+    Get-CimInstance Win32_Process -Filter "Name='pythonw.exe' OR Name='python.exe' OR Name='QtWebEngineProcess.exe'" |
+        Where-Object { $_.CommandLine -match 'jarvis.ui.overlay' -or ($_.Name -eq 'QtWebEngineProcess.exe' -and $_.ExecutablePath -and $_.ExecutablePath.StartsWith($Root)) } |
+        ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+}
+
+function Invoke-Update {
+    Push-Location $Root
+    try {
+        if (git status --porcelain --untracked-files=no) { throw 'You have local changes in the code. Commit or stash them first.' }
+        $wasRunning = @(Get-JarvisProcesses).Count -gt 0
+        $before = git rev-parse HEAD
+        git pull --ff-only
+        if ($LASTEXITCODE) { throw 'git pull failed (see above).' }
+        $after = git rev-parse HEAD
+        if ($before -eq $after) { Write-Ok 'Already up to date.'; return }
+        Stop-Jarvis
+        Stop-Overlay
+        Start-Sleep -Seconds 2
+        # keep the extras that are installed (the overlay branch needs --extra overlay; a plain sync uninstalls it)
+        $extra = @()
+        if (Test-Path (Join-Path $Root '.venv\Lib\site-packages\PySide6')) { $extra = @('--extra', 'overlay') }
+        $uv = (Get-Command uv -ErrorAction SilentlyContinue).Source
+        if (-not $uv) { $uv = Join-Path $Root '.venv\Scripts\uv.exe' }
+        & $uv sync @extra
+        if ($LASTEXITCODE) { throw 'uv sync failed (see above). Fix it, then run: .\jarvis.ps1 start' }
+        Write-Ok 'Updated. What''s new:'
+        git log --oneline --no-merges "$before..$after" | Select-Object -First 15 | ForEach-Object { Write-Info $_ }
+        if ($wasRunning) { Invoke-Start }
+    } finally { Pop-Location }
+}
+
 function Invoke-Test {
     Push-Location $Root
     try {
@@ -241,7 +279,28 @@ switch ($Command) {
     'voice-test'    { Stop-Jarvis; Push-Location $Root; try { & $Python -W ignore -m jarvis.voicetest } finally { Pop-Location }; Write-Host '  Start JARVIS again with: .\jarvis.ps1 start' }
     'tasks'         { Push-Location $Root; try { $env:PYTHONIOENCODING = 'utf-8'; & $Python -W ignore -m jarvis.tasks @(@($Name, $Arg) | Where-Object { $_ }) } finally { Pop-Location } }
     'review'        { Push-Location $Root; try { $env:PYTHONIOENCODING = 'utf-8'; & $Python -W ignore -m jarvis.review } finally { Pop-Location } }
-    'eval'          { Push-Location $Root; try { $env:PYTHONIOENCODING = 'utf-8'; & $Python -W ignore -m jarvis.evals } finally { Pop-Location } }
+    'eval'          { Push-Location $Root; try { $env:PYTHONIOENCODING = 'utf-8'; & $Python -W ignore -m jarvis.evals @(@($Name, $Arg) | Where-Object { $_ }) } finally { Pop-Location } }
+    'update'        { Invoke-Update }
+    'doctor'        {
+        if (-not (Test-Path $Python)) {  # a fresh clone: no environment yet, so the Python check can't run
+            Write-Warn 'No Python environment yet. Install the tools, then create it:'
+            Write-Info 'winget install Python.Python.3.12 astral-sh.uv Ollama.Ollama'
+            Write-Info 'uv sync        (in this folder; then run .\jarvis.ps1 doctor again)'
+            return
+        }
+        Push-Location $Root; try { $env:PYTHONIOENCODING = 'utf-8'; & $Python -W ignore -m jarvis.doctor } finally { Pop-Location } }
+    'eval-add'      { Push-Location $Root; try { $env:PYTHONIOENCODING = 'utf-8'; & $Python -W ignore -m jarvis.review --add @(@($Name) | Where-Object { $_ }) } finally { Pop-Location } }
+    'release-check' {
+        # before a release: lint + tests + the eval on the local model (public + your own cases) must pass
+        Push-Location $Root
+        try {
+            $env:PYTHONIOENCODING = 'utf-8'
+            & $Python -m ruff check src tests; if ($LASTEXITCODE) { throw 'Lint failed.' }
+            & $Python -m pytest -q; if ($LASTEXITCODE) { throw 'Tests failed.' }
+            & $Python -W ignore -m jarvis.evals --local --min-accuracy 95; if ($LASTEXITCODE) { throw 'Eval below 95%.' }
+            Write-Ok 'Release check passed.'
+        } finally { Pop-Location }
+    }
     'spotify-login' { Push-Location $Root; try { & $Python -W ignore -m jarvis.integrations.spotify } finally { Pop-Location } }
     'enroll-voice'  { Push-Location $Root; try { & $Python -W ignore -m jarvis.audio.voiceid } finally { Pop-Location } }
     'set-key'       {

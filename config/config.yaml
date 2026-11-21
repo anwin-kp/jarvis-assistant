@@ -54,8 +54,10 @@ voice:
   barge_in: true         # talk over JARVIS to interrupt it (echo from speakers is filtered out)
   barge_in_rms: 0.02     # minimum loudness to interrupt (adapts upward to JARVIS's echo)
   echo_tail_ms: 700      # keep ignoring JARVIS's voice this long after it stops (Bluetooth speakers lag)
+  record_echo: false     # true = save mic + JARVIS's own audio while it speaks (data/voice-log/echo, local only),
+                         #   to measure echo cancellation: python -m jarvis.audio.aec
   voice_id:              # only obey your voice; enroll first: .\jarvis.ps1 enroll-voice
-    enabled: false
+    enabled: auto        # auto = on once you have enrolled | true | false
     threshold: 0.45      # higher = stricter
   wake_word: true        # also load "Hey Jarvis" (wake_word mode, and waking up after "go to sleep")
   wake_threshold: 0.5    # 0.3 = more sensitive, 0.7 = fewer false wakes
