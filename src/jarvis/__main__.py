@@ -519,6 +519,12 @@ class App:
                 if not self.busy.is_set():
                     self._state("ready")
                 continue
+            if utt.short and not (SHORT_WORDS.match(text) or is_stop_command(text) or self.fast.matches(text)):
+                logger.info("Short sound, not a command: {!r} (ignored)", text[:40])
+                self._publish("user_cancel")
+                if not self.busy.is_set():
+                    self._state("ready")
+                continue
             # 1-2 words over JARVIS that aren't a known command ("He's moved" for a mumbled "stop") = stop
             short_interrupt = utt.barge and len(text.split()) <= 2 and not self.fast.matches(text)
             just_spoke = time.monotonic() - self._spoke_at < 5  # "stop" right after JARVIS talked
@@ -1025,6 +1031,10 @@ def single_instance(name: str = "Local\\JARVIS-assistant-instance") -> bool:
 
 COMMON_CAPS = {"Is", "Has", "Likes", "Works", "Lives", "Prefers", "From", "Uses", "Speaks", "Built", "Also",
                "Since", "Earlier", "Personal", "Maintains", "Looking", "Building", "The", "And", "With", "For"}
+# What a very short sound may be: one-word commands and replies (anything else from a short sound is noise).
+SHORT_WORDS = re.compile(r"^\W*(stop|go|continue|resume|pause|play|next|skip|back|previous|yes|yeah|yep|no|nope|"
+                         r"okay|ok|cancel|mute|unmute|louder|quieter|thanks|thank you|hi|hey|hello|jarvis)"
+                         r"(\W+jarvis)?\W*$", re.I)
 NAME = re.compile(r"\b(jarvis|jervis|javis|jarvi|jarves|jarvish)\b", re.I)
 
 
