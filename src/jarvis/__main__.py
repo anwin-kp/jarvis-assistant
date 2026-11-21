@@ -877,6 +877,15 @@ class App:
             idx.start_background()  # make them searchable later
         # documents stay on this PC (like files); image descriptions already came from the cloud vision model
         private = any(p.suffix.lower() not in attachments.IMAGE_EXT for p in paths)
+        docs = [p for p in paths if p.suffix.lower() not in attachments.IMAGE_EXT]
+        if self.learner and docs and ABOUT_ME.search(text or ""):  # "learn about me from my LinkedIn profile"
+            def learn():
+                for p in docs:
+                    try:
+                        self.learner.learn_document(attachments.extract(p), attachments.display_name(p))
+                    except Exception:
+                        logger.exception("Learning from {} failed", p)
+            threading.Thread(target=learn, daemon=True, name="learn-document").start()
         return self.handle(prompt, show=False, route_text=text, private=private)
 
     def handle(self, text: str, show: bool = True, route_text: str | None = None, private: bool = False) -> bool:
@@ -1123,6 +1132,9 @@ def proper_names(text: str) -> list[str]:
 COMMON_CAPS = {"Is", "Has", "Likes", "Works", "Lives", "Prefers", "From", "Uses", "Speaks", "Built", "Also",
                "Since", "Earlier", "Personal", "Maintains", "Looking", "Building", "The", "And", "With", "For"}
 # What a very short sound may be: one-word commands and replies (anything else from a short sound is noise).
+# the user says an attached file is about them: learn from all of it (not just the first 500 characters)
+ABOUT_ME = re.compile(r"\b(?:about me|learn|remember|train|my (?:own )?(?:profile|resume|cv|linkedin|bio|details))\b",
+                      re.IGNORECASE)
 SHORT_WORDS = re.compile(r"^\W*(stop|go|continue|resume|pause|play|next|skip|back|previous|yes|yeah|yep|no|nope|"
                          r"okay|ok|cancel|mute|unmute|louder|quieter|thanks|thank you|hi|hey|hello|jarvis)"
                          r"(\W+jarvis)?\W*$", re.I)

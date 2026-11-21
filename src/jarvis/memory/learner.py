@@ -51,6 +51,33 @@ Answer with JSON only (empty lists if nothing new):
 {{"add": [{{"fact": "[category] ...", "evidence": "exact user words"}}],
   "replace": [{{"id": 0, "fact": "[category] ...", "evidence": "exact user words"}}]}}"""
 
+DOC_PROMPT = """The user of a personal assistant called JARVIS shared a document about THEMSELVES: {name}
+(their own profile / CV / bio, e.g. a LinkedIn profile saved as PDF). Extract lasting facts about the user:
+who they are, work history (company, role, dates), skills, education, certifications, projects, places,
+languages, goals.
+
+Rules:
+- At most 6 NEW facts for this part. Summarise: merge related bullet points into one fact (a project = one
+  fact: what it is, for whom, the key tech). Never copy a bullet point or a heading as a fact.
+- Skip anything a known fact already covers, even partly or in other words. Nothing new: empty lists.
+- Only what this part of the document says about the user. No guesses, no facts about the world.
+- Skip email addresses, phone numbers, street addresses and other secrets.
+- Each fact: one short third-person sentence starting with a category in brackets, e.g.
+  "[work] Senior Flutter Developer at Gadgeon since 2022." Categories: {cats}.
+- Every fact needs "evidence": exact words copied from the document part below.
+- If a fact updates an existing one, put it in "replace" with that id. Already known facts must not be added
+  again (the same thing worded differently is already known).
+
+Known facts (id: fact):
+{facts}
+
+Document part:
+{part}
+
+Answer with JSON only (empty lists if nothing new):
+{{"add": [{{"fact": "[category] ...", "evidence": "exact words from the document"}}],
+  "replace": [{{"id": 0, "fact": "[category] ...", "evidence": "exact words from the document"}}]}}"""
+
 _CAT = re.compile(r"^(?:\[(\w+)\]|(\w+):)\s*")  # "[music] ..." or "music: ..."
 
 
@@ -73,12 +100,13 @@ def _norm(text: str) -> str:
     return " ".join(re.sub(r"[^\w\s]", " ", text.lower()).split())
 
 
-def supported(item: dict, said: str) -> bool:
-    """The quoted evidence really is (mostly) in what the user said: guards against invented facts."""
+def supported(item: dict, said: str, document: bool = False) -> bool:
+    """The quoted evidence really is (mostly) in what the user said: guards against invented facts. A document
+    the user says is about them (CV, profile) needs no "I/my": it is about them by definition."""
     ev = _norm(str(item.get("evidence", "")))
     if len(ev) < 3:
         return False
-    if not FIRST_PERSON.search(ev):  # "what's the weather in Goa" says nothing about the user
+    if not document and not FIRST_PERSON.search(ev):  # "what's the weather in Goa" says nothing about the user
         return False
     fact_words = {w for w in _norm(_CAT.sub("", str(item.get("fact", "")))).split() if len(w) > 2} - STOP
     if not fact_words & set(ev.split()):  # the quote must be about the fact ("can you see my screen" =/= Spotify)
@@ -88,6 +116,25 @@ def supported(item: dict, said: str) -> bool:
         return True
     words, vocab = ev.split(), set(told.split())
     return len(words) >= 3 and sum(w in vocab for w in words) / len(words) >= 0.8
+
+
+def _content(text: str) -> set[str]:
+    return {w for w in _norm(_CAT.sub("", text)).split() if len(w) > 2} - STOP
+
+
+def good_doc_fact(fact: str, known: list[str]) -> bool:
+    """From a document: a real sentence in a real category, and not something a known fact already says."""
+    body = _CAT.sub("", fact).strip()
+    m = _CAT.match(fact)
+    cat = (m.group(1) or m.group(2) or "").lower() if m else ""
+    if cat in ("", "other") or len(body) < 30 or len(body.split()) < 5:
+        return False  # "QuickOP – Healthcare", "Set up Clean Archi"
+    words = _content(fact)
+    for k in known:
+        kw = _content(k)
+        if words and len(words & kw) / len(words) >= 0.4:  # mostly already known, in other words
+            return False
+    return True
 
 
 def clean_fact(fact: str) -> str | None:
@@ -163,16 +210,37 @@ class Learner:
             return {}
         return data if isinstance(data, dict) else {}
 
-    def apply(self, data: dict, said: str) -> list[str]:
+    def learn_document(self, text: str, name: str, part_chars: int = 2500) -> list[str]:
+        """Learn from a whole document the user says is about them (resume, LinkedIn profile), part by part,
+        on the local model. Each fact must quote the document."""
+        learned: list[str] = []
+        parts = [text[i:i + part_chars] for i in range(0, min(len(text), 40_000), part_chars)]
+        for part in parts:
+            if not part.strip():
+                continue
+            facts = "\n".join(f"{f['id']}: {f['fact']}" for f in self.memory.list_facts()[-80:]) or "(none yet)"
+            raw = self.chat(DOC_PROMPT.format(name=name, cats=", ".join(CATEGORIES), facts=facts, part=part))
+            try:
+                data = json.loads(raw[raw.find("{"): raw.rfind("}") + 1])
+            except ValueError:
+                continue
+            if isinstance(data, dict):
+                data["add"] = [i for i in flatten(data.get("add")) if isinstance(i, dict) and
+                               good_doc_fact(str(i.get("fact", "")), [f["fact"] for f in self.memory.list_facts()])]
+                learned += self.apply(data, part, document=True)
+        logger.info("Learned {} fact(s) from {} ({} part(s))", len(learned), name, len(parts))
+        return learned
+
+    def apply(self, data: dict, said: str, document: bool = False) -> list[str]:
         learned = []
         known = {f["id"] for f in self.memory.list_facts()}
         for item in flatten(data.get("replace")):
-            if (isinstance(item, dict) and item.get("id") in known and supported(item, said)
+            if (isinstance(item, dict) and item.get("id") in known and supported(item, said, document)
                     and (fact := clean_fact(item.get("fact", "")))):
                 if self.memory.replace_fact(int(item["id"]), fact):
                     learned.append(fact)
         for item in flatten(data.get("add")):
-            if not (isinstance(item, dict) and supported(item, said)):
+            if not (isinstance(item, dict) and supported(item, said, document)):
                 logger.debug("Learner: dropped unsupported {}", item)
                 continue
             if (fact := clean_fact(item.get("fact", ""))) and self.memory.learn(fact):
