@@ -2,12 +2,13 @@
 plus the router that decides local vs cloud. Off by default: JARVIS stays 100% local unless you add a key."""
 
 import re
+import threading
 
 import requests
 from loguru import logger
 
 from jarvis.core.config import get_secret
-from jarvis.llm.ollama_brain import acted, unbacked_claim
+from jarvis.llm.ollama_brain import acted, result_reply, stopped_reply, unbacked_claim
 from jarvis.tools.registry import ConfirmFn, ToolRegistry
 
 PROVIDERS = {  # base URL, keyring entry name
@@ -36,6 +37,7 @@ class CloudBrain:
         self.max_steps, self.timeout = max_steps, timeout
         self.extra = extra or {}  # provider-specific request options, e.g. {"reasoning_effort": "low"}
         self.last_tool_calls: list[str] = []
+        self.cancel = threading.Event()  # the Router shares the local brain's: "stop" ends a cloud turn too
 
     @property
     def name(self) -> str:  # each Groq model has its own free per-minute budget: cool down per model
@@ -61,13 +63,21 @@ class CloudBrain:
             except (TypeError, ValueError):
                 pass
             raise e
-        if not r.ok:
-            raise CloudUnavailable(f"{self.provider} HTTP {r.status_code}: {r.text[:200]}")
-        data = r.json()
+        if not r.ok:  # a bad request (e.g. Groq's "tool_use_failed"): try the next model, but no cooldown
+            e = CloudUnavailable(f"{self.provider} HTTP {r.status_code}: {r.text[:200]}")
+            e.retry_after = 0.0
+            raise e
+        try:
+            data = r.json()
+            msg = data["choices"][0]["message"]
+        except (ValueError, KeyError, IndexError, TypeError) as err:  # a garbled answer must not crash the turn
+            e = CloudUnavailable(f"{self.name}: unexpected answer ({err})")
+            e.retry_after = 0.0
+            raise e from err
         if u := data.get("usage"):
             logger.debug("Cloud {}: {} prompt + {} reply tokens", self.name, u.get("prompt_tokens"),
                          u.get("completion_tokens"))
-        return data["choices"][0]["message"]
+        return msg
 
     def complete(self, messages: list[dict]) -> str:
         return (self._chat(messages, None).get("content") or "").strip()
@@ -79,6 +89,8 @@ class CloudBrain:
         self.last_tool_calls = list(prior_tools or [])
         nudged = False
         for _ in range(self.max_steps):
+            if self.cancel.is_set():
+                return stopped_reply(self.last_tool_calls)
             try:
                 msg = self._chat(msgs, tools)
             except CloudUnavailable as e:
@@ -95,8 +107,12 @@ class CloudBrain:
                     msgs += [{"role": "assistant", "content": reply}, {"role": "user", "content": nudge}]
                     continue
                 return reply
+            if self.cancel.is_set():  # interrupted while the request was out: don't run what it asked for
+                return stopped_reply(self.last_tool_calls)
             msgs.append({"role": "assistant", "content": msg.get("content") or "", "tool_calls": calls})
             for c in calls:
+                if self.cancel.is_set():
+                    return stopped_reply(self.last_tool_calls)
                 name = c["function"]["name"]
                 self.last_tool_calls.append(name)
                 res = self.reg.execute(name, c["function"].get("arguments") or "{}", confirm)
@@ -174,15 +190,6 @@ def as_text_history(messages: list[dict]) -> list[dict]:
                     + json.dumps(done, ensure_ascii=False) + ". Continue from here: answer the user, or take the next "
                     "step only if one is still needed."})
     return out
-
-
-def result_reply(results: list[str] | None) -> str:
-    """The answer when the AI couldn't finish but a tool did: its own (checked) result, plainly."""
-    last = next((r for r in reversed(results or []) if r and r.strip()), "")
-    if not last:
-        return "I did that step, but couldn't finish my answer (my cloud brain is busy). Please check it worked."
-    text = " ".join(last.replace("<untrusted", "").split())[:300]
-    return text if not text.startswith("ERROR") else "That didn't work: " + text[6:].strip(": ")
 
 
 class CloudChain:
@@ -275,6 +282,9 @@ class Router:
         self.last_tool_calls: list[str] = []
         self.last_backend = "local"
         self.share_personal = False  # memory.share_with_cloud: send what JARVIS knows about you to the cloud model
+        if cloud and hasattr(local, "cancel"):
+            for b in getattr(cloud, "brains", None) or [cloud]:
+                b.cancel = local.cancel  # one "stop" for whichever brain is working
 
     @property
     def model(self) -> str:
@@ -301,15 +311,10 @@ class Router:
     def respond(self, messages: list[dict], tools: list[dict], confirm: ConfirmFn, on_sentence=None,
                 think: bool = False, private: bool | None = None, action: bool = False,
                 cloud_tools: list[dict] | None = None) -> str:
-        if self._use_cloud(tools, think, private, action):
+        tried_cloud = self._use_cloud(tools, think, private, action)
+        if tried_cloud:
             try:
-                offered = cloud_tools if cloud_tools is not None else tools
-                public_tools = [t for t in offered or [] if not self._is_private(t)]  # never private tools
-                msgs = recent(personal_context(messages, self.share_personal))
-                msgs = trim_examples(msgs, {t["function"]["name"] for t in public_tools}, set(self.reg.names()))
-                reply = self.cloud.respond(msgs, public_tools, confirm)
-                self.last_tool_calls, self.last_backend = self.cloud.last_tool_calls, "cloud"
-                return reply
+                return self._cloud_turn(messages, tools, confirm, cloud_tools)
             except CloudUnavailable as e:
                 if self.cloud.last_tool_calls:  # a tool already ran; don't repeat it locally
                     logger.warning("Cloud failed after running tools: {}", e)
@@ -319,8 +324,39 @@ class Router:
         kw = {"on_sentence": on_sentence} if on_sentence else {}
         if think:
             kw["think"] = True
-        reply = self.local.respond(personal_context(messages, True), tools, confirm, **kw)
+        try:
+            reply = self.local.respond(personal_context(messages, True), tools, confirm, **kw)
+        except Exception as e:
+            # Ollama stopped or crashed mid-session: a turn that may use the cloud is answered there instead of
+            # failing ("Something went wrong"). Never after a local tool ran (it would run twice), never private.
+            ran = getattr(self.local, "last_tool_calls", None)
+            if tried_cloud or ran or not self._cloud_allowed(tools, private):
+                raise
+            logger.warning("Local model failed ({}); answering with the cloud model", e)
+            try:
+                return self._cloud_turn(messages, tools, confirm, cloud_tools)
+            except CloudUnavailable as ce:
+                if self.cloud.last_tool_calls:
+                    self.last_tool_calls, self.last_backend = self.cloud.last_tool_calls, "cloud"
+                    return result_reply(getattr(ce, "results", None))
+                raise e from ce
         self.last_tool_calls, self.last_backend = self.local.last_tool_calls, "local"
+        return reply
+
+    def _cloud_allowed(self, tools: list[dict], private: bool | None) -> bool:
+        if not (self.cloud and self.cloud.available) or self.private:
+            return False
+        return not (private if private is not None else any(self._is_private(t) for t in tools or []))
+
+    def _cloud_turn(self, messages, tools, confirm, cloud_tools) -> str:
+        if hasattr(self.local, "cancel"):
+            self.local.cancel.clear()
+        offered = cloud_tools if cloud_tools is not None else tools
+        public_tools = [t for t in offered or [] if not self._is_private(t)]  # never private tools
+        msgs = recent(personal_context(messages, self.share_personal))
+        msgs = trim_examples(msgs, {t["function"]["name"] for t in public_tools}, set(self.reg.names()))
+        reply = self.cloud.respond(msgs, public_tools, confirm)
+        self.last_tool_calls, self.last_backend = self.cloud.last_tool_calls, "cloud"
         return reply
 
     def complete(self, messages: list[dict]) -> str:

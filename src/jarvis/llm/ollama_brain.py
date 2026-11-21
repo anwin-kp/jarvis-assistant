@@ -168,13 +168,18 @@ class OllamaBrain:
         self.last_tool_calls: list[str] = []
         self.cancel.clear()
         nudged = False
+        results: list[str] = []
         for step in range(self.max_steps):
+            if self.cancel.is_set():
+                return stopped_reply(self.last_tool_calls)
             think_now = self.think or nudged or think  # think harder on complex requests / the retry
             if on_sentence and not nudged:
                 msg = self._chat_stream(msgs, tools, think_now, on_sentence)
             else:
                 msg = self.client.chat(model=self.model, messages=msgs, tools=tools or None, think=think_now,
                                        keep_alive=self.keep_alive, options=self.options).message
+            if self.cancel.is_set():  # you interrupted while it was writing: don't run what it asked for
+                return stopped_reply(self.last_tool_calls)
             msgs.append(msg)
             if not msg.tool_calls:
                 reply = (msg.content or "").strip()
@@ -187,15 +192,32 @@ class OllamaBrain:
                     continue
                 if nudged and not self.last_tool_calls and CLAIMS_ACTION.search(reply):
                     reply += " (Heads-up: no tool actually ran, so nothing was changed. Please ask again.)"
+                if not reply and results:  # tools ran but the model said nothing: "(no reply)" helped nobody
+                    return result_reply(results)
                 return reply
             for call in msg.tool_calls:
+                if self.cancel.is_set():
+                    return stopped_reply(self.last_tool_calls)
                 name, args = call.function.name, call.function.arguments
                 logger.debug("step {} tool call {} {}", step, name, args)
                 self.last_tool_calls.append(name)
                 result = self.reg.execute(name, args, confirm)
-                msgs.append({
-                    "role": "tool",
-                    "tool_name": name,
-                    "content": ("ERROR: " if result.error else "") + result.text,
-                })
+                content = ("ERROR: " if result.error else "") + result.text
+                results.append(content)
+                msgs.append({"role": "tool", "tool_name": name, "content": content})
         return "That took more steps than I'm allowed, so I stopped. Want me to try a simpler approach?"
+
+
+def stopped_reply(ran: list[str]) -> str:
+    """You interrupted: say so plainly (and what had already run), so the history never claims more."""
+    done = ", ".join(dict.fromkeys(ran))
+    return f"Stopped (already done: {done})." if done else "Stopped."
+
+
+def result_reply(results: list[str] | None) -> str:
+    """The answer when the AI couldn't finish but a tool did: its own (checked) result, plainly."""
+    last = next((r for r in reversed(results or []) if r and r.strip()), "")
+    if not last:
+        return "I did that step, but couldn't finish my answer (my cloud brain is busy). Please check it worked."
+    text = " ".join(last.replace("<untrusted", "").split())[:300]
+    return text if not text.startswith("ERROR") else "That didn't work: " + text[6:].strip(": ")
