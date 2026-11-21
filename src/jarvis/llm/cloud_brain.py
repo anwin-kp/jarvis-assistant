@@ -57,12 +57,20 @@ class CloudBrain:
     def complete(self, messages: list[dict]) -> str:
         return (self._chat(messages, None).get("content") or "").strip()
 
-    def respond(self, messages: list[dict], tools: list[dict], confirm: ConfirmFn, on_sentence=None) -> str:
+    def respond(self, messages: list[dict], tools: list[dict], confirm: ConfirmFn, on_sentence=None,
+                prior_tools: list[str] | None = None) -> str:
+        """prior_tools: tools another provider already ran in this turn (their results are in messages)."""
         msgs = list(messages)
-        self.last_tool_calls = []
+        self.last_tool_calls = list(prior_tools or [])
         nudged = False
         for _ in range(self.max_steps):
-            msg = self._chat(msgs, tools)
+            try:
+                msg = self._chat(msgs, tools)
+            except CloudUnavailable as e:
+                if self.last_tool_calls:  # tools already ran: hand over the conversation, results included
+                    e.partial = msgs
+                    e.results = [m["content"] for m in msgs if m.get("role") == "tool"]
+                raise
             calls = msg.get("tool_calls") or []
             if not calls:
                 reply = (msg.get("content") or "").strip()
@@ -96,6 +104,36 @@ def personal_context(messages: list[dict], keep: bool) -> list[dict]:
             m = {**m, "content": (head.rstrip() + kept + tail).strip()}
         out.append(m)
     return out
+
+
+def as_text_history(messages: list[dict]) -> list[dict]:
+    """Hand a half-done turn to another provider: tool calls and results become plain text (Gemini rejects tool-call
+    records written by another model: "missing a thought_signature"). It reads what already ran and finishes."""
+    import json
+
+    out, done = [], []
+    for m in messages:
+        if m.get("role") == "assistant" and m.get("tool_calls"):
+            for c in m["tool_calls"]:
+                done.append(f"{c['function']['name']}({c['function'].get('arguments') or ''})")
+        elif m.get("role") == "tool":
+            done[-1:] = [f"{done[-1]} -> {m.get('content', '')[:600]}"] if done else []
+        else:
+            out.append(m)
+    if done:
+        out.append({"role": "user", "content": "[System] Already done in this turn (do NOT run these again): "
+                    + json.dumps(done, ensure_ascii=False) + ". Continue from here: answer the user, or take the next "
+                    "step only if one is still needed."})
+    return out
+
+
+def result_reply(results: list[str] | None) -> str:
+    """The answer when the AI couldn't finish but a tool did: its own (checked) result, plainly."""
+    last = next((r for r in reversed(results or []) if r and r.strip()), "")
+    if not last:
+        return "I did that step, but couldn't finish my answer (my cloud brain is busy). Please check it worked."
+    text = " ".join(last.replace("<untrusted", "").split())[:300]
+    return text if not text.startswith("ERROR") else "That didn't work: " + text[6:].strip(": ")
 
 
 class CloudChain:
@@ -145,7 +183,31 @@ class CloudChain:
         raise CloudUnavailable(str(last) if last else "no cloud provider available")
 
     def respond(self, messages, tools, confirm, on_sentence=None) -> str:
-        return self._try(lambda b: b.respond(messages, tools, confirm))
+        """Groq's free per-minute limit often hits mid-task (after a tool ran). The next provider then continues
+        from the conversation so far, tool results included, so finished actions are never repeated."""
+        import time
+
+        msgs, done, results, last = messages, [], [], None
+        for b in self._ready():
+            self.active = b
+            try:
+                out = b.respond(msgs, tools, confirm, prior_tools=done)
+                self.last_tool_calls = b.last_tool_calls
+                return out
+            except CloudUnavailable as e:
+                logger.warning("Cloud {} unavailable ({}){}", b.provider, e,
+                               "; continuing on the next one from the tool results" if b.last_tool_calls else "")
+                self.cooldown[b.provider] = time.monotonic() + 60
+                if getattr(e, "partial", None):
+                    msgs, done, results = as_text_history(e.partial), list(b.last_tool_calls), e.results
+                elif b.last_tool_calls:  # tools ran but there's nothing to continue from: never risk running them twice
+                    self.last_tool_calls = b.last_tool_calls
+                    raise
+                last = e
+        self.last_tool_calls = done
+        err = CloudUnavailable(str(last) if last else "no cloud provider available")
+        err.results = results
+        raise err
 
     def complete(self, messages) -> str:
         return self._try(lambda b: b.complete(messages))
@@ -198,7 +260,8 @@ class Router:
             except CloudUnavailable as e:
                 if self.cloud.last_tool_calls:  # a tool already ran; don't repeat it locally
                     logger.warning("Cloud failed after running tools: {}", e)
-                    return "I lost the connection to the cloud model midway. Please check whether it finished."
+                    self.last_tool_calls, self.last_backend = self.cloud.last_tool_calls, "cloud"
+                    return result_reply(getattr(e, "results", None))
                 logger.warning("Cloud unavailable ({}); using local model", e)
         kw = {"on_sentence": on_sentence} if on_sentence else {}
         if think:
