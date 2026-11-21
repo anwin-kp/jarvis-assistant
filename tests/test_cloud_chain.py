@@ -123,3 +123,15 @@ def test_rate_limit_waits_only_as_long_as_groq_says(monkeypatch):
     with pytest.raises(CloudUnavailable) as e:
         b._chat([], None)
     assert e.value.retry_after == 4 and b.name == "groq/openai/gpt-oss-20b"
+
+
+def test_cloud_prompt_keeps_only_examples_for_offered_tools():
+    from jarvis.llm.cloud_brain import trim_examples
+
+    sysm = ("Rules.\nExamples of choosing tools well:\n- loud -> set_volume.\n- weather -> get_weather\n"
+            "  with no city.\n- Chat needs no tool: just answer.\n\n[personal]\nfacts")
+    out = trim_examples([{"role": "system", "content": sysm}, {"role": "user", "content": "hi"}],
+                        {"set_volume"}, {"set_volume", "get_weather"})
+    text = out[0]["content"]
+    assert "set_volume" in text and "get_weather" not in text and "with no city" not in text
+    assert "just answer" in text and text.endswith("\n\n[personal]\nfacts") and out[1]["content"] == "hi"

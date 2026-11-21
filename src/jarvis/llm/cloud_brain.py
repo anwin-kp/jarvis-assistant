@@ -1,6 +1,8 @@
 """Optional free-tier cloud brain (Groq / Google Gemini / OpenRouter) via their OpenAI-compatible APIs,
 plus the router that decides local vs cloud. Off by default: JARVIS stays 100% local unless you add a key."""
 
+import re
+
 import requests
 from loguru import logger
 
@@ -117,6 +119,33 @@ def personal_context(messages: list[dict], keep: bool) -> list[dict]:
             m = {**m, "content": (head.rstrip() + kept + tail).strip()}
         out.append(m)
     return out
+
+
+EXAMPLES = "Examples of choosing tools well:"
+
+
+def trim_examples(messages: list[dict], offered: set[str], known: set[str]) -> list[dict]:
+    """Cloud requests offer ~10 tools, but the persona's examples cover ~25 (2.4k of its 4.2k characters, resent
+    on every step). Keep an example if it names an offered tool or names no tool at all (general advice)."""
+    if not messages or messages[0].get("role") != "system" or EXAMPLES not in (messages[0].get("content") or ""):
+        return messages
+    text = messages[0]["content"]
+    head, _, rest = text.partition(EXAMPLES)
+    lines = rest.split("\n")
+    end = next((i for i, ln in enumerate(lines[1:], 1) if not ln.startswith(("-", " "))), len(lines))
+    bullets: list[list[str]] = []
+    for ln in lines[1:end]:
+        if ln.startswith("-") or not bullets:
+            bullets.append([ln])
+        else:
+            bullets[-1].append(ln)  # an indented continuation line belongs to the bullet above
+    kept = []
+    for b in bullets:
+        named = {w for w in re.findall(r"\b[a-z]+(?:_[a-z]+)+\b", " ".join(b)) if w in known}
+        if not named or named & offered:
+            kept += b
+    body = "\n".join([lines[0], *kept, *lines[end:]]) if kept else "\n".join(lines[end:])
+    return [{**messages[0], "content": head + (EXAMPLES + body if kept else body.lstrip("\n"))}, *messages[1:]]
 
 
 def recent(messages: list[dict], turns: int = 3) -> list[dict]:
@@ -277,6 +306,7 @@ class Router:
                 offered = cloud_tools if cloud_tools is not None else tools
                 public_tools = [t for t in offered or [] if not self._is_private(t)]  # never private tools
                 msgs = recent(personal_context(messages, self.share_personal))
+                msgs = trim_examples(msgs, {t["function"]["name"] for t in public_tools}, set(self.reg.names()))
                 reply = self.cloud.respond(msgs, public_tools, confirm)
                 self.last_tool_calls, self.last_backend = self.cloud.last_tool_calls, "cloud"
                 return reply
