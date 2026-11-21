@@ -106,3 +106,21 @@ def test_rate_limited_step_uses_gemini_instead_of_waiting():
     op = Operator("key", http=http, fallback_key="gem")
     assert op._decide("t", [], Image.new("RGB", (40, 40)), [Target("x", "ui", (0, 0, 1, 1))]) == ("done", {})
     assert len(http.urls) == 2 and "generativelanguage" in http.urls[1]  # no 30 s wait
+
+
+def test_short_groq_wait_is_preferred_over_gemini():
+    calls = []
+
+    class Http:
+        def post(self, url, **kw):
+            calls.append(url)
+            if "groq" in url and len(calls) == 1:
+                return type("R", (), {"status_code": 429, "headers": {"retry-after": "2"}, "text": ""})()
+            body = {"choices": [{"message": {"tool_calls": [{"function": {"name": "done", "arguments": "{}"}}]}}]}
+            return type("R", (), {"status_code": 200, "headers": {}, "json": lambda self: body,
+                                  "raise_for_status": lambda self: None})()
+
+    op = Operator("key", http=Http(), fallback_key="gem")
+    op.cancel.wait = lambda s: False  # don't actually sleep in the test
+    assert op._decide("t", [], Image.new("RGB", (40, 40)), [Target("x", "ui", (0, 0, 1, 1))]) == ("done", {})
+    assert all("groq" in u for u in calls)  # waited 2 s for Groq instead of switching
