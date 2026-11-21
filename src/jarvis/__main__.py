@@ -251,6 +251,7 @@ class App:
         self.proactive = Proactive(lambda m: self.q.put(("alert", m)), pcfg.get("battery_percent", 15),
                                    pcfg.get("disk_free_gb", 10), break_minutes=pcfg.get("break_reminder_minutes", 0),
                                    events_fn=events_fn, meeting_minutes=pcfg.get("meeting_reminder_minutes", 10),
+                                   weekly_fn=self._weekly_review,
                                    ) if pcfg.get("enabled", True) else None
         self.telegram = None
 
@@ -368,6 +369,14 @@ class App:
                 if fact := clean_fact(f"[other] In their own words: {text}"):
                     self.memory.learn(fact)
         return self.memory.list_facts()
+
+    def _weekly_review(self) -> None:
+        """Once a week: find the turns that went wrong (jarvis.review) and show a one-line summary in the HUD."""
+        from jarvis import review
+
+        if summary := review.run_weekly():
+            logger.info(summary)
+            self.q.put(("notice", summary))
 
     def _start_learner(self) -> None:
         mcfg = self.cfg.get("memory") or {}

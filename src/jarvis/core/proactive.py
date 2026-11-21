@@ -23,12 +23,13 @@ def idle_seconds() -> float:
 class Proactive:
     def __init__(self, on_alert, battery_percent: int = 15, disk_free_gb: float = 10, interval: float = 60,
                  cooldown_minutes: float = 30, break_minutes: float = 0, idle_fn=idle_seconds, events_fn=None,
-                 meeting_minutes: float = 10):
+                 meeting_minutes: float = 10, weekly_fn=None):
         self.on_alert = on_alert  # on_alert(message)
         self.battery_percent, self.disk_free_gb = battery_percent, disk_free_gb
         self.interval, self.cooldown = interval, cooldown_minutes * 60
         self.break_seconds = break_minutes * 60  # 0 = no break reminders
         self.idle_fn, self.events_fn, self.meeting_minutes = idle_fn, events_fn, meeting_minutes
+        self.weekly_fn = weekly_fn  # the weekly self-check (it keeps its own schedule)
         self._work_start: float | None = None
         self._events_checked = -1e12
         self._announced: set[str] = set()
@@ -50,6 +51,11 @@ class Proactive:
             self._alert("disk", f"Drive C has only {free_gb:.1f} gigabytes free.", now)
         self._check_break(now)
         self._check_meetings(now)
+        if self.weekly_fn:
+            try:
+                self.weekly_fn()
+            except Exception as e:
+                logger.debug("Weekly self-check failed: {}", e)
 
     def _check_break(self, now: float) -> None:
         if not self.break_seconds:

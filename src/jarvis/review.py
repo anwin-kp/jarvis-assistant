@@ -104,6 +104,35 @@ def report(days: float = 7) -> Path:
     return path
 
 
+LAST_RUN = DATA / "review" / "last-run.txt"
+
+
+def run_weekly(every_days: float = 7) -> str | None:
+    """The automatic weekly self-check: at most once every `every_days`, write the report and return a one-line
+    summary for the HUD (None when not due or nothing to report)."""
+    import time
+
+    try:
+        if time.time() - float(LAST_RUN.read_text(encoding="utf-8")) < every_days * 86400:
+            return None
+    except (OSError, ValueError):
+        pass
+    all_turns = turns(every_days)
+    LAST_RUN.parent.mkdir(parents=True, exist_ok=True)
+    LAST_RUN.write_text(str(time.time()), encoding="utf-8")
+    if not all_turns:
+        return None
+    path = report(every_days)
+    counts: dict[str, int] = {}
+    for t in all_turns:
+        for s in set(t["signals"]) - {"stopped"}:  # being talked over is normal, not a failure
+            counts[s] = counts.get(s, 0) + 1
+    flagged = sum(1 for t in all_turns if set(t["signals"]) - {"stopped"})
+    top = ", ".join(f"{k.replace('_', ' ')} {v}" for k, v in sorted(counts.items(), key=lambda kv: -kv[1])[:3])
+    return (f"Weekly self-check: {len(all_turns)} turns, {flagged} went wrong" + (f" ({top})" if top else "")
+            + f". Report: {path.relative_to(DATA.parent)}")
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--days", type=float, default=7)
