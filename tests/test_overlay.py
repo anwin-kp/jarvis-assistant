@@ -19,3 +19,27 @@ def test_hud_falls_back_to_a_window_without_qt(monkeypatch):
     h.mode = "overlay"
     h.open()
     assert opened and "msedge" in opened[0]
+
+
+def test_fullscreen_detection(monkeypatch):
+    import types
+
+    from jarvis.ui import overlay
+
+    mon = (0, 0, 2560, 1600)
+    fake = {"fg": 5, "cls": "Chrome_WidgetWin_1", "rect": mon, "mon_fg": 1, "mon_own": 1}
+    gui = types.SimpleNamespace(GetForegroundWindow=lambda: fake["fg"], GetClassName=lambda h: fake["cls"],
+                                GetWindowRect=lambda h: fake["rect"])
+    api = types.SimpleNamespace(MonitorFromWindow=lambda h, f: fake["mon_fg"] if h == 5 else fake["mon_own"],
+                                GetMonitorInfo=lambda m: {"Monitor": mon})
+    con = types.SimpleNamespace(MONITOR_DEFAULTTONEAREST=2)
+    monkeypatch.setitem(__import__("sys").modules, "win32gui", gui)
+    monkeypatch.setitem(__import__("sys").modules, "win32api", api)
+    monkeypatch.setitem(__import__("sys").modules, "win32con", con)
+    assert overlay.fullscreen_in_front(9)  # a game covering the whole monitor
+    fake["rect"] = (-8, -8, 2568, 1512)  # maximized window: the taskbar stays visible
+    assert not overlay.fullscreen_in_front(9)
+    fake.update(rect=mon, cls="WorkerW")  # the desktop itself
+    assert not overlay.fullscreen_in_front(9)
+    fake.update(cls="Game", mon_fg=2)  # fullscreen, but on the other display
+    assert not overlay.fullscreen_in_front(9)

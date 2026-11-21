@@ -4,9 +4,10 @@ The same HUD page, in overlay mode (?overlay=1): no background, reactor in a cor
 Two modes, like game overlays:
   passive  - mouse clicks go through to your apps; replies appear and fade
   active   - the overlay takes clicks and keys: text box, buttons, approvals
-Ctrl+Alt+J toggles active/passive, Esc returns to passive, Ctrl+Alt+H hides/shows it, Ctrl+Alt+D moves it to the
-next display (remembered). It turns active by itself when
-JARVIS needs an approval. Qt (signed DLLs) works with Smart App Control, unlike an unsigned packed .exe."""
+It hides by itself while a game / fullscreen video is in front or Gaming mode is on.
+Ctrl+Alt+J toggles active/passive (and shows it even then), Esc returns to passive, Ctrl+Alt+H hides/shows it,
+Ctrl+Alt+D moves it to the next display (remembered). It turns active by itself when JARVIS needs an approval.
+Qt (signed DLLs) works with Smart App Control, unlike an unsigned packed .exe."""
 
 import ctypes
 import sys
@@ -15,6 +16,28 @@ from ctypes import wintypes
 
 HOTKEY_ACTIVE, HOTKEY_HIDE, HOTKEY_MOVE = 1, 2, 3
 STATE_FILE = __import__("pathlib").Path(__file__).resolve().parents[3] / "data" / "overlay.json"
+
+
+SHELL_CLASSES = {"Progman", "WorkerW", "Shell_TrayWnd", "Shell_SecondaryTrayWnd"}  # desktop / taskbar
+
+
+def fullscreen_in_front(own_hwnd: int) -> bool:
+    """A game, fullscreen video or F11 browser is in front on the overlay's display: its window covers the whole
+    monitor, taskbar area included (a normal maximized window doesn't)."""
+    import win32api
+    import win32con
+    import win32gui
+
+    fg = win32gui.GetForegroundWindow()
+    if not fg or fg == own_hwnd or win32gui.GetClassName(fg) in SHELL_CLASSES:
+        return False
+    nearest = win32con.MONITOR_DEFAULTTONEAREST
+    mon = win32api.MonitorFromWindow(fg, nearest)
+    if int(mon) != int(win32api.MonitorFromWindow(own_hwnd, nearest)):
+        return False
+    left, top, right, bottom = win32gui.GetWindowRect(fg)
+    m = win32api.GetMonitorInfo(mon)["Monitor"]
+    return left <= m[0] and top <= m[1] and right >= m[2] and bottom >= m[3]
 
 
 def saved_screen() -> str | None:
@@ -103,6 +126,16 @@ def main(url: str, owner_pid: int | None = None) -> int:
 
     place(current)
     state = {"active": False}
+    # why it is hidden: "user" (Ctrl+Alt+H), "fullscreen" (a game/video in front), "gaming" (Gaming mode)
+    hidden_by: set[str] = set()
+
+    def update_visibility() -> None:
+        want = not hidden_by or (state["active"] and "user" not in hidden_by)  # Ctrl+Alt+J shows it anyway
+        if want and not view.isVisible():
+            view.show()
+            set_active(state["active"])
+        elif not want and view.isVisible():
+            view.hide()
 
     def set_active(on: bool) -> None:
         state["active"] = on
@@ -121,19 +154,30 @@ def main(url: str, owner_pid: int | None = None) -> int:
             save_screen(screens[current].name())
             return
         if which == HOTKEY_HIDE:
-            view.setVisible(not view.isVisible())
             if view.isVisible():
-                set_active(state["active"])
+                hidden_by.add("user")
+            else:
+                hidden_by.discard("user")
+            update_visibility()
         else:
-            view.show()
+            hidden_by.discard("user")
             set_active(not state["active"])
+            update_visibility()
 
     def on_title(title: str) -> None:
         """The page talks back through its title: it asks for active mode (approvals) or passive (Esc/close)."""
         if title.endswith(":active") and not state["active"]:
             set_active(True)
+            update_visibility()
         elif title.endswith(":passive") and state["active"]:
             set_active(False)
+            update_visibility()
+        elif title.endswith(":gaming-on"):
+            hidden_by.add("gaming")
+            update_visibility()
+        elif title.endswith(":gaming-off"):
+            hidden_by.discard("gaming")
+            update_visibility()
 
     bridge.hotkey.connect(on_hotkey)
     view.titleChanged.connect(on_title)
@@ -164,6 +208,19 @@ def main(url: str, owner_pid: int | None = None) -> int:
     alive = QTimer()
     alive.timeout.connect(owner_alive)
     alive.start(2000)
+
+    def watch_fullscreen() -> None:
+        try:
+            full = fullscreen_in_front(int(view.winId()))
+        except Exception:
+            return
+        if full != ("fullscreen" in hidden_by):
+            (hidden_by.add if full else hidden_by.discard)("fullscreen")
+            update_visibility()
+
+    fullscreen_timer = QTimer()
+    fullscreen_timer.timeout.connect(watch_fullscreen)
+    fullscreen_timer.start(1000)
     return app.exec()
 
 

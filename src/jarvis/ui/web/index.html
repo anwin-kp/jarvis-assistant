@@ -372,8 +372,10 @@ function stats(e) {
 
 /* ---------- mode / flags ---------- */
 const MODE_TEXT = { always: "ALWAYS LISTENING", wake_word: 'SAY "HEY JARVIS"', push: "PUSH TO TALK" };
+let lastGaming = null;
 function applyFlags(f) {
   flags = f;
+  if (OVERLAY && f.gaming !== lastGaming) { lastGaming = f.gaming; overlayRequest(f.gaming ? "gaming-on" : "gaming-off"); }
   $("b-mode").textContent = "Mode: " + ({ always: "Always", wake_word: "Wake word", push: "Push" }[f.mode] || "—");
   $("b-sleep").textContent = f.sleeping ? "Wake up" : "Sleep";
   $("b-sleep").classList.toggle("on", !!f.sleeping);
