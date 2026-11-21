@@ -94,6 +94,8 @@ def register(reg: ToolRegistry) -> None:
         name = p.name()
         if name.lower() in PROTECTED or int(pid) in (0, 4):
             raise PermissionError(f"{name} is a protected system process")
+        if p.pid == __import__("os").getpid():
+            raise PermissionError("that's JARVIS itself (to stop JARVIS, say 'Jarvis, shut down')")
         p.kill()
         return f"Killed {name} (PID {pid})."
 

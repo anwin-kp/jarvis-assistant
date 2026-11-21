@@ -133,8 +133,16 @@ class Memory:
             return None
         import numpy as np
 
-        vecs = np.asarray(embed([f"search_document: {f['fact']}" for f in facts] + [f"search_document: {fact}"]))
-        vecs = vecs / (np.linalg.norm(vecs, axis=1, keepdims=True) + 1e-9)
+        # every learned fact used to re-embed ALL known facts (hundreds of texts per check while learning from a
+        # document); known facts' vectors are kept, only new texts are embedded
+        cache = self.__dict__.setdefault("_fact_vecs", {})
+        texts = [f["fact"] for f in facts] + [fact]
+        new = [t for t in dict.fromkeys(texts) if t not in cache]
+        if new:
+            for t, v in zip(new, embed([f"search_document: {t}" for t in new]), strict=True):
+                v = np.asarray(v, dtype=float)
+                cache[t] = v / (np.linalg.norm(v) + 1e-9)
+        vecs = np.asarray([cache[t] for t in texts])
         scores = vecs[:-1] @ vecs[-1]
         best = int(np.argmax(scores))
         return facts[best]["id"] if float(scores[best]) >= threshold else None

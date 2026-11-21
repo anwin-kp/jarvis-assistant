@@ -107,7 +107,11 @@ class Hud:
                         continue
                     if action in ("facts", "forget", "teach"):  # Memory panel: no turn, no cut-in
                         if self.memory_api:
-                            facts = await asyncio.to_thread(self.memory_api, action, msg)
+                            try:
+                                facts = await asyncio.to_thread(self.memory_api, action, msg)
+                            except Exception:  # a bad id used to end this window's connection
+                                logger.exception("Memory panel {} failed", action)
+                                continue
                             await ws.send_json({"type": "facts", "facts": facts})
                         continue
                     if action == "stop" or (self.on_stop and action == "text" and self.on_stop(text)):
