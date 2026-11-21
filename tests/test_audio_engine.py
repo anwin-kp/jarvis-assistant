@@ -27,7 +27,7 @@ def feed(eng, fs):
 
 
 def kinds(events):
-    return [k for k, _ in events if k != "level"]
+    return [k for k, _ in events if k not in ("level", "partial")]  # partial = live caption drafts
 
 
 def utterances(events):
@@ -192,3 +192,11 @@ def test_very_short_interrupt_is_reported_as_a_stop():
     eng.set_speaking(True)
     feed(eng, frames(QUIET, 600) + frames(LOUD, 180) + frames(QUIET, 900))  # a clipped "stop"
     assert ("noise", True) in [(k, d) for k, d in ev if k == "noise"] and "barge" in kinds(ev)
+
+
+def test_live_caption_drafts_while_talking():
+    eng, ev = make()
+    feed(eng, frames(VOICE, 2500) + frames(QUIET, 1200))  # 2.5 s of speech
+    partials = [d for k, d in ev if k == "partial"]
+    assert 1 <= len(partials) <= 3 and len(partials[-1]) > len(partials[0]) * 0.99
+    assert utterances(ev)  # the final utterance still comes

@@ -90,6 +90,7 @@
   .right { grid-area:right; display:flex; flex-direction:column; min-height:0; }
   #log { flex:1; overflow:auto; padding:6px 16px 14px; display:flex; flex-direction:column; gap:12px; scroll-behavior:smooth; }
   .msg { position:relative; padding:9px 13px 10px; white-space:pre-wrap; animation:rise .3s ease; max-width:94%; }
+  .msg .partial { opacity:.65; font-style:italic; }
   .msg .who { display:block; font:600 9px var(--hdr); letter-spacing:.3em; margin-bottom:3px; }
   .user { align-self:flex-end; background:rgba(0,119,255,.12); border-right:2px solid var(--c3); text-align:right; }
   .user .who { color:#5ea8ff; }
@@ -340,6 +341,11 @@ function msg(cls, who, text, typed = false) {
   return d;
 }
 let pendingUser = null;
+function userPartial(text) {  // live caption while you talk (final text replaces it)
+  if (!pendingUser) userPending();
+  const b = pendingUser.lastChild; b.textContent = text + " …"; b.classList.add("partial");
+  $("log").scrollTop = 1e9;
+}
 function userPending() {
   if (pendingUser) return;
   pendingUser = msg("user pending", "YOU", "");
@@ -448,6 +454,7 @@ function connect() {
       case "level": levelTarget = e.v; break;
       case "user": userText(e.text, e.files); break;
       case "user_pending": userPending(); break;
+      case "user_partial": userPartial(e.text); break;
       case "user_cancel": userCancel(); break;
       case "reply": msg("jarvis", "JARVIS", e.text, true); break;
       case "notice": notice(e.text); break;
