@@ -178,6 +178,14 @@ def main(url: str, owner_pid: int | None = None) -> int:
         elif title.endswith(":gaming-off"):
             hidden_by.discard("gaming")
             update_visibility()
+        elif title.endswith(":toggle-hidden"):  # tray menu: same as the hotkeys
+            on_hotkey(HOTKEY_HIDE)
+        elif title.endswith(":activate"):
+            hidden_by.discard("user")
+            set_active(True)
+            update_visibility()
+        elif title.endswith(":next-display"):
+            on_hotkey(HOTKEY_MOVE)
 
     bridge.hotkey.connect(on_hotkey)
     view.titleChanged.connect(on_title)

@@ -454,6 +454,8 @@ function connect() {
       case "level": levelTarget = e.v; break;
       case "user": userText(e.text, e.files); break;
       case "user_pending": userPending(); break;
+      case "overlay_cmd": if (OVERLAY) { if (e.cmd === "settings") { overlayRequest("active"); $("ov-set").classList.add("open"); }
+                          else overlayRequest(e.cmd); } break;
       case "user_partial": userPartial(e.text); break;
       case "user_cancel": userCancel(); break;
       case "reply": msg("jarvis", "JARVIS", e.text, true); break;

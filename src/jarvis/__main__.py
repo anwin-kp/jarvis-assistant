@@ -326,6 +326,7 @@ class App:
                     "free_gpu": lambda: self.q.put(("text", "/unload")),
                     "quit": lambda: self.q.put(("quit",)),
                     "open_hud": lambda: self.hud.open() if self.hud else None,
+                    "overlay": lambda cmd: self._publish("overlay_cmd", cmd=cmd),  # page -> overlay window
                     "state": lambda: {"wake": self.listen_mode != "push" and not self.sleeping,
                                       "speech": self.speech_on, "gaming": self.gaming.active},
                 })

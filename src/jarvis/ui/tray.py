@@ -29,6 +29,12 @@ class Tray:
             item("Speak replies", lambda: self.a["toggle_speech"](), checked=lambda _: self.a["state"]()["speech"]),
             item("Gaming mode", lambda: self.a["gaming"](), checked=lambda _: self.a["state"]()["gaming"]),
             item("Open HUD", lambda: self.a["open_hud"](), default=True),
+            item("Overlay", pystray.Menu(  # desktop overlay app: the same actions as its hotkeys
+                item("Show / hide  (Ctrl+Alt+H)", lambda: self.a["overlay"]("toggle-hidden")),
+                item("Use it  (Ctrl+Alt+J)", lambda: self.a["overlay"]("activate")),
+                item("Move to next display  (Ctrl+Alt+D)", lambda: self.a["overlay"]("next-display")),
+                item("Position && size...", lambda: self.a["overlay"]("settings")),
+            ), visible=lambda _: "overlay" in self.a),
             item("Free GPU memory", lambda: self.a["free_gpu"]()),
             pystray.Menu.SEPARATOR,
             item("Quit JARVIS", lambda: self.a["quit"]()),
