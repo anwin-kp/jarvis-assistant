@@ -46,6 +46,7 @@ class FastIntents:
             (r(r"(?:turn off |disable |stop |exit )gaming mode|gaming mode off"),
              self._tool("set_gaming_mode", {"on": False}, None)),
             (r(r"(?:open|launch|start|run) (?:the )?(.+?)(?: app| application)?"), self._open),
+            (r(r"(?:close|quit|exit|kill) (?:the )?(.+?)(?: app| application)?"), self._close),
             (r(r"(?:never ?mind,? )?(?:cancel|abort|stop) (?:the )?(?:shutdown|shut down|restart)|(?:never ?mind,? )?(?:don'?t|do not) (?:shut ?down|restart)(?: the (?:pc|computer|laptop))?"),
              self._tool("cancel_shutdown", {}, None)),
             (r(r"(?:switch|go|change) to (?:the )?(.+?)(?: window)?|(?:bring up|focus(?: on)?) (?:the )?(.+?)(?: window)?"), self._switch),
@@ -122,6 +123,16 @@ class FastIntents:
             return None
         r = self.reg.execute("window_action", {"name": name, "action": "focus"}, confirm)
         return None if r.error else f"Switched to {name}."  # no such window: let the AI decide (maybe open it)
+
+    def _close(self, m, confirm):
+        name = m.group(1).strip()
+        if name not in self.apps:
+            return None  # "close this tab", "close the window": the AI decides
+        r = self.reg.execute("close_app", {"name": name}, confirm) if self.reg.get("close_app") else None
+        if r is None:
+            return None
+        text = r.text.removeprefix("ERROR: ").removeprefix("WARNING: ")
+        return f"Closed {name}." if text.startswith("Closed") else text.replace(" Tell the user to check it.", "")
 
     def _open(self, m, confirm):
         name = m.group(1).strip()

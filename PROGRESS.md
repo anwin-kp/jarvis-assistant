@@ -32,7 +32,7 @@ Compact state for continuing work without re-reading the codebase. Update it wit
 ## Done (PRs)
 #26–#41 voice engine, Spotify, vision, operator, HUD attachments, location, cut-in, memory/learner ·
 #43 cloud actions + fallback · #44 verified actions · #45 review + voice fixes · #46 lessons + plan-then-do ·
-#47 Gemini flash-lite · #48 voice test + 600 ms pre-roll · #49 short words · #50 task playbooks · #51 read-only tools don't back claims · #52 email modify · #54 Spotify retry + cloud handover · #55 smaller cloud requests · #56 offline tasks (local eval, offline Spotify) · #57 distant speech kept · #58 weekly self-check · #59 live captions · #60 briefing when you sit down · #61 conversation survives restarts · #63-#67 smoke-test fixes (self-echo, gated-mic echo, operator Gemini fallback, list_processes) ·
+#47 Gemini flash-lite · #48 voice test + 600 ms pre-roll · #49 short words · #50 task playbooks · #51 read-only tools don't back claims · #52 email modify · #54 Spotify retry + cloud handover · #55 smaller cloud requests · #56 offline tasks (local eval, offline Spotify) · #57 distant speech kept · #58 weekly self-check · #59 live captions · #60 briefing when you sit down · #61 conversation survives restarts · #63-#67 smoke-test fixes (self-echo, gated-mic echo, operator Gemini fallback, list_processes) · #69 close_app really closes (real process names, WM_CLOSE + verify, no false "closed") ·
 overlay branch: transparent overlay, Ctrl+Alt+J/H/D, auto-hide over fullscreen/gaming, position & size settings (gear), tray Overlay submenu.
 
 ## Backlog (highest impact first)
