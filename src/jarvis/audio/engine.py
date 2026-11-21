@@ -80,6 +80,7 @@ class AudioEngine:
         self.echo_tail_frames = echo_tail_ms // FRAME_MS
         self.sounds_like_jarvis = sounds_like_jarvis or (lambda audio: False)
         self.wake_detector = wake_detector
+        self.tap = None  # (frame int16) -> None: mic frames while JARVIS speaks (voice.record_echo, see audio/aec.py)
         if is_speech is None:
             import webrtcvad
 
@@ -154,6 +155,8 @@ class AudioEngine:
             if self._tail > 0:
                 self._tail -= 1
             mode = self.mode
+        if speaking and self.tap is not None:
+            self.tap(frame)
         if not self.calibrated:  # learn the room's background level first (never while JARVIS talks)
             if not speaking:
                 self._calib.append(level)
