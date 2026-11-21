@@ -165,6 +165,8 @@ class Orchestrator:
         if self.semantic and words:
             groups |= self.semantic.pick(words)
         tools = self.reg.schemas(groups)
+        if books and books.last_used:  # the playbook is already in context: looking it up again only wastes a step
+            tools = [t for t in tools if t["function"]["name"] != "find_task_playbook"]
         self.last_think = needs_thinking(words)
         kw = {"on_sentence": on_sentence} if on_sentence else {}
         if self.last_think:

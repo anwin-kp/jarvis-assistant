@@ -24,7 +24,7 @@ KEYWORDS: dict[str, list[str]] = {
         "remind", "reminder", "alarm", "timer", "minutes", "tomorrow", "schedule", "task", "to-do", "todo",
         "to do", "briefing", "agenda",
     ],
-    "email": [
+    "email": ["mark as read", "as read", "as unread", "archive", "trash", "inbox",
         "email", "e-mail", "mail", "inbox", "gmail", "unread", "draft", "reply", "send", "calendar",
         "meeting", "event", "appointment", "schedule", "agenda", "busy", "free on",
     ],
