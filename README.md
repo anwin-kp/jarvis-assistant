@@ -42,6 +42,9 @@ See [JARVIS_PLAN.md](JARVIS_PLAN.md) for the architecture and roadmap.
 
 ## Install
 
+> **New here?** [SETUP.md](SETUP.md) walks you through everything: requirements, install, which free API keys
+> unlock which features, Gmail/Spotify/Telegram setup, privacy and troubleshooting.
+
 Requirements: Windows 10/11, an NVIDIA GPU with ~6 GB+ VRAM recommended (it also runs on CPU, more slowly).
 
 ```powershell
