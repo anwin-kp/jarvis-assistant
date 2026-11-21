@@ -51,7 +51,7 @@ Requirements: Windows 10/11, an NVIDIA GPU with ~6 GB+ VRAM recommended (it also
 winget install Python.Python.3.12 astral-sh.uv Ollama.Ollama
 git clone https://github.com/anwin-kp/jarvis-assistant.git
 cd jarvis-assistant
-uv sync
+uv sync --extra overlay    # this branch: the overlay needs its Qt extra (a plain `uv sync` uninstalls it)
 ollama pull qwen3:8b        # optional: start-jarvis downloads it if missing
 .\start-jarvis.ps1
 ```

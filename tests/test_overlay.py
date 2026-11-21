@@ -1,0 +1,74 @@
+from jarvis.ui.overlay import overlay_url
+
+
+def test_overlay_url_adds_the_mode_flag():
+    assert overlay_url("http://127.0.0.1:8765/?token=abc") == "http://127.0.0.1:8765/?token=abc&overlay=1"
+    assert overlay_url("http://127.0.0.1:8765/") == "http://127.0.0.1:8765/?overlay=1"
+
+
+def test_hud_falls_back_to_a_window_without_qt(monkeypatch):
+    import queue
+
+    from jarvis.ui import hud as hud_mod
+    from jarvis.ui import overlay
+
+    opened = []
+    monkeypatch.setattr(overlay, "available", lambda: False)
+    monkeypatch.setattr(hud_mod.subprocess, "Popen", lambda args, **kw: opened.append(args))
+    h = hud_mod.Hud(queue.Queue())
+    h.mode = "overlay"
+    h.open()
+    assert opened and "msedge" in opened[0]
+
+
+def test_fullscreen_detection(monkeypatch):
+    import types
+
+    from jarvis.ui import overlay
+
+    mon = (0, 0, 2560, 1600)
+    fake = {"fg": 5, "cls": "Chrome_WidgetWin_1", "rect": mon, "mon_fg": 1, "mon_own": 1}
+    gui = types.SimpleNamespace(GetForegroundWindow=lambda: fake["fg"], GetClassName=lambda h: fake["cls"],
+                                GetWindowRect=lambda h: fake["rect"])
+    api = types.SimpleNamespace(MonitorFromWindow=lambda h, f: fake["mon_fg"] if h == 5 else fake["mon_own"],
+                                GetMonitorInfo=lambda m: {"Monitor": mon})
+    con = types.SimpleNamespace(MONITOR_DEFAULTTONEAREST=2)
+    monkeypatch.setitem(__import__("sys").modules, "win32gui", gui)
+    monkeypatch.setitem(__import__("sys").modules, "win32api", api)
+    monkeypatch.setitem(__import__("sys").modules, "win32con", con)
+    assert overlay.fullscreen_in_front(9)  # a game covering the whole monitor
+    fake["rect"] = (-8, -8, 2568, 1512)  # maximized window: the taskbar stays visible
+    assert not overlay.fullscreen_in_front(9)
+    fake.update(rect=mon, cls="WorkerW")  # the desktop itself
+    assert not overlay.fullscreen_in_front(9)
+    fake.update(cls="Game", mon_fg=2)  # fullscreen, but on the other display
+    assert not overlay.fullscreen_in_front(9)
+
+
+def test_overlay_settings_keep_only_valid_choices(monkeypatch, tmp_path):
+    from jarvis.ui import hud
+
+    monkeypatch.setattr(hud, "OVERLAY_SETTINGS", tmp_path / "s.json")
+    assert hud.load_overlay_settings() == hud.OVERLAY_DEFAULTS
+    out = hud.save_overlay_settings({"corner": "tl", "size": "l", "fade": "never", "evil": "x", "width": "huge"})
+    assert out == {"corner": "tl", "size": "l", "width": "normal", "fade": "never"}
+    assert hud.load_overlay_settings() == out
+    assert hud.save_overlay_settings({"corner": "c"})["corner"] == "c"  # centre of the screen
+
+
+def test_passive_overlay_is_only_its_strip():
+    from PySide6.QtCore import QRect
+
+    from jarvis.ui.overlay import parse_strip, strip_geometry
+
+    assert parse_strip("JARVIS:7:strip-r-748") == ("r", 748) and parse_strip("JARVIS:8:passive") is None
+    screen = QRect(0, 0, 1280, 760)  # a 2560x1600 laptop at 200% (taskbar excluded)
+    right = strip_geometry(screen, "r", 748, active=False)
+    assert (right.left(), right.right(), right.top(), right.bottom()) == (532, 1279, 0, 759)
+    left = strip_geometry(screen, "l", 748, active=False)
+    assert (left.left(), left.width(), left.height()) == (0, 748, 760)
+    center = strip_geometry(screen, "c", 488, active=False)
+    assert (center.left(), center.width(), center.height()) == (396, 488, 760) and parse_strip("J:1:strip-c-488")
+    assert strip_geometry(screen, "r", 748, active=True) == screen  # typing / settings: whole display
+    assert strip_geometry(screen, "r", 0, active=False) == screen  # page hasn't said yet
+    assert strip_geometry(screen, "r", 5000, active=False) == screen

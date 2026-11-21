@@ -110,6 +110,10 @@ function Stop-Jarvis {
     # close the HUD window (own Edge profile, so the normal browser is untouched)
     Get-CimInstance Win32_Process -Filter "Name='msedge.exe'" | Where-Object { $_.CommandLine -like '*hud-profile*' } |
         ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+    # and the desktop overlay (it also closes by itself when JARVIS is gone)
+    Get-CimInstance Win32_Process -Filter "Name='python.exe' OR Name='pythonw.exe'" |
+        Where-Object { $_.CommandLine -match '-m\s+jarvis\.ui\.overlay' } |
+        ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
     Start-Sleep -Milliseconds 500
     if (@(Get-JarvisProcesses).Count -eq 0) { Write-Ok "JARVIS stopped ($($procs.Count) process(es))" }
     else { Write-Warn 'Some JARVIS processes are still running. Use kill-jarvis.ps1.' }
