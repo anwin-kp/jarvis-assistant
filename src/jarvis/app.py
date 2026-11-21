@@ -36,6 +36,11 @@ def build(dry_run: bool = False):
 
     media_tools.register(reg)
     window_tools.register(reg)
+    from jarvis.tools import desk_tools, tab_tools, utility_tools
+
+    tab_tools.register(reg)  # the user's own Chrome/Edge tabs: list, switch, close (others / duplicates)
+    utility_tools.register(reg)  # exact maths, units, currency, dates, definitions
+    desk_tools.register(reg)  # network status, recent files, open a site in the user's browser
     clipboard_tools.register(reg)
     pc_tools.register(reg)
     from jarvis.core.config import ROOT

@@ -16,7 +16,8 @@ PROVIDERS = {  # base URL, keyring entry name
     "gemini": ("https://generativelanguage.googleapis.com/v1beta/openai", "gemini_api_key"),
     "openrouter": ("https://openrouter.ai/api/v1", "openrouter_api_key"),
 }
-PRIVATE_GROUPS = {"files", "email", "docs", "screen", "clipboard", "notes"}  # never sent to the cloud
+# never sent to the cloud ("tabs": your tab titles show what you browse)
+PRIVATE_GROUPS = {"files", "email", "docs", "screen", "clipboard", "notes", "tabs"}
 # Requests that DO something: in smart mode these go to the bigger cloud model, which picks tools and follows
 # multi-step instructions far more reliably than the small local one (wrong tools, claimed actions, loops).
 ACTION_GROUPS = {"system", "media", "browser", "windows", "pc", "reminder", "home"}

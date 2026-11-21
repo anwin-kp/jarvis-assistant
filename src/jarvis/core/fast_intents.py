@@ -15,6 +15,9 @@ def normalize(text: str) -> str:
     return re.sub(r"\s+", " ", t).strip(".!?, ")
 
 
+_IN = r"(?: (?:in|on) (?:the )?(chrome|edge|brave)(?: browser)?)?"
+
+
 def _sound(s: str) -> str:
     """Spelling folded toward sound: "not padder" -> "notpader", "spotty fly" -> "spotyfly"."""
     s = re.sub(r"[^a-z]", "", s.lower()).replace("ph", "f").replace("ck", "k")
@@ -69,6 +72,12 @@ class FastIntents:
              self._tool("set_gaming_mode", {"on": True}, None)),
             (r(r"(?:turn off |disable |stop |exit )gaming mode|gaming mode off"),
              self._tool("set_gaming_mode", {"on": False}, None)),
+            # browser tabs (before open/close: "close the YouTube tab" is a tab, not an app)
+            (r(rf"(?:keep|leave) only (?:this|the current|the active|one|1) tab(?: open)?{_IN}"
+               rf"|close (?:all )?(?:the )?other tabs{_IN}"), self._tabs("others")),
+            (r(rf"close (?:all )?(?:the )?duplicate tabs{_IN}"), self._tabs("duplicates")),
+            (r(rf"close (?:the |my )?(.+?) tabs?{_IN}"), self._tabs("matching")),
+            (r(rf"(?:switch|go|change) to (?:the |my )?(.+?) tab{_IN}"), self._tab_switch),
             (r(r"(?:open|launch|start|run) (?:the )?(.+?)(?: app| application)?"), self._open),
             # "closed"/"clothes": how "close" is often transcribed
             (r(r"(?:close|closed|clothes|quit|exit|kill) (?:the )?(.+?)(?: app| application)?"), self._close),
@@ -148,6 +157,28 @@ class FastIntents:
             return None
         r = self.reg.execute("window_action", {"name": name, "action": "focus"}, confirm)
         return None if r.error else f"Switched to {name}."  # no such window: let the AI decide (maybe open it)
+
+    def _tabs(self, mode):
+        def handle(m, confirm):
+            if self.reg.get("close_browser_tabs") is None:
+                return None
+            groups = [g for g in m.groups()]
+            browser = groups[-1] or "chrome"
+            tab = groups[0] if mode == "matching" else ""
+            if mode == "matching" and tab.lower() in ("other", "all", "all the", "all other", "this", "these"):
+                return None  # "close all tabs": not a title; let the AI ask
+            r = self.reg.execute("close_browser_tabs", {"mode": mode, "tab": tab, "browser": browser}, confirm)
+            text = r.text.removeprefix("WARNING: ")
+            if r.error and "matches" in text:
+                return None  # no tab by that name: maybe it's a window or an app, the AI decides
+            return text.removeprefix("ERROR: ").replace(" Ctrl+Shift+T in the browser reopens closed tabs.", "")
+        return handle
+
+    def _tab_switch(self, m, confirm):
+        if self.reg.get("switch_browser_tab") is None:
+            return None
+        r = self.reg.execute("switch_browser_tab", {"tab": m.group(1), "browser": m.group(2) or "chrome"}, confirm)
+        return None if r.error else f"Switched to {m.group(1)}."
 
     def _close(self, m, confirm):
         name = heard_app(m.group(1), self.apps)

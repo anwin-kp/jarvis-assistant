@@ -114,7 +114,7 @@ security:
   # Clicks and key presses still ask when the target is risky ("Buy", "Pay", "Delete", "Send", Alt+F4...).
   no_approval: [operate_app, press_keys, click_ui_element, type_into_ui_field, type_text, browser_click,
                 browser_type, close_app, close_window, create_event, create_folder, draft_email, delete_task,
-                set_radio, forget]
+                set_radio, forget, close_browser_tabs]
   shell_enabled: false   # true = allow read-only PowerShell commands (always asks first)
   # Folders JARVIS may read/search. Known-folder names are resolved via Windows
   # (handles OneDrive redirection); you can also add full paths.
