@@ -15,7 +15,11 @@ llm:
     provider: groq       # groq | gemini | openrouter
     model: openai/gpt-oss-120b   # see console.groq.com/docs/models; gemini: gemini-2.5-flash, openrouter: a ":free" model
     fallbacks:           # tried in order when the one above is rate limited / down (free keys: set-key gemini)
-      - {provider: gemini, model: gemini-3.5-flash-lite, reasoning_effort: low}  # 2.5 is retired for new keys
+      # each Groq model has its own free 8k tokens/minute: two more fast (<1 s) models before Gemini
+      - {provider: groq, model: openai/gpt-oss-20b}
+      - {provider: groq, model: qwen/qwen3.8-27b}
+      # Gemini has slow spells (10-80 s): give up after 10 s and let the local model answer
+      - {provider: gemini, model: gemini-3.5-flash-lite, reasoning_effort: low, timeout: 10}
     use_in_gaming_mode: true         # while gaming, use the cloud (if a key is set) instead of the slow CPU
 
 history_turns: 8         # how many previous exchanges the model sees

@@ -93,8 +93,10 @@ def build(dry_run: bool = False):
         steps = cfg["llm"].get("max_steps", 6)
         chain = [CloudBrain(reg, ccfg["provider"], ccfg.get("model", ""), steps)]
         for fb in ccfg.get("fallbacks") or []:  # e.g. Gemini when Groq's free limit is reached
-            extra = {k: v for k, v in fb.items() if k not in ("provider", "model")}
-            chain.append(CloudBrain(reg, fb["provider"], fb.get("model", ""), steps, extra=extra))
+            extra = {k: v for k, v in fb.items() if k not in ("provider", "model", "timeout")}
+            # a short timeout: when a fallback is having a slow spell, the local model answers instead
+            chain.append(CloudBrain(reg, fb["provider"], fb.get("model", ""), steps, timeout=fb.get("timeout", 25),
+                                    extra=extra))
         cloud = CloudChain(chain)
     from jarvis.llm.cloud_brain import Router
 

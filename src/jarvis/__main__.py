@@ -1104,7 +1104,8 @@ def echo_of(text: str, spoken: list[str]) -> bool:
     vocab = set(re.findall(r"[a-z0-9']+", said))
     if sum(w in vocab for w in words) / len(words) >= 0.75:
         return True
-    return any(difflib.SequenceMatcher(None, " ".join(words), s.lower()).ratio() > 0.6 for s in spoken)
+    near = 0.6 if len(words) >= 5 else 0.85  # short phrases share letters by chance
+    return any(difflib.SequenceMatcher(None, " ".join(words), s.lower()).ratio() > near for s in spoken)
 
 
 def normalize_heard(text: str) -> str:
