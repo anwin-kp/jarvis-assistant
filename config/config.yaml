@@ -90,8 +90,9 @@ hud:
 
 briefing:
   enabled: true
-  time: "08:30"          # daily briefing (weather, tasks, reminders, news); fires once per day
-  city: null             # e.g. "Kochi, India" for the weather part
+  time: "08:30"          # daily briefing (weather, tasks, reminders, news): once a day, the first time you're
+  until: "14:00"         #   at the PC between these times (keyboard/mouse in the last minute)
+  city: null             # null = where you are (location); or e.g. "Kochi, India"
 
 gaming:
   auto_detect: true      # free the GPU automatically while one of these games runs
