@@ -647,8 +647,17 @@ let last = 0, speedNow = 0.55, sleepMix = 0, colFrom = "#00d8ff", colTo = "#00d8
 let phTicks = 0, phCore = 0, phSpec = 0, sec = 0;
 const phRings = RINGS.map(() => 0);
 
+// Frames per second by state. requestAnimationFrame follows the display (200 Hz on this laptop): the reactor was
+// redrawn 200x a second even while idle - ~45% of a CPU core and ~20% GPU, plus Windows recompositing the
+// see-through overlay each frame. Smooth when it matters, a slow idle spin otherwise.
+const FPS = { booting: 60, listening: 60, thinking: 60, speaking: 60, sleeping: 12 };
+const IDLE_FPS = 30;
+
 function frame(now) {
-  const dt = Math.min(0.05, last ? (now - last) / 1000 : 0.016); last = now; sec += dt;
+  requestAnimationFrame(frame);
+  const fps = FPS[shownState()] || IDLE_FPS;
+  if (last && now - last < 1000 / fps - 2) return;  // not yet time for this state's next frame
+  const dt = Math.min(0.1, last ? (now - last) / 1000 : 0.016); last = now; sec += dt;
   resize();
   const s = shownState(), target = STATE_COLOR[s] || "#00d8ff";
   if (target !== colTo) { colFrom = colMix < 1 ? colTo : colTo; colTo = target; colMix = 0; }
@@ -710,11 +719,11 @@ function frame(now) {
   cx.globalCompositeOperation = "source-over";
 
   drawWave(col, s);
-  requestAnimationFrame(frame);
 }
 
 function drawWave(col, s) {
   const w = wv.width, h = wv.height, mid = h / 2;
+  if (!w || !h) return;  // hidden (overlay mode): nothing to draw
   wx.clearRect(0, 0, w, h); wx.lineCap = "round";
   for (let line = 0; line < 3; line++) {
     wx.beginPath();
