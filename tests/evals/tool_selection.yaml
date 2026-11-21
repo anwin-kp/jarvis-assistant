@@ -87,3 +87,5 @@
 - {say: "where am I right now?", expect: [get_my_location]}
 - {say: "who won the last cricket world cup", expect: [web_search]}
 - {say: "check my email", expect: [list_unread_emails]}
+- {say: "Mark all my unread emails as read", expect: [mark_emails_read]}
+- {say: "archive the emails from LinkedIn", expect: [list_unread_emails, archive_email]}

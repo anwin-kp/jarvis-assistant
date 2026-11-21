@@ -40,6 +40,7 @@ def real_tool_names():
 
 # Registered only once the account is connected (Google login, Spotify client id): absent on CI machines.
 OPTIONAL_TOOLS = {"list_unread_emails", "read_email", "draft_email", "send_draft", "list_events", "create_event",
+                  "mark_emails_read", "archive_email", "trash_email",
                   "spotify_play", "spotify_control", "spotify_now_playing", "spotify_volume", "spotify_queue",
                   "spotify_like_current", "spotify_my_playlists"}
 DANGER_TOOLS = {"delete_file", "empty_recycle_bin", "kill_process", "shutdown_pc", "restart_pc", "send_draft"}
