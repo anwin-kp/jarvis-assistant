@@ -5,7 +5,7 @@ import requests
 from loguru import logger
 
 from jarvis.core.config import get_secret
-from jarvis.llm.ollama_brain import unbacked_claim
+from jarvis.llm.ollama_brain import acted, unbacked_claim
 from jarvis.tools.registry import ConfirmFn, ToolRegistry
 
 PROVIDERS = {  # base URL, keyring entry name
@@ -66,7 +66,7 @@ class CloudBrain:
             calls = msg.get("tool_calls") or []
             if not calls:
                 reply = (msg.get("content") or "").strip()
-                nudge = unbacked_claim(reply, bool(self.last_tool_calls)) if tools and not nudged else None
+                nudge = unbacked_claim(reply, acted(self.reg, self.last_tool_calls)) if tools and not nudged else None
                 if nudge:
                     nudged = True
                     msgs += [{"role": "assistant", "content": reply}, {"role": "user", "content": nudge}]

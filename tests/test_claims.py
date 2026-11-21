@@ -66,3 +66,15 @@ def test_website_addresses_offer_the_browser():
     assert "browser" in pick_groups("open amazon.in and search for a usb c cable")
     assert "browser" in pick_groups("go to github.com/anwin-kp")
     assert "browser" not in pick_groups("what's the weather like")
+
+
+def test_a_read_only_tool_does_not_back_a_change_claim():
+    from jarvis.llm.ollama_brain import NUDGE, acted, unbacked_claim
+    from jarvis.tools.registry import ToolRegistry
+
+    reg = ToolRegistry()
+    reg.tool("list_unread_emails", "list", {}, read_only=True)(lambda: "3 unread")
+    reg.tool("set_volume", "vol", {})(lambda: "ok")
+    claim = "I've marked all your emails as read."
+    assert unbacked_claim(claim, acted(reg, ["list_unread_emails"])) == NUDGE
+    assert unbacked_claim(claim, acted(reg, ["set_volume"])) is None

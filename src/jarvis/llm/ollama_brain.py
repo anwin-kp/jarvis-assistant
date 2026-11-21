@@ -41,6 +41,11 @@ NUDGE_PROMISE = (
 )
 
 
+def acted(reg, tool_names: list[str]) -> bool:
+    """Did any tool that CHANGES something run? Listing emails doesn't back "I've marked them as read"."""
+    return any((t := reg.get(n)) is not None and not t.read_only for n in tool_names)
+
+
 def unbacked_claim(reply: str, tools_ran: bool = False) -> str | None:
     """The nudge to send when a reply claims or promises an action that no tool call backs up. After tools ran,
     a claim may be true, but a promise ("Let me play it now. One moment") still means nothing more will happen."""
@@ -170,7 +175,7 @@ class OllamaBrain:
             if not msg.tool_calls:
                 reply = (msg.content or "").strip()
                 # Small models sometimes claim an action without calling a tool: push back once.
-                nudge = unbacked_claim(reply, bool(self.last_tool_calls)) if tools and not nudged else None
+                nudge = unbacked_claim(reply, acted(self.reg, self.last_tool_calls)) if tools and not nudged else None
                 if nudge:
                     nudged = True
                     logger.info("Reply claims/promises an action but no tool ran; nudging: {}", reply[:80])
