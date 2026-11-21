@@ -19,3 +19,18 @@ def test_hud_requires_token_and_relays_messages():
         ws.send_json({"action": "talk"})
     assert q.get(timeout=2) == ("text", "what time is it")
     assert q.get(timeout=2) == ("text", "")
+
+
+def test_gauges_are_measured_only_while_a_window_shows_them():
+    import queue
+
+    from jarvis.ui.hud import Hud
+
+    h = Hud(queue.Queue())
+    assert not h.shows_stats  # no window open
+    overlay, window = object(), object()  # stand-ins for two websockets
+    h.clients |= {overlay}
+    h.no_stats.add(overlay)
+    assert not h.shows_stats  # the overlay hides the gauges
+    h.clients.add(window)
+    assert h.shows_stats
