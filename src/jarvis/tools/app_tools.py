@@ -42,6 +42,29 @@ def _is_app_window(w: dict, key: str, names: set[str]) -> bool:
     return app == "applicationframehost" and key in w["title"].lower()
 
 
+def app_window(key: str, apps: dict[str, str]) -> dict | None:
+    """The open window of an allowlisted app (by its real process names; Store apps by title)."""
+    from jarvis.tools.window_tools import list_windows
+
+    names = app_names(key, apps.get(key, key))
+    return next((w for w in list_windows() if _is_app_window(w, key, names)), None)
+
+
+def bring_to_front(hwnd: int) -> bool:
+    """Restore (if minimized) and bring to the front; True if it really is the foreground window now. Opening an app
+    that was already running used to leave it behind other windows ("Open Chrome" -> "I can't see it", seen live)."""
+    import win32gui
+
+    from jarvis.tools.registry import wait_for
+    from jarvis.tools.window_tools import focus
+
+    try:
+        focus(hwnd)
+    except Exception:  # Windows may refuse to hand over the foreground (then the taskbar button flashes)
+        pass
+    return bool(wait_for(lambda: win32gui.GetForegroundWindow() == hwnd, timeout=1.5, every=0.1))
+
+
 def close_app_named(name: str, apps: dict[str, str], wait: float = 5.0) -> str:
     """Close an app the way a person would (its windows' close button), check its windows are really gone, then
     end what's left in the background (e.g. Spotify in the tray). Unsaved work is never force-closed."""
@@ -100,13 +123,19 @@ def register(reg: ToolRegistry, app_allowlist: dict[str, str]) -> None:
         key = name.lower().strip()
         if key not in apps:
             return f"ERROR: '{name}' is not in my app list. Known apps: {names}. The user can add it to config.yaml."
-        _launch(apps[key])
         from jarvis.tools.registry import wait_for
-        from jarvis.tools.window_tools import find_window
 
-        if wait_for(lambda: find_window(name), timeout=6):
-            return f"Opened {name} (checked: its window is open)."
-        return f"Started {name}, but no window has appeared yet (checked for 6 s); it may still be loading."
+        if w := app_window(key, apps):  # already running: show it rather than start a second copy
+            front = bring_to_front(w["hwnd"])
+            return (f"{name} was already open: brought it to the front (checked)." if front else
+                    f"{name} is already open, but Windows kept it behind other windows (see the taskbar).")
+        _launch(apps[key])
+        w = wait_for(lambda: app_window(key, apps), timeout=6)
+        if not w:
+            return f"Started {name}, but no window has appeared yet (checked for 6 s); it may still be loading."
+        if bring_to_front(w["hwnd"]):
+            return f"Opened {name} (checked: its window is open and in front)."
+        return f"Opened {name}, but Windows kept it behind other windows (its taskbar button is flashing)."
 
     @reg.tool(
         "close_app",

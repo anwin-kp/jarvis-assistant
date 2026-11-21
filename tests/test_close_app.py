@@ -53,3 +53,28 @@ def test_progressive_claim_without_tool_is_caught():
     assert unbacked_claim("Closing notepad.")
     assert unbacked_claim("Okay, opening Spotify now.")
     assert not unbacked_claim("Closing remarks are usually short.", tools_ran=True)
+
+
+def test_open_app_shows_an_already_running_app_instead_of_hiding_it(monkeypatch):
+    """Live: 'Open Chrome' -> 'I can't see it' (Chrome was running, its window stayed behind)."""
+    from jarvis.tools import app_tools, window_tools
+    from jarvis.tools.registry import ToolRegistry
+
+    launched, fronted = [], []
+    wins = [{"hwnd": 7, "app": "chrome", "title": "New Tab - Google Chrome"}]
+    monkeypatch.setattr(window_tools, "list_windows", lambda: list(wins))
+    monkeypatch.setattr(app_tools, "_launch", launched.append)
+    monkeypatch.setattr(app_tools, "bring_to_front", lambda h: fronted.append(h) or True)
+    reg = ToolRegistry()
+    app_tools.register(reg, {"chrome": "chrome.exe", "notepad": "notepad.exe"})
+    open_app = reg.get("open_app").func
+    assert open_app("chrome") == "chrome was already open: brought it to the front (checked)."
+    assert launched == [] and fronted == [7]  # no second copy started
+
+    def appear(target):  # notepad isn't running: launch it, its window appears, then bring it forward
+        launched.append(target)
+        wins.append({"hwnd": 9, "app": "Notepad", "title": "Untitled - Notepad"})
+
+    monkeypatch.setattr(app_tools, "_launch", appear)
+    assert open_app("notepad") == "Opened notepad (checked: its window is open and in front)."
+    assert launched == ["notepad.exe"] and fronted == [7, 9]
