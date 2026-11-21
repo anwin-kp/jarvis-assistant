@@ -168,7 +168,7 @@
   body.overlay #reactor { width:var(--ov-r, 210px); }
   body.overlay .status { margin-top:-10px; }
   body.overlay .status .s { font-size:11px; letter-spacing:.45em; }
-  body.overlay .right { position:fixed; width:min(var(--ov-w, 460px), 42vw); height:72vh; background:transparent;
+  body.overlay .right { position:fixed; width:min(var(--ov-w, 460px), var(--ov-maxw, 42vw)); height:72vh; background:transparent;
                         border:0; box-shadow:none; clip-path:none; contain:none; }
   body.overlay .right::before, body.overlay .right::after, body.overlay .right .ptitle { display:none; }
   body.overlay #log { justify-content:flex-end; overflow:hidden; padding:0 4px; }
@@ -444,7 +444,7 @@ function setState(s) {
 /* ---------- socket ---------- */
 function send(action, text = "") { if (ws && ws.readyState === 1) ws.send(JSON.stringify({ action, text })); }
 function connect() {
-  ws = new WebSocket(`ws://${location.host}/ws?token=${token}`);
+  ws = new WebSocket(`ws://${location.host}/ws?token=${token}${OVERLAY ? "&view=overlay" : ""}`);
   ws.onopen = () => { $("link").textContent = "LINK ESTABLISHED"; $("link").classList.remove("off"); };
   ws.onclose = () => { $("link").textContent = "LINK LOST · RETRYING"; $("link").classList.add("off"); setTimeout(connect, 2000); };
   ws.onmessage = (m) => {
@@ -533,6 +533,12 @@ function ovApply(st) {
   b.style.setProperty("--ov-r", (OV_SIZES[st.size] || 210) + "px");
   b.style.setProperty("--ov-w", (OV_WIDTHS[st.width] || 460) + "px");
   if (st.fade !== "never") b.style.setProperty("--ov-fade", st.fade + "s");
+  // Passive overlay = only the strip it draws in (reactor + messages), not the whole screen: Windows recomposites
+  // the whole see-through window every frame (~27% GPU for a full-screen one). Tell the Qt window how wide.
+  const maxw = Math.round(screen.availWidth * 0.42), ovR = OV_SIZES[st.size] || 210;
+  b.style.setProperty("--ov-maxw", maxw + "px");
+  const strip = ovR + 40 + Math.min(OV_WIDTHS[st.width] || 460, maxw) + 28;
+  overlayRequest(`strip-${(st.corner || "br").endsWith("l") ? "l" : "r"}-${strip}`);
   document.querySelectorAll("#ov-set [data-k]").forEach((x) => x.classList.toggle("on", st[x.dataset.k] === x.dataset.v));
   void r;
 }
