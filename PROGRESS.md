@@ -16,7 +16,7 @@ Compact state for continuing work without re-reading the codebase. Update it wit
 | Voice | `audio/engine.py` (VAD, barge-in, 600 ms pre-roll, short-word lane), `stt/` (Groq turbo + names) | `.\jarvis.ps1 voice-test` |
 | HUD | `ui/hud.py`, `ui/web/index.html` | attachments, memory panel, cut-in |
 | Overlay app | branch `feature/desktop-overlay` only: `ui/overlay.py` | PySide6; never merge into develop (draft PR #42) |
-| Health | `.\jarvis.ps1 review` (failed turns), `data/logs/jarvis.log` | private data in `data/` is never committed |
+| Health | weekly self-check (auto), `.\jarvis.ps1 review`, `evals --local` (cloud off), `data/logs/jarvis.log` | private data in `data/` is never committed |
 
 ## Workflow
 - **Two folders.** `C:\Developmnet\Jarvis` = the user's running app, always on `feature/desktop-overlay` (never switch it).
@@ -32,13 +32,12 @@ Compact state for continuing work without re-reading the codebase. Update it wit
 ## Done (PRs)
 #26–#41 voice engine, Spotify, vision, operator, HUD attachments, location, cut-in, memory/learner ·
 #43 cloud actions + fallback · #44 verified actions · #45 review + voice fixes · #46 lessons + plan-then-do ·
-#47 Gemini flash-lite · #48 voice test + 600 ms pre-roll · #49 short words · #50 task playbooks · #51 read-only tools don't back claims · #52 email modify · #54 Spotify retry + cloud handover · #55 smaller cloud requests ·
-overlay branch: transparent overlay, Ctrl+Alt+J/H/D, auto-hide over fullscreen/gaming.
+#47 Gemini flash-lite · #48 voice test + 600 ms pre-roll · #49 short words · #50 task playbooks · #51 read-only tools don't back claims · #52 email modify · #54 Spotify retry + cloud handover · #55 smaller cloud requests · #56 offline tasks (local eval, offline Spotify) · #57 distant speech kept · #58 weekly self-check · #59 live captions · #60 briefing when you sit down · #61 conversation survives restarts ·
+overlay branch: transparent overlay, Ctrl+Alt+J/H/D, auto-hide over fullscreen/gaming, position & size settings (gear), tray Overlay submenu.
 
 ## Backlog (highest impact first)
-1. Re-run `review` after recent fixes; fix the top new failure classes.
-2. Overlay extras (user-optional): live captions, tray controls, position/size settings.
-3. Remaining eval miss class: in-app tasks routed locally (privacy) sometimes `open_app` first.
+1. Act on the weekly self-check summary (HUD notice + data/review/): fix the top failure classes.
+2. Tools that need internet fail offline (weather, web, email): consider cached last-known answers.
 
 ## Known issues
 - Groq free tier: 8k tokens/min per model. Cloud requests send ~10 tools (playbook + closest by meaning) and the
