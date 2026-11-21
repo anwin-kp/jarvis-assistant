@@ -72,6 +72,7 @@ class ToolRegistry:
         self.on_call: Callable[[str, dict, str], None] | None = None
         # security.no_approval: everyday CONFIRM tools that just run. DANGER tools always ask.
         self.no_approval: set[str] = set()
+        self.trace: list | None = None
         self.confirm_fn: ConfirmFn | None = None  # the app's approval prompt, for tools that ask mid-way
 
     def needs_approval(self, tool: Tool) -> bool:
@@ -141,6 +142,8 @@ class ToolRegistry:
 
     def execute(self, name: str, args: Any, confirm: ConfirmFn) -> ToolResult:
         result, parsed_args, status = self._execute(name, args, confirm)
+        if self.trace is not None:  # this turn's tool calls, for learning playbooks from clean successes
+            self.trace.append((name, parsed_args, status, (result.text or "")[:300]))
         if self.on_call:
             self.on_call(name, parsed_args, status)
         return result

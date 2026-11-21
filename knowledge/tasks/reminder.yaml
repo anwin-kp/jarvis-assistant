@@ -1,0 +1,24 @@
+id: reminder
+title: Set or list reminders
+triggers:
+- remind me to call Priya at 6:30
+- remind me in 20 minutes to stretch
+- remind me every weekday at 9 to check email
+- what reminders do I have
+what: Creates a one-off or repeating reminder, or lists them.
+steps:
+- 'in N minutes: create_reminder(text=..., in_minutes=N)'
+- 'at a time: create_reminder(text=..., when_iso=<ISO time, today unless said>)'
+- 'repeating: add repeat=daily|weekdays|weekly'
+- 'list: list_reminders'
+tools:
+- create_reminder
+- list_reminders
+verify:
+- the result echoes the reminder time; tell the user the exact time
+errors:
+- symptom: time in the past
+  recovery: ask whether they meant tomorrow
+safety: safe, no approval.
+status: verified
+source: curated

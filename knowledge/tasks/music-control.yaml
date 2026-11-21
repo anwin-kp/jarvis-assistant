@@ -1,0 +1,25 @@
+id: music-control
+title: Pause, resume or skip the music
+triggers:
+- pause the music
+- continue
+- resume
+- next song
+- skip this
+- go back a song
+- it's not playing
+what: Controls the current Spotify playback.
+steps:
+- spotify_control(action=pause|resume|next|previous)
+- '''it''s not playing'': spotify_now_playing, then spotify_control(action=resume)'
+tools:
+- spotify_control
+- spotify_now_playing
+verify:
+- 'for ''not playing'': spotify_now_playing shows is_playing'
+errors:
+- symptom: no active device / Spotify closed
+  recovery: spotify_play the last playlist to start it again
+safety: safe, no approval.
+status: verified
+source: curated

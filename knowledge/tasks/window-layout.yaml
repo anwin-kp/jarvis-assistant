@@ -1,0 +1,22 @@
+id: window-layout
+title: Arrange windows
+triggers:
+- snap Chrome to the left
+- minimize Spotify
+- switch to VS Code
+- maximize this window
+what: Focuses, minimizes, maximizes or snaps a window.
+steps:
+- window_action(name=<app/window>, action=focus|minimize|maximize|restore|snap_left|snap_right)
+- 'unsure of the name: list_windows first'
+tools:
+- window_action
+- list_windows
+verify:
+- the result names the window it changed
+errors:
+- symptom: no window matches
+  recovery: list_windows and ask which
+safety: safe.
+status: verified
+source: curated

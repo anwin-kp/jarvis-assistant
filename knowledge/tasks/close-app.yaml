@@ -1,0 +1,19 @@
+id: close-app
+title: Close an application
+triggers:
+- close Spotify
+- close the calculator
+- quit Chrome
+what: Gracefully closes a running application.
+steps:
+- close_app(name=<app>)
+tools:
+- close_app
+verify:
+- the result reports the process closed (or that it wasn't running)
+errors:
+- symptom: No running process named X
+  recovery: tell the user it isn't running
+safety: no approval needed, but warn that unsaved work in editors may prompt to save.
+status: verified
+source: curated

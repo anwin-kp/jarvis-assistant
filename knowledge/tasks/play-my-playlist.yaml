@@ -1,0 +1,22 @@
+id: play-my-playlist
+title: Play one of my Spotify playlists
+triggers:
+- play my Mix-Up Mash playlist
+- open Spotify and play my sleep playlist
+- put on my workout playlist
+- play mixup mesh
+what: Starts one of the user's own Spotify playlists on this PC (opens Spotify if needed).
+steps:
+- spotify_play(kind=my_playlist, query=<playlist name exactly as heard; misheard names are matched>)
+tools:
+- spotify_play
+verify:
+- 'the result says ''Checked: now playing ...'''
+errors:
+- symptom: 'ERROR: none of your playlists matches'
+  recovery: say the closest names from the error and ask which
+- symptom: 'WARNING: hasn''t started playing'
+  recovery: say Spotify didn't respond; offer to try again
+safety: safe, no approval. Never use operate_app or open_app for music.
+status: verified
+source: curated

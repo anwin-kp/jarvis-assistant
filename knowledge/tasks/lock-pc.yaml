@@ -1,0 +1,19 @@
+id: lock-pc
+title: Lock the PC
+triggers:
+- lock my PC
+- lock the screen
+- I'm stepping away
+what: Locks Windows (the user's password/PIN is needed to get back in).
+steps:
+- lock_screen
+tools:
+- lock_screen
+verify:
+- the screen locks (JARVIS keeps running)
+errors:
+- symptom: lock failed
+  recovery: tell the user to press Win+L
+safety: safe, no approval.
+status: verified
+source: curated
