@@ -386,7 +386,7 @@ class App:
                 from jarvis.memory.learner import clean_fact
 
                 if fact := clean_fact(f"[other] In their own words: {text}"):
-                    self.memory.learn(fact)
+                    self.memory.learn(fact, "taught")
         return self.memory.list_facts()
 
     def _weekly_review(self) -> None:
