@@ -34,6 +34,9 @@ FRAME = 480  # 30 ms
 FRAME_MS = 30
 
 
+PARTIAL_EVERY = 33  # frames (~1 s) between live caption drafts
+
+
 @dataclass
 class Utterance:
     audio: np.ndarray  # float32, 16 kHz mono
@@ -229,6 +232,9 @@ class AudioEngine:
 
     def _continue_capture(self, frame: np.ndarray, level: float) -> None:
         self._frames.append(frame)
+        # live captions: about once a second while you talk, the audio so far (the app drafts a caption locally)
+        if len(self._frames) % PARTIAL_EVERY == 0 and self._voiced >= 10 and not self._capture_barge:
+            self.emit("partial", np.concatenate(self._frames).astype(np.float32) / 32768.0)
         voiced = level >= self.threshold and self.is_speech(frame)
         if voiced:
             self._voiced += 1
