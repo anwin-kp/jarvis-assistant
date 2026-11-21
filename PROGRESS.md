@@ -32,7 +32,7 @@ Compact state for continuing work without re-reading the codebase. Update it wit
 ## Done (PRs)
 #26–#41 voice engine, Spotify, vision, operator, HUD attachments, location, cut-in, memory/learner ·
 #43 cloud actions + fallback · #44 verified actions · #45 review + voice fixes · #46 lessons + plan-then-do ·
-#47 Gemini flash-lite · #48 voice test + 600 ms pre-roll · #49 short words · #50 task playbooks · #51 read-only tools don't back claims · #52 email modify · #54 Spotify retry + cloud handover · #55 smaller cloud requests · #56 offline tasks (local eval, offline Spotify) · #57 distant speech kept · #58 weekly self-check · #59 live captions · #60 briefing when you sit down · #61 conversation survives restarts · #63-#67 smoke-test fixes (self-echo, gated-mic echo, operator Gemini fallback, list_processes) · #69 close_app really closes (real process names, WM_CLOSE + verify, no false "closed") · #70 speed: 2 more Groq models before Gemini (own 8k TPM each), per-model cooldown from retry-after, Gemini 10 s cap, short commands not dropped as echo, eval --cloud · #71 misheard app names ("closed not padder" -> close notepad; sound-alike match, app names in STT vocabulary) ·
+#47 Gemini flash-lite · #48 voice test + 600 ms pre-roll · #49 short words · #50 task playbooks · #51 read-only tools don't back claims · #52 email modify · #54 Spotify retry + cloud handover · #55 smaller cloud requests · #56 offline tasks (local eval, offline Spotify) · #57 distant speech kept · #58 weekly self-check · #59 live captions · #60 briefing when you sit down · #61 conversation survives restarts · #63-#67 smoke-test fixes (self-echo, gated-mic echo, operator Gemini fallback, list_processes) · #69 close_app really closes (real process names, WM_CLOSE + verify, no false "closed") · #70 speed: 2 more Groq models before Gemini (own 8k TPM each), per-model cooldown from retry-after, Gemini 10 s cap, short commands not dropped as echo, eval --cloud · #71 misheard app names ("closed not padder" -> close notepad; sound-alike match, app names in STT vocabulary) · #72 cloud requests 20-33% smaller (only examples for the offered tools) ·
 overlay branch: transparent overlay, Ctrl+Alt+J/H/D, auto-hide over fullscreen/gaming, position & size settings (gear), tray Overlay submenu.
 
 ## Backlog (highest impact first)
@@ -44,7 +44,7 @@ overlay branch: transparent overlay, Ctrl+Alt+J/H/D, auto-hide over fullscreen/g
   `Barge-in accepted` / `Heard my own voice` / `status=error` counts in the log since the last restart.
 
 ## Known issues
-- Groq free tier: 8k tokens/min per model. Cloud requests send ~10 tools (playbook + closest by meaning) and the
+- Groq free tier: 8k tokens/min per model (~0.9-1.4k per request after #72). Cloud requests send ~10 tools (playbook + closest by meaning) and the
   last 3 exchanges; a mid-task 429 hands over to Gemini as plain text. Operator screenshots are ~4k tokens.
 - Loud Bluetooth speaker + gated headset mic: the echo can be louder than the user's voice; talking over
   JARVIS then needs a louder voice (HUD Stop always works).
