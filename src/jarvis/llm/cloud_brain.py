@@ -20,7 +20,7 @@ ACTION_GROUPS = {"system", "media", "browser", "windows", "pc", "reminder", "hom
 
 
 class CloudUnavailable(RuntimeError):
-    pass
+    retry_after: float = 60.0  # seconds until this provider/model can be tried again
 
 
 class CloudBrain:
@@ -36,6 +36,10 @@ class CloudBrain:
         self.last_tool_calls: list[str] = []
 
     @property
+    def name(self) -> str:  # each Groq model has its own free per-minute budget: cool down per model
+        return f"{self.provider}/{self.model}"
+
+    @property
     def available(self) -> bool:
         return bool(self.key)
 
@@ -49,10 +53,19 @@ class CloudBrain:
         except requests.RequestException as e:
             raise CloudUnavailable(f"network: {e}") from e
         if r.status_code == 429 or r.status_code >= 500:
-            raise CloudUnavailable(f"{self.provider} HTTP {r.status_code}")
+            e = CloudUnavailable(f"{self.name} HTTP {r.status_code}")
+            try:  # Groq says exactly when its per-minute token budget refills (often a few seconds)
+                e.retry_after = min(60.0, max(2.0, float(r.headers.get("retry-after", 60))))
+            except (TypeError, ValueError):
+                pass
+            raise e
         if not r.ok:
             raise CloudUnavailable(f"{self.provider} HTTP {r.status_code}: {r.text[:200]}")
-        return r.json()["choices"][0]["message"]
+        data = r.json()
+        if u := data.get("usage"):
+            logger.debug("Cloud {}: {} prompt + {} reply tokens", self.name, u.get("prompt_tokens"),
+                         u.get("completion_tokens"))
+        return data["choices"][0]["message"]
 
     def complete(self, messages: list[dict]) -> str:
         return (self._chat(messages, None).get("content") or "").strip()
@@ -168,7 +181,7 @@ class CloudChain:
     def _ready(self):
         import time
 
-        return [b for b in self.brains if b.available and self.cooldown.get(b.provider, 0) < time.monotonic()]
+        return [b for b in self.brains if b.available and self.cooldown.get(b.name, 0) < time.monotonic()]
 
     def _try(self, call):
         import time
@@ -184,8 +197,8 @@ class CloudChain:
                 self.last_tool_calls = b.last_tool_calls
                 if b.last_tool_calls:
                     raise
-                logger.warning("Cloud {} unavailable ({}); trying the next one", b.provider, e)
-                self.cooldown[b.provider] = time.monotonic() + 60
+                logger.warning("Cloud {} unavailable ({}); trying the next one", b.name, e)
+                self.cooldown[b.name] = time.monotonic() + e.retry_after
                 last = e
         raise CloudUnavailable(str(last) if last else "no cloud provider available")
 
@@ -202,9 +215,9 @@ class CloudChain:
                 self.last_tool_calls = b.last_tool_calls
                 return out
             except CloudUnavailable as e:
-                logger.warning("Cloud {} unavailable ({}){}", b.provider, e,
+                logger.warning("Cloud {} unavailable ({}){}", b.name, e,
                                "; continuing on the next one from the tool results" if b.last_tool_calls else "")
-                self.cooldown[b.provider] = time.monotonic() + 60
+                self.cooldown[b.name] = time.monotonic() + e.retry_after
                 if getattr(e, "partial", None):
                     msgs, done, results = as_text_history(e.partial), list(b.last_tool_calls), e.results
                 elif b.last_tool_calls:  # tools ran but there's nothing to continue from: never risk running them twice

@@ -5,6 +5,7 @@ from jarvis.llm.cloud_brain import CloudChain, CloudUnavailable, Router
 
 class FakeCloud:
     def __init__(self, provider, fail=None, tools_before_fail=False):
+        self.name = provider
         self.provider, self.model, self.fail, self.tools_before_fail = provider, "m", fail, tools_before_fail
         self.available, self.last_tool_calls, self.calls = True, [], 0
 
@@ -45,6 +46,7 @@ class ToolThenLimit:
     """Runs a tool, then hits the per-minute limit on the next step (what happened with 'Close Spotify')."""
 
     def __init__(self, provider):
+        self.name = provider
         self.provider, self.model, self.available, self.last_tool_calls, self.seen = provider, "m", True, [], None
 
     def respond(self, messages, tools, confirm, prior_tools=None):
@@ -93,3 +95,31 @@ def test_handover_history_is_plain_text():
     out = as_text_history(msgs)
     assert [m["role"] for m in out] == ["system", "user", "user"] and "do NOT run these again" in out[-1]["content"]
     assert "close_app" in out[-1]["content"] and "Closed spotify." in out[-1]["content"]
+
+
+def test_each_model_cools_down_separately_and_for_as_long_as_asked():
+    a, b = FakeCloud("groq", fail="429"), FakeCloud("groq")
+    a.name, b.name = "groq/big", "groq/small"
+    chain = CloudChain([a, b])
+    assert chain.respond([], [], None) == "reply from groq"  # the other Groq model answered
+    assert "groq/small" not in chain.cooldown and "groq/big" in chain.cooldown
+
+
+def test_short_commands_are_not_mistaken_for_echo():
+    from jarvis.__main__ import echo_of
+
+    assert not echo_of("Close Spotify", ["Opening spotify."])
+    assert echo_of("You have no", ["You have no unread emails."])
+
+
+def test_rate_limit_waits_only_as_long_as_groq_says(monkeypatch):
+    import types
+
+    from jarvis.llm import cloud_brain
+
+    resp = types.SimpleNamespace(status_code=429, headers={"retry-after": "4"}, ok=False, text="")
+    monkeypatch.setattr(cloud_brain.requests, "post", lambda *a, **k: resp)
+    b = cloud_brain.CloudBrain(None, "groq", "openai/gpt-oss-20b")
+    with pytest.raises(CloudUnavailable) as e:
+        b._chat([], None)
+    assert e.value.retry_after == 4 and b.name == "groq/openai/gpt-oss-20b"

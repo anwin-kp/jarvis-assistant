@@ -15,7 +15,8 @@ from loguru import logger
 CASES = Path(__file__).resolve().parents[2] / "tests" / "evals" / "tool_selection.yaml"
 
 
-def run(limit: int | None = None, verbose: bool = False, use_fast: bool = True, local_only: bool = False) -> dict:
+def run(limit: int | None = None, verbose: bool = False, use_fast: bool = True, local_only: bool = False,
+        cloud_model: str | None = None) -> dict:
     import jarvis.app as app
 
     logger.remove()
@@ -24,6 +25,14 @@ def run(limit: int | None = None, verbose: bool = False, use_fast: bool = True, 
 
     playbooks.LEARNED, playbooks.NOTES = app.DATA / "tasks" / "learned", app.DATA / "tasks" / "notes"
     cfg, orch, brain, reg, memory, _ = app.build(dry_run=True)
+    if cloud_model and getattr(brain, "cloud", None):  # compare one cloud model: "groq:openai/gpt-oss-20b"
+        from jarvis.llm.cloud_brain import CloudBrain
+
+        provider, model = cloud_model.split(":", 1)
+        b0 = brain.cloud.brains[0]
+        brain.cloud.brains = [CloudBrain(reg, provider, model, b0.max_steps,
+                                         extra={"reasoning_effort": "low"} if provider == "gemini" else None)]
+        brain.mode = "cloud_first"
     if local_only and hasattr(brain, "cloud"):  # "the cloud is unreachable": everything on the local model
         brain.cloud = None
     from jarvis.core.fast_intents import FastIntents
@@ -67,5 +76,6 @@ if __name__ == "__main__":
     ap.add_argument("-v", "--verbose", action="store_true")
     ap.add_argument("--no-fast", action="store_true", help="disable instant commands (baseline)")
     ap.add_argument("--local", action="store_true", help="cloud unreachable: local model only")
+    ap.add_argument("--cloud", help="every case on this cloud model, e.g. groq:openai/gpt-oss-20b")
     a = ap.parse_args()
-    run(a.limit, a.verbose, not a.no_fast, a.local)
+    run(a.limit, a.verbose, not a.no_fast, a.local, a.cloud)
