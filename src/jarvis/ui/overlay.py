@@ -70,6 +70,26 @@ def single_instance() -> bool:
     return win32api.GetLastError() != winerror.ERROR_ALREADY_EXISTS
 
 
+def parse_strip(title: str) -> tuple[str, int] | None:
+    """'JARVIS:7:strip-r-748' -> ('r', 748): the page's message strip (side, width in CSS px)."""
+    import re
+
+    m = re.search(r":strip-([lr])-(\d{2,5})$", title)
+    return (m.group(1), int(m.group(2))) if m else None
+
+
+def strip_geometry(screen_rect, side: str, width: int, active: bool):
+    """Passive: a full-height strip on the overlay's side; active (typing, settings): the whole display."""
+    if active or width <= 0 or width >= screen_rect.width():
+        return screen_rect
+    rect = type(screen_rect)(screen_rect)
+    if side == "r":
+        rect.setLeft(screen_rect.right() - width + 1)
+    else:
+        rect.setRight(screen_rect.left() + width - 1)
+    return rect
+
+
 def overlay_url(url: str) -> str:
     return url + ("&" if "?" in url else "?") + "overlay=1"
 
@@ -118,14 +138,20 @@ def main(url: str, owner_pid: int | None = None) -> int:
     names = [sc.name() for sc in screens]
     current = names.index(saved_screen()) if saved_screen() in names else screens.index(app.primaryScreen())
 
+    state = {"active": False}
+    # passive: only the strip the page draws in (the page says how wide, and on which side); active: whole display
+    strip = {"side": "r", "width": 0}
+
+    def geometry():
+        return strip_geometry(screens[current].availableGeometry(), strip["side"], strip["width"], state["active"])
+
     def place(i: int) -> None:
         sc = screens[i]
         view.setScreen(sc)
         view.move(sc.availableGeometry().topLeft())
-        QTimer.singleShot(250, lambda: view.setGeometry(sc.availableGeometry()))
+        QTimer.singleShot(250, lambda: view.setGeometry(geometry()))
 
     place(current)
-    state = {"active": False}
     # why it is hidden: "user" (Ctrl+Alt+H), "fullscreen" (a game/video in front), "gaming" (Gaming mode)
     hidden_by: set[str] = set()
 
@@ -139,6 +165,8 @@ def main(url: str, owner_pid: int | None = None) -> int:
 
     def set_active(on: bool) -> None:
         state["active"] = on
+        if view.geometry() != geometry():
+            view.setGeometry(geometry())
         click_through(int(view.winId()), not on)
         view.page().runJavaScript(f"window.overlayActive && overlayActive({'true' if on else 'false'})")
         if on:
@@ -186,6 +214,10 @@ def main(url: str, owner_pid: int | None = None) -> int:
             update_visibility()
         elif title.endswith(":next-display"):
             on_hotkey(HOTKEY_MOVE)
+        elif (got := parse_strip(title)) and got != (strip["side"], strip["width"]):
+            strip["side"], strip["width"] = got
+            if not state["active"]:
+                view.setGeometry(geometry())
 
     bridge.hotkey.connect(on_hotkey)
     view.titleChanged.connect(on_title)
