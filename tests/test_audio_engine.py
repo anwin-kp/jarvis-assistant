@@ -220,3 +220,22 @@ def test_gated_echo_bursts_do_not_interrupt():
     for f in pattern:
         eng.process(f)
     assert "barge" not in events
+
+
+def test_late_echo_after_learning_window_does_not_interrupt():
+    """Speech synthesis + Bluetooth: JARVIS's first audible echo comes after 0.9 s, then loud peaks."""
+    import numpy as np
+
+    from jarvis.audio.engine import AudioEngine
+
+    events = []
+    eng = AudioEngine(lambda k, d: events.append(k), is_speech=lambda f: True, calibrate_ms=300,
+                      sounds_like_jarvis=lambda a: False)
+    zero = np.zeros(480, np.int16)
+    echo = (np.ones(480) * 0.09 * 32767).astype(np.int16)
+    for _ in range(20):
+        eng.process(zero)
+    eng.set_speaking(True)
+    for f in [zero] * 40 + ([echo] * 6 + [zero] * 3) * 10:  # 1.2 s of nothing, then echo syllables
+        eng.process(f)
+    assert "barge" not in events
