@@ -38,6 +38,9 @@ PARTIAL_EVERY = 33  # frames (~1 s) between live caption drafts
 ECHO_LEARN_FRAMES = 30  # 0.9 s at the start of a reply: echo learning, no interrupts
 ECHO_WINDOW = 63  # ~1.9 s of recent levels for the echo estimate
 ECHO_RECENT_SKIP = 13  # ...minus the newest 0.4 s (a possible interruption)
+ECHO_PRESENT = 0.0005  # any signal at all (a gated headset gives exact zeros until the echo arrives)
+ECHO_HEARD_FRAMES = 15  # 0.45 s of audible echo before interrupts are trusted
+ECHO_SILENT_AFTER = 100  # ...or 3 s of a reply with no echo at all
 
 
 @dataclass
@@ -96,6 +99,7 @@ class AudioEngine:
         self._echo = 0.0  # learned echo level while JARVIS speaks
         self._echo_learn = 0  # frames left in the echo-learning window at the start of speech
         self._echo_levels: list[float] = []  # mic levels while JARVIS speaks (diagnostics)
+        self._echo_heard, self._reply_frames = 0, 0  # audible echo frames / frames in this reply
         self._echo_recent: collections.deque = collections.deque(maxlen=ECHO_WINDOW)  # mic levels while JARVIS talks
         self._voiced_hist: collections.deque = collections.deque(maxlen=10)  # last 300 ms: voiced or not
         self._requested = 0  # frames left for a requested one-shot capture (push-to-talk / after wake)
@@ -117,6 +121,7 @@ class AudioEngine:
                 # Bluetooth speakers play ~0.3-0.5 s late: learn the echo for 0.9 s before allowing an interrupt
                 self._echo, self._echo_learn = 0.0, ECHO_LEARN_FRAMES
                 self._echo_recent.clear()
+                self._echo_heard, self._reply_frames = 0, 0
                 self._voiced_hist.clear()
             if not speaking and self._speaking:
                 self._tail = self.echo_tail_frames
@@ -205,9 +210,15 @@ class AudioEngine:
         # The newest 0.4 s is left out so your own interruption can't raise its own bar.
         past = list(self._echo_recent)[:-ECHO_RECENT_SKIP] or [0.0]
         self._echo = float(max(past))
+        self._reply_frames += 1
+        self._echo_heard += level > ECHO_PRESENT
         if self._echo_learn > 0:
             self._echo_learn -= 1
             return  # still learning the echo (Bluetooth delay): no interrupts yet
+        # The first audible echo can come >0.9 s into a reply (speech synthesis + Bluetooth delay): until JARVIS has
+        # heard its own voice for a moment, it can't tell it apart from yours. A silent speaker: allowed after 3 s.
+        if self._echo_heard < ECHO_HEARD_FRAMES and self._reply_frames < ECHO_SILENT_AFTER:
+            return
         threshold = max(self.barge_floor, self._echo * self.barge_factor)
         voiced = level >= threshold and self.is_speech(frame)
         self._voiced_hist.append(voiced)
