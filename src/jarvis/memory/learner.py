@@ -243,7 +243,8 @@ class Learner:
             if not (isinstance(item, dict) and supported(item, said, document)):
                 logger.debug("Learner: dropped unsupported {}", item)
                 continue
-            if (fact := clean_fact(item.get("fact", ""))) and self.memory.learn(fact):
+            if (fact := clean_fact(item.get("fact", ""))) and self.memory.learn(fact, "document" if document
+                                                                                     else "said"):
                 learned.append(fact)
         if learned:
             logger.info("Learned about the user: {}", learned)

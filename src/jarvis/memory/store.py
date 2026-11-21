@@ -1,6 +1,7 @@
 """Local SQLite memory: conversation log, user facts, audit log."""
 
 import json
+import re
 import sqlite3
 import threading
 from pathlib import Path
@@ -20,10 +21,28 @@ CREATE TABLE IF NOT EXISTS summaries(
 
 CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT);
 
+CREATE TABLE IF NOT EXISTS fact_history(
+  id INTEGER PRIMARY KEY, ts TEXT DEFAULT (datetime('now','localtime')), fact_id INTEGER, old_fact TEXT,
+  new_fact TEXT, reason TEXT);
+
 CREATE TABLE IF NOT EXISTS audit_log(
   id INTEGER PRIMARY KEY, ts TEXT DEFAULT (datetime('now','localtime')),
   tool TEXT, args TEXT, risk TEXT, status TEXT);
 """
+
+
+# Facts that can only have one value at a time: a new one replaces the old (kept in fact_history). Deliberately
+# narrow: real facts are rich sentences ("Works at Gadgeon ... on a Siemens project"), and a broad rule would wipe
+# correct detail. These cover the corrections seen in real use ("my name is Anwin, not Nin").
+SLOTS = {
+    "name": re.compile(r"^\[identity\]\s*(?:(?:full|first|real)\s+)?name is\b", re.I),
+    "birthday": re.compile(r"^\[dates\]\s*(?:birthday is|was born on|date of birth is)\b", re.I),
+    "home": re.compile(r"^\[places\]\s*(?:lives|is living|now lives) in\b", re.I),
+}
+
+
+def slot_of(fact: str) -> str | None:
+    return next((name for name, rx in SLOTS.items() if rx.match(fact.strip())), None)
 
 
 class Memory:
@@ -32,6 +51,10 @@ class Memory:
         self.lock = threading.Lock()
         with self.lock:
             self.db.executescript(SCHEMA)
+            cols = {r[1] for r in self.db.execute("PRAGMA table_info(facts)")}
+            if "source" not in cols:  # where a fact came from: said / document / taught / told (remember)
+                self.db.execute("ALTER TABLE facts ADD COLUMN source TEXT DEFAULT ''")
+                self.db.commit()
 
     def log_turn(self, user: str, reply: str) -> None:
         with self.lock:
@@ -41,18 +64,34 @@ class Memory:
             )
             self.db.commit()
 
-    def remember(self, fact: str) -> str:
-        fact = fact.strip()
+    def remember(self, fact: str, source: str = "told") -> str:
+        fact = " ".join(fact.split())
+        if (slot := slot_of(fact)) and (old := self._slot_fact(slot)) and old["fact"] != fact:
+            self.replace_fact(old["id"], fact, reason=f"new {slot}")  # "my name is X" again: update, not a 2nd name
+            return "Updated."
         with self.lock:
-            cur = self.db.execute("INSERT OR IGNORE INTO facts(fact) VALUES (?)", (fact,))
+            cur = self.db.execute("INSERT OR IGNORE INTO facts(fact, source) VALUES (?, ?)", (fact, source))
             self.db.commit()
         return "Saved." if cur.rowcount else "I already knew that."
 
+    def _slot_fact(self, slot: str) -> dict | None:
+        return next((f for f in self.list_facts() if slot_of(f["fact"]) == slot), None)
+
     def forget(self, fact_id: int) -> str:
         with self.lock:
+            row = self.db.execute("SELECT fact FROM facts WHERE id = ?", (fact_id,)).fetchone()
             cur = self.db.execute("DELETE FROM facts WHERE id = ?", (fact_id,))
+            if row:  # kept in the history, so a wrong "forget" can be undone
+                self.db.execute("INSERT INTO fact_history(fact_id, old_fact, new_fact, reason) VALUES (?, ?, '', ?)",
+                                (fact_id, row[0], "forgotten"))
             self.db.commit()
         return "Forgotten." if cur.rowcount else f"No fact with id {fact_id}."
+
+    def fact_history(self, limit: int = 50) -> list[dict]:
+        with self.lock:
+            rows = self.db.execute("SELECT ts, fact_id, old_fact, new_fact, reason FROM fact_history "
+                                   "ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+        return [dict(zip(("ts", "fact_id", "old", "new", "reason"), r, strict=True)) for r in rows]
 
     def list_facts(self) -> list[dict]:
         with self.lock:
@@ -147,17 +186,26 @@ class Memory:
         best = int(np.argmax(scores))
         return facts[best]["id"] if float(scores[best]) >= threshold else None
 
-    def learn(self, fact: str) -> bool:
-        """Add a fact unless one with the same meaning exists. Returns True if added."""
+    def learn(self, fact: str, source: str = "said") -> bool:
+        """Add a fact unless one with the same meaning exists (a single-value slot - name, birthday, home - is
+        updated instead). Returns True if added or updated."""
         fact = " ".join(fact.split())
-        if len(fact) < 6 or self._similar_fact(fact) is not None:
+        if len(fact) < 6:
             return False
-        return self.remember(fact) == "Saved."
+        slot = slot_of(fact)
+        if not slot and self._similar_fact(fact) is not None:
+            return False
+        return self.remember(fact, source) in ("Saved.", "Updated.")
 
-    def replace_fact(self, fact_id: int, fact: str) -> bool:
+    def replace_fact(self, fact_id: int, fact: str, reason: str = "updated") -> bool:
+        fact = " ".join(fact.split())
         with self.lock:
+            row = self.db.execute("SELECT fact FROM facts WHERE id=?", (fact_id,)).fetchone()
             cur = self.db.execute("UPDATE OR IGNORE facts SET fact=?, ts=datetime('now','localtime') WHERE id=?",
-                                  (" ".join(fact.split()), fact_id))
+                                  (fact, fact_id))
+            if cur.rowcount and row and row[0] != fact:  # the old version is kept: nothing is silently lost
+                self.db.execute("INSERT INTO fact_history(fact_id, old_fact, new_fact, reason) VALUES (?, ?, ?, ?)",
+                                (fact_id, row[0], fact, reason))
             self.db.commit()
         return bool(cur.rowcount)
 
@@ -191,7 +239,7 @@ class Memory:
     def export(self) -> dict:
         out = {}
         with self.lock:
-            for table in ("facts", "summaries", "messages", "audit_log"):
+            for table in ("facts", "fact_history", "summaries", "messages", "audit_log"):
                 cur = self.db.execute(f"SELECT * FROM {table}")
                 cols = [c[0] for c in cur.description]
                 out[table] = [dict(zip(cols, row, strict=True)) for row in cur]
