@@ -24,6 +24,7 @@ from pathlib import Path
 import requests
 from loguru import logger
 
+GEMINI = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
 GROQ = "https://api.groq.com/openai/v1/chat/completions"
 RISKY = re.compile(r"\b(pay|buy|purchase|order|checkout|place order|send|post|delete|remove|erase|format|uninstall|"
                    r"confirm|submit|transfer|sign out|log ?out|unsubscribe|empty)\b", re.I)
@@ -195,12 +196,15 @@ def to_send_keys(combo: str) -> str:
 
 class Operator:
     def __init__(self, api_key: str, model: str = "qwen/qwen3.8-27b", max_steps: int = 15, confirm=None,
-                 cancel: threading.Event | None = None, http=None, text_model: str = "openai/gpt-oss-120b"):
+                 cancel: threading.Event | None = None, http=None, text_model: str = "openai/gpt-oss-120b",
+                 fallback_key: str | None = None, fallback_model: str = "gemini-3.5-flash-lite"):
         # steps without a new screenshot go to a text model: separate free quota, so tasks wait less
         self.key, self.model, self.text_model, self.max_steps = api_key, model, text_model, max_steps
         self.confirm = confirm or (lambda what: False)
         self.cancel = cancel or threading.Event()
         self.http = http or requests
+        # Groq rate limited: the same step goes to Gemini (it reads screenshots too) instead of waiting 30 s at a time
+        self.fallback_key, self.fallback_model = fallback_key, fallback_model
 
     LOOK = {"type": "function", "function": {
         "name": "look", "description": "See a screenshot of the window, when the target list isn't enough "
@@ -288,6 +292,16 @@ class Operator:
         waited = 0.0
         while True:
             r = self.http.post(GROQ, timeout=60, headers={"Authorization": f"Bearer {self.key}"}, json=body)
+            if getattr(r, "status_code", 200) == 429 and self.fallback_key:
+                alt = {k: v for k, v in body.items() if k != "reasoning_effort"}
+                alt.update(model=self.fallback_model, reasoning_effort="low")
+                g = self.http.post(GEMINI, timeout=60, headers={"Authorization": f"Bearer {self.fallback_key}"},
+                                   json=alt)
+                if getattr(g, "status_code", 500) < 400:
+                    logger.info("Operator: Groq rate limited; this step used Gemini")
+                    return g.json()
+                logger.warning("Operator: Gemini fallback failed {} {}", getattr(g, "status_code", "?"),
+                               getattr(g, "text", "")[:200])
             if getattr(r, "status_code", 200) != 429 or waited > 90:
                 if getattr(r, "status_code", 200) >= 400:
                     logger.warning("Operator: Groq {} {}", r.status_code, getattr(r, "text", "")[:300])

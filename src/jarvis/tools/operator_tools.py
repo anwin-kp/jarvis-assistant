@@ -60,7 +60,7 @@ def register(reg: ToolRegistry, cfg: dict) -> None:
         reg.operator_cancel.clear()
         op = Operator(key, ocfg.get("model", "qwen/qwen3.8-27b"), ocfg.get("max_steps", 15),
                       confirm=reg.ask,  # asks only before risky clicks (buy, delete, send...) and closing
-                      cancel=reg.operator_cancel)
+                      cancel=reg.operator_cancel, fallback_key=get_secret("gemini_api_key"))
         try:
             return op.run(task, hwnd)
         except Exception as e:
