@@ -19,7 +19,12 @@ Compact state for continuing work without re-reading the codebase. Update it wit
 | Health | `.\jarvis.ps1 review` (failed turns), `data/logs/jarvis.log` | private data in `data/` is never committed |
 
 ## Workflow
-- Branch from `develop` → PR → Windows CI → squash merge → `git merge develop` into `feature/desktop-overlay` → restart.
+- **Two folders.** `C:\Developmnet\Jarvis` = the user's running app, always on `feature/desktop-overlay` (never switch it).
+  `C:\Developmnet\Jarvis-dev` = git worktree for development (`data` is a junction to the app's data).
+  In the dev folder run Python as `PYTHONPATH=<dev>/src ../Jarvis/.venv/Scripts/python.exe ...` (the venv's editable
+  install points at the app folder).
+- Dev: branch from `develop` → PR → Windows CI → squash merge. Then in the app folder: `git pull`,
+  `git merge develop` into `feature/desktop-overlay`, push, `jarvis.ps1 restart`.
 - Before merging: `ruff check src tests`, `pytest -q`; eval when prompts/routing/tools change.
 - Smart App Control: only signed native code (check imports of new deps).
 - Patch files via a script file (not bash heredocs: they mangle `\b` and `\n`).
@@ -27,7 +32,7 @@ Compact state for continuing work without re-reading the codebase. Update it wit
 ## Done (PRs)
 #26–#41 voice engine, Spotify, vision, operator, HUD attachments, location, cut-in, memory/learner ·
 #43 cloud actions + fallback · #44 verified actions · #45 review + voice fixes · #46 lessons + plan-then-do ·
-#47 Gemini flash-lite · #48 voice test + 600 ms pre-roll · #49 short words · #50 task playbooks ·
+#47 Gemini flash-lite · #48 voice test + 600 ms pre-roll · #49 short words · #50 task playbooks · #51 read-only tools don't back claims · #52 email modify ·
 overlay branch: transparent overlay, Ctrl+Alt+J/H/D, auto-hide over fullscreen/gaming.
 
 ## Backlog (highest impact first)
