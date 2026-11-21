@@ -15,7 +15,8 @@
     .\jarvis.ps1 eval             # score how well JARVIS understands requests (local, ~3 min)
     .\jarvis.ps1 autostart-on     # start JARVIS (minimized) when you log in to Windows
     .\jarvis.ps1 autostart-off
-    .\jarvis.ps1 review           # find last week's turns that went wrong (report in dataeview)
+    .\jarvis.ps1 review           # find last week's turns that went wrong (report in data
+eview)
     .\jarvis.ps1 shortcut         # add JARVIS (and Kill JARVIS) to the Desktop and Start menu
     .\jarvis.ps1 enroll-voice     # record your voiceprint (for voice.voice_id)
     .\jarvis.ps1 spotify-login    # connect Spotify (after: set-key spotify_client_id)
@@ -26,7 +27,7 @@
 #>
 param(
     [Parameter(Position = 0)]
-    [ValidateSet('start', 'stop', 'restart', 'status', 'free', 'stop-all', 'logs', 'test', 'autostart-on', 'autostart-off', 'google-login', 'set-key', 'shortcut', 'enroll-voice', 'eval', 'review', 'spotify-login', 'help')]
+    [ValidateSet('start', 'stop', 'restart', 'status', 'free', 'stop-all', 'logs', 'test', 'autostart-on', 'autostart-off', 'google-login', 'set-key', 'shortcut', 'enroll-voice', 'eval', 'review', 'voice-test', 'spotify-login', 'help')]
     [string]$Command = 'help',
     [switch]$DryRun,
     [switch]$Text,
@@ -231,6 +232,7 @@ switch ($Command) {
     'autostart-on'  { Set-Autostart $true }
     'autostart-off' { Set-Autostart $false }
     'shortcut'      { New-Shortcuts }
+    'voice-test'    { Stop-Jarvis; Push-Location $Root; try { & $Python -W ignore -m jarvis.voicetest } finally { Pop-Location }; Write-Host '  Start JARVIS again with: .\jarvis.ps1 start' }
     'review'        { Push-Location $Root; try { $env:PYTHONIOENCODING = 'utf-8'; & $Python -W ignore -m jarvis.review } finally { Pop-Location } }
     'eval'          { Push-Location $Root; try { $env:PYTHONIOENCODING = 'utf-8'; & $Python -W ignore -m jarvis.evals } finally { Pop-Location } }
     'spotify-login' { Push-Location $Root; try { & $Python -W ignore -m jarvis.integrations.spotify } finally { Pop-Location } }

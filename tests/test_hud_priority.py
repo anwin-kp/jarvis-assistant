@@ -71,3 +71,11 @@ def test_hej_is_hey_and_jarvis_needs_its_name_after_a_quiet_minute():
     assert app._addressed("Jarvis, what's the weather?", utt) and app._addressed("pause", utt)
     app._spoke_at = _t.monotonic() - 10  # JARVIS just replied: follow-ups need no name
     assert app._addressed("and tomorrow?", utt)
+
+
+def test_measured_mishearings_are_corrected():
+    from jarvis.__main__ import normalize_heard
+    from jarvis.core.commands import is_stop_command
+
+    assert normalize_heard("Bosta Music") == "Pause the music" and normalize_heard("Posta musical.") != "Posta musical."
+    assert is_stop_command("Go.") and is_stop_command("stop") and not is_stop_command("go to sleep")

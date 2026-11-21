@@ -1028,9 +1028,18 @@ COMMON_CAPS = {"Is", "Has", "Likes", "Works", "Lives", "Prefers", "From", "Uses"
 NAME = re.compile(r"\b(jarvis|jervis|javis|jarvi|jarves|jarvish)\b", re.I)
 
 
+# Measured on the user's own voice (voice test, 20 phrases, every engine): the same few words come out wrong.
+HEARD_FIXES = [
+    (re.compile(r"^\s*hej\b", re.I), "Hey"),  # "Hey" -> Swedish "Hej" (JARVIS then answered in Swedish)
+    (re.compile(r"^\W*(?:bosta|posta|pasta|bostah|postah|pose the|paws the)\W+music(?:al)?\b\W*$", re.I),
+     "Pause the music"),
+]
+
+
 def normalize_heard(text: str) -> str:
-    """Whisper writes "Hey" as Swedish "Hej" for some accents (and JARVIS then answered in Swedish)."""
-    return re.sub(r"^\s*hej\b", "Hey", text, flags=re.I)
+    for pattern, fixed in HEARD_FIXES:
+        text = pattern.sub(fixed, text)
+    return text
 
 
 def main() -> None:
