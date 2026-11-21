@@ -53,6 +53,10 @@ class PiperTTS:
         if not chunks or stopped():
             return
         audio = np.concatenate([c.audio_int16_array for c in chunks])
+        if self.on_audio is not None:  # what's about to be played (echo recording, audio/aec.py)
+            import time
+
+            self.on_audio(audio, chunks[0].sample_rate, time.monotonic())
         # Own output stream, written in small blocks (the global sd.play/sd.stop pair crashed when stopped
         # from another thread while playing).
         block = 1024
@@ -61,6 +65,8 @@ class PiperTTS:
                 if stopped():
                     break
                 out.write(audio[i:i + block].reshape(-1, 1))
+
+    on_audio = None  # (int16 audio, sample rate, start time) -> None
 
     def stop(self) -> None:
         self._stop.set()
