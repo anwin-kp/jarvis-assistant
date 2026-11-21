@@ -48,26 +48,22 @@ class CloudBrain:
     def available(self) -> bool:
         return bool(self.key)
 
-    def _chat(self, messages: list[dict], tools: list[dict] | None) -> dict:
+    def _chat(self, messages: list[dict], tools: list[dict] | None, on_text=None) -> dict:
+        """One request. on_text: stream the answer, calling on_text(piece) as it arrives (speech starts with the
+        first sentence instead of waiting for the whole reply: cloud turns had a 4.7 s median to the first word)."""
         body = {"model": self.model, "messages": messages, "temperature": 0.3, **self.extra}
         if tools:
             body["tools"] = tools
+        if on_text:
+            body["stream"] = True
         try:
             r = requests.post(f"{self.base}/chat/completions", json=body, timeout=self.timeout,
-                              headers={"Authorization": f"Bearer {self.key}"})
+                              headers={"Authorization": f"Bearer {self.key}"}, stream=bool(on_text))
         except requests.RequestException as e:
             raise CloudUnavailable(f"network: {e}") from e
-        if r.status_code == 429 or r.status_code >= 500:
-            e = CloudUnavailable(f"{self.name} HTTP {r.status_code}")
-            try:  # Groq says exactly when its per-minute token budget refills (often a few seconds)
-                e.retry_after = min(60.0, max(2.0, float(r.headers.get("retry-after", 60))))
-            except (TypeError, ValueError):
-                pass
-            raise e
-        if not r.ok:  # a bad request (e.g. Groq's "tool_use_failed"): try the next model, but no cooldown
-            e = CloudUnavailable(f"{self.provider} HTTP {r.status_code}: {r.text[:200]}")
-            e.retry_after = 0.0
-            raise e
+        self._check(r)
+        if on_text:
+            return self._read_stream(r, on_text)
         try:
             data = r.json()
             msg = data["choices"][0]["message"]
@@ -79,6 +75,62 @@ class CloudBrain:
             logger.debug("Cloud {}: {} prompt + {} reply tokens", self.name, u.get("prompt_tokens"),
                          u.get("completion_tokens"))
         return msg
+
+    def _read_stream(self, r, on_text) -> dict:
+        """Server-sent events (OpenAI format): text deltas go to on_text while no tool call has started; tool-call
+        pieces (name, arguments) are joined by index. A connection drop after text was spoken keeps that text."""
+        import json
+
+        content, calls = "", {}
+        r.encoding = "utf-8"  # event streams declare no charset: requests guessed Latin-1 ("28Â°C"), seen live
+        try:
+            for raw in r.iter_lines(decode_unicode=True):
+                if not raw or not raw.startswith("data:"):
+                    continue
+                payload = raw[5:].strip()
+                if payload == "[DONE]":
+                    break
+                try:
+                    choices = json.loads(payload).get("choices") or []
+                except ValueError:
+                    continue
+                delta = (choices[0].get("delta") or {}) if choices else {}
+                for tc in delta.get("tool_calls") or []:
+                    slot = calls.setdefault(tc.get("index", len(calls)),
+                                            {"id": "", "type": "function", "function": {"name": "", "arguments": ""}})
+                    slot["id"] = tc.get("id") or slot["id"]
+                    fn = tc.get("function") or {}
+                    slot["function"]["name"] += fn.get("name") or ""
+                    slot["function"]["arguments"] += fn.get("arguments") or ""
+                if piece := delta.get("content"):
+                    content += piece
+                    if not calls:
+                        on_text(piece)
+                if self.cancel.is_set():
+                    break
+        except requests.RequestException as err:
+            if not content or calls:
+                e = CloudUnavailable(f"{self.name}: stream dropped ({err})")
+                e.retry_after = 0.0
+                raise e from err
+            logger.warning("Cloud {}: stream dropped after {} chars; keeping what was said", self.name, len(content))
+        msg = {"role": "assistant", "content": content}
+        if calls:
+            msg["tool_calls"] = [{**c, "id": c["id"] or f"call_{i}"} for i, c in sorted(calls.items())]
+        return msg
+
+    def _check(self, r) -> None:
+        if r.status_code == 429 or r.status_code >= 500:
+            e = CloudUnavailable(f"{self.name} HTTP {r.status_code}")
+            try:  # Groq says exactly when its per-minute token budget refills (often a few seconds)
+                e.retry_after = min(60.0, max(2.0, float(r.headers.get("retry-after", 60))))
+            except (TypeError, ValueError):
+                pass
+            raise e
+        if not r.ok:  # a bad request (e.g. Groq's "tool_use_failed"): try the next model, but no cooldown
+            e = CloudUnavailable(f"{self.provider} HTTP {r.status_code}: {r.text[:200]}")
+            e.retry_after = 0.0
+            raise e
 
     def complete(self, messages: list[dict]) -> str:
         return (self._chat(messages, None).get("content") or "").strip()
@@ -92,14 +144,21 @@ class CloudBrain:
         for _ in range(self.max_steps):
             if self.cancel.is_set():
                 return stopped_reply(self.last_tool_calls)
+            stream = None
+            if on_sentence and not nudged:  # speak sentences as they arrive; claims wait for the checked answer
+                from jarvis.llm.ollama_brain import SentenceStream
+
+                stream = SentenceStream(on_sentence, lambda: acted(self.reg, self.last_tool_calls))
             try:
-                msg = self._chat(msgs, tools)
+                msg = self._chat(msgs, tools, stream.feed if stream else None)
             except CloudUnavailable as e:
                 if self.last_tool_calls:  # tools already ran: hand over the conversation, results included
                     e.partial = msgs
                     e.results = [m["content"] for m in msgs if m.get("role") == "tool"]
                 raise
             calls = msg.get("tool_calls") or []
+            if stream and not calls:
+                stream.finish()
             if not calls:
                 reply = (msg.get("content") or "").strip()
                 nudge = unbacked_claim(reply, acted(self.reg, self.last_tool_calls)) if tools and not nudged else None
@@ -248,7 +307,8 @@ class CloudChain:
         for b in self._ready():
             self.active = b
             try:
-                out = b.respond(msgs, tools, confirm, prior_tools=done)
+                kw = {"on_sentence": on_sentence} if on_sentence else {}
+                out = b.respond(msgs, tools, confirm, prior_tools=done, **kw)
                 self.last_tool_calls = b.last_tool_calls
                 return out
             except CloudUnavailable as e:
@@ -315,7 +375,7 @@ class Router:
         tried_cloud = self._use_cloud(tools, think, private, action)
         if tried_cloud:
             try:
-                return self._cloud_turn(messages, tools, confirm, cloud_tools)
+                return self._cloud_turn(messages, tools, confirm, cloud_tools, on_sentence)
             except CloudUnavailable as e:
                 if self.cloud.last_tool_calls:  # a tool already ran; don't repeat it locally
                     logger.warning("Cloud failed after running tools: {}", e)
@@ -335,7 +395,7 @@ class Router:
                 raise
             logger.warning("Local model failed ({}); answering with the cloud model", e)
             try:
-                return self._cloud_turn(messages, tools, confirm, cloud_tools)
+                return self._cloud_turn(messages, tools, confirm, cloud_tools, on_sentence)
             except CloudUnavailable as ce:
                 if self.cloud.last_tool_calls:
                     self.last_tool_calls, self.last_backend = self.cloud.last_tool_calls, "cloud"
@@ -349,14 +409,15 @@ class Router:
             return False
         return not (private if private is not None else any(self._is_private(t) for t in tools or []))
 
-    def _cloud_turn(self, messages, tools, confirm, cloud_tools) -> str:
+    def _cloud_turn(self, messages, tools, confirm, cloud_tools, on_sentence=None) -> str:
         if hasattr(self.local, "cancel"):
             self.local.cancel.clear()
         offered = cloud_tools if cloud_tools is not None else tools
         public_tools = [t for t in offered or [] if not self._is_private(t)]  # never private tools
         msgs = recent(personal_context(messages, self.share_personal))
         msgs = trim_examples(msgs, {t["function"]["name"] for t in public_tools}, set(self.reg.names()))
-        reply = self.cloud.respond(msgs, public_tools, confirm)
+        kw = {"on_sentence": on_sentence} if on_sentence else {}
+        reply = self.cloud.respond(msgs, public_tools, confirm, **kw)
         self.last_tool_calls, self.last_backend = self.cloud.last_tool_calls, "cloud"
         return reply
 
