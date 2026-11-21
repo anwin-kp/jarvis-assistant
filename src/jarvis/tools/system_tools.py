@@ -69,10 +69,10 @@ def register(reg: ToolRegistry) -> None:
         rows = []
         for p in procs:
             try:
-                mem = p.info["memory_info"]
+                mem = p.info.get("memory_info")  # missing when the process exited mid-scan (KeyError before)
                 rows.append({
-                    "pid": p.info["pid"],
-                    "name": p.info["name"],
+                    "pid": p.info.get("pid"),
+                    "name": p.info.get("name"),
                     "memory_mb": round(mem.rss / 2**20) if mem else 0,
                     "cpu_percent": p.cpu_percent(None) if sort_by == "cpu" else None,
                 })
