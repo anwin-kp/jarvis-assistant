@@ -142,7 +142,7 @@ def test_loud_headset_speech_interrupts_even_if_fingerprint_is_unsure():
                       sounds_like_jarvis=lambda audio: True)  # fingerprint (wrongly) says "JARVIS"
     feed(eng, frames(QUIET, 300))
     eng.set_speaking(True)
-    feed(eng, frames(QUIET * 3, 600) + frames(LOUD, 900) + frames(QUIET, 900))  # low echo, you speak clearly
+    feed(eng, frames(QUIET * 3, 1000) + frames(LOUD, 900) + frames(QUIET, 900))  # low echo, you speak clearly
     assert "barge" in kinds(events)
 
 
@@ -164,7 +164,7 @@ def test_calibration_ignores_jarvis_talking_and_follows_the_room():
 def test_short_stop_word_interrupts():
     eng, ev = make()
     eng.set_speaking(True)
-    feed(eng, frames(QUIET, 600))
+    feed(eng, frames(QUIET, 1000))  # past the 0.9 s echo learning
     # "stop": ~360 ms of speech with a short dip in the middle (not unbroken)
     feed(eng, frames(LOUD, 150) + frames(QUIET, 60) + frames(LOUD, 150) + frames(QUIET, 900))
     assert "barge" in kinds(ev)
@@ -190,7 +190,7 @@ def test_one_word_command_is_kept_and_reports_speech_length():
 def test_very_short_interrupt_is_reported_as_a_stop():
     eng, ev = make()
     eng.set_speaking(True)
-    feed(eng, frames(QUIET, 600) + frames(LOUD, 180) + frames(QUIET, 900))  # a clipped "stop"
+    feed(eng, frames(QUIET, 1000) + frames(LOUD, 180) + frames(QUIET, 900))  # a clipped "stop"
     assert ("noise", True) in [(k, d) for k, d in ev if k == "noise"] and "barge" in kinds(ev)
 
 

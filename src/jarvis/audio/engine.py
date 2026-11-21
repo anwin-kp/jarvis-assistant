@@ -35,6 +35,8 @@ FRAME_MS = 30
 
 
 PARTIAL_EVERY = 33  # frames (~1 s) between live caption drafts
+ECHO_LEARN_FRAMES = 30  # 0.9 s at the start of a reply: echo learning, no interrupts
+ECHO_WINDOW = 50  # 1.5 s of recent levels for the echo estimate
 
 
 @dataclass
@@ -93,6 +95,7 @@ class AudioEngine:
         self._echo = 0.0  # learned echo level while JARVIS speaks
         self._echo_learn = 0  # frames left in the echo-learning window at the start of speech
         self._echo_levels: list[float] = []  # mic levels while JARVIS speaks (diagnostics)
+        self._echo_recent: collections.deque = collections.deque(maxlen=ECHO_WINDOW)  # mic levels while JARVIS talks
         self._voiced_hist: collections.deque = collections.deque(maxlen=10)  # last 300 ms: voiced or not
         self._requested = 0  # frames left for a requested one-shot capture (push-to-talk / after wake)
         self._request_after_wake = False
@@ -110,7 +113,9 @@ class AudioEngine:
     def set_speaking(self, speaking: bool) -> None:
         with self._lock:
             if speaking and not self._speaking and self._tail == 0:  # a new reply (not just its next sentence)
-                self._echo, self._echo_learn = 0.0, 12
+                # Bluetooth speakers play ~0.3-0.5 s late: learn the echo for 0.9 s before allowing an interrupt
+                self._echo, self._echo_learn = 0.0, ECHO_LEARN_FRAMES
+                self._echo_recent.clear()
                 self._voiced_hist.clear()
             if not speaking and self._speaking:
                 self._tail = self.echo_tail_frames
@@ -190,15 +195,18 @@ class AudioEngine:
 
     def _watch_for_barge(self, frame: np.ndarray, level: float) -> None:
         self._echo_levels.append(level)
-        if self._echo_learn > 0:  # start of a reply: measure the echo (detection keeps running)
-            self._echo = max(self._echo, level)
+        # The echo estimate uses ALL frames (loud echo sounds like speech: excluding "speech" frames kept the
+        # estimate near 0 while the real echo was 0.2-0.5 and JARVIS interrupted itself). The 75th percentile of
+        # the last 1.5 s: your own short interruption (~300 ms) barely moves it.
+        self._echo_recent.append(level)
+        self._echo = float(np.percentile(self._echo_recent, 75))
+        if self._echo_learn > 0:
             self._echo_learn -= 1
+            return  # still learning the echo (Bluetooth delay): no interrupts yet
         threshold = max(self.barge_floor, self._echo * self.barge_factor)
         voiced = level >= threshold and self.is_speech(frame)
         self._voiced_hist.append(voiced)
         if not voiced:
-            if self._echo_learn == 0:
-                self._echo = 0.95 * self._echo + 0.05 * level  # keep adapting to the echo level
             return
         # enough speech in the last 300 ms (not necessarily unbroken): short words like "stop" count
         self._barge_run = sum(self._voiced_hist)
