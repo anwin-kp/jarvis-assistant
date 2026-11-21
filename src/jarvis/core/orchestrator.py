@@ -93,6 +93,23 @@ class Orchestrator:
             prompt += "\n\n" + INTERVIEW
         return prompt
 
+    def cloud_tools(self, words: str, tools: list[dict], k: int = 10) -> list[dict]:
+        """A much smaller tool list for the cloud model (Groq's free tier: 8k tokens/minute, and every step resends
+        everything). The big model needs no help choosing: the tools of the playbook in use + the k closest by
+        meaning. Measured: 15-44 tools (1-3.2k tokens) -> about 10 (~0.7k)."""
+        by_name = {t["function"]["name"]: t for t in tools}
+        keep: list[str] = []
+        books = getattr(self.reg, "playbooks", None)
+        if books and books.last_used:
+            card = next((c for c in books.cards if c.id == books.last_used), None)
+            keep += [n for n in (card.data["tools"] if card else []) if n in by_name]
+        if self.semantic:
+            keep += [n for n in self.semantic.rank_tools(words, k * 3) if n in by_name][:k]
+        keep = list(dict.fromkeys(keep))
+        if len(keep) < 3:  # ranking unavailable: don't risk leaving the model without tools
+            return tools
+        return [by_name[n] for n in keep]
+
     def summarize_session(self) -> None:
         """Condense the current conversation into a stored summary, then start fresh."""
         with self.lock:
@@ -171,6 +188,8 @@ class Orchestrator:
         kw = {"on_sentence": on_sentence} if on_sentence else {}
         if self.last_think:
             kw["think"] = True
+        if hasattr(self.brain, "cloud"):
+            kw["cloud_tools"] = self.cloud_tools(words, tools)
         if hasattr(self.brain, "cloud"):  # router: privacy follows what you asked for, not tools added "just in case"
             from jarvis.llm.cloud_brain import PRIVATE_GROUPS
 

@@ -32,7 +32,7 @@ Compact state for continuing work without re-reading the codebase. Update it wit
 ## Done (PRs)
 #26–#41 voice engine, Spotify, vision, operator, HUD attachments, location, cut-in, memory/learner ·
 #43 cloud actions + fallback · #44 verified actions · #45 review + voice fixes · #46 lessons + plan-then-do ·
-#47 Gemini flash-lite · #48 voice test + 600 ms pre-roll · #49 short words · #50 task playbooks · #51 read-only tools don't back claims · #52 email modify ·
+#47 Gemini flash-lite · #48 voice test + 600 ms pre-roll · #49 short words · #50 task playbooks · #51 read-only tools don't back claims · #52 email modify · #54 Spotify retry + cloud handover · #55 smaller cloud requests ·
 overlay branch: transparent overlay, Ctrl+Alt+J/H/D, auto-hide over fullscreen/gaming.
 
 ## Backlog (highest impact first)
@@ -41,5 +41,6 @@ overlay branch: transparent overlay, Ctrl+Alt+J/H/D, auto-hide over fullscreen/g
 3. Remaining eval miss class: in-app tasks routed locally (privacy) sometimes `open_app` first.
 
 ## Known issues
-- Groq free tier: 8k tokens/min per model; operator screenshots are ~4k tokens (text-first mitigates).
+- Groq free tier: 8k tokens/min per model. Cloud requests send ~10 tools (playbook + closest by meaning) and the
+  last 3 exchanges; a mid-task 429 hands over to Gemini as plain text. Operator screenshots are ~4k tokens.
 - Windows location is IP-based (~20 km) on this PC; `location.home` overrides.
