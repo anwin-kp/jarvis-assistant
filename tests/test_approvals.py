@@ -34,3 +34,23 @@ def test_wait_for_polls_until_true_or_timeout():
     assert wait_for(lambda: n.append(1) or (len(n) >= 3 and "ok"), timeout=2, every=0.01) == "ok"
     assert wait_for(lambda: None, timeout=0.05, every=0.01) is None
     assert wait_for(lambda: 1 / 0, timeout=0.05, every=0.01) is None  # errors count as "not yet"
+
+
+def test_briefing_waits_until_you_are_at_the_pc(tmp_path):
+    from datetime import datetime
+
+    from jarvis.memory.store import Memory
+    from jarvis.scheduler.reminders import Reminders
+
+    fired, present = [], [False]
+    r = Reminders(Memory(tmp_path / "m.db"), lambda kind, text: fired.append(kind), "08:30",
+                  present_fn=lambda: present[0])
+    r._check_briefing(datetime(2026, 11, 22, 7, 0))  # too early
+    r._check_briefing(datetime(2026, 11, 22, 9, 0))  # time, but nobody at the PC
+    assert fired == []
+    present[0] = True
+    r._check_briefing(datetime(2026, 11, 22, 12, 40))  # sat down late: still today's briefing
+    r._check_briefing(datetime(2026, 11, 22, 12, 45))  # once a day
+    assert fired == ["briefing"]
+    r._check_briefing(datetime(2026, 11, 23, 15, 0))  # after "until": skipped
+    assert fired == ["briefing"]

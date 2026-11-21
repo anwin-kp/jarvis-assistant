@@ -714,7 +714,8 @@ class App:
 
     def briefing_prompt(self) -> str:
         city = self.cfg.get("briefing", {}).get("city")
-        parts = [f"the weather in {city}" if city else None, "my open tasks", "my pending reminders",
+        parts = [f"the weather in {city}" if city else "the weather where I am", "my open tasks",
+                 "my pending reminders",
                  "today's calendar events and unread emails" if "list_events" in self.reg.names() else None,
                  "the top 3 news headlines"]
         return ("Give me my daily briefing in a few short spoken sentences: "

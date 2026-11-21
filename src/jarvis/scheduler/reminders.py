@@ -35,9 +35,12 @@ def fmt(dt: datetime) -> str:
 
 
 class Reminders:
-    def __init__(self, memory: Memory, on_fire, briefing_time: str | None = None, interval: float = 10):
+    def __init__(self, memory: Memory, on_fire, briefing_time: str | None = None, interval: float = 10,
+                 briefing_until: str = "14:00", present_fn=None):
         """on_fire(kind, text): kind is 'reminder' or 'briefing'."""
         self.db, self.lock = memory.db, memory.lock
+        # morning briefing "when you sit down": the first moment after briefing_time that you're at the PC
+        self.briefing_until, self.present_fn = briefing_until, present_fn
         with self.lock:
             self.db.executescript(SCHEMA)
         self.on_fire = on_fire
@@ -88,9 +91,14 @@ class Reminders:
     def _check_briefing(self, now: datetime) -> None:
         h, m = (int(x) for x in self.briefing_time.split(":"))
         target = now.replace(hour=h, minute=m, second=0, microsecond=0)
+        uh, um = (int(x) for x in self.briefing_until.split(":"))
+        until = now.replace(hour=uh, minute=um, second=0, microsecond=0)
         today = now.date().isoformat()
-        # Fire once per day, any time from the target until 3 hours later (e.g. if the PC was off).
-        if not (target <= now <= target + timedelta(hours=3)):
+        # Once per day, between the target and `until`, at the first moment you're actually at the PC (so it isn't
+        # spoken to an empty room, and isn't missed when you start late).
+        if not (target <= now <= max(until, target + timedelta(hours=1))):
+            return
+        if self.present_fn and not self.present_fn():
             return
         with self.lock:
             row = self.db.execute("SELECT value FROM kv WHERE key='last_briefing'").fetchone()
