@@ -136,6 +136,7 @@ class Orchestrator:
         except Exception:
             logger.exception("Session summary failed")
         self.history.clear()
+        self._persist()
 
     def add_exchange(self, text: str, reply: str) -> None:
         """Record a turn that was answered without the AI (instant commands)."""
@@ -145,9 +146,42 @@ class Orchestrator:
         self.history = self.history[-2 * self.history_turns :]
         self.last_activity = time.monotonic()
         self.memory.log_turn(text, reply)
+        self._persist()
 
     def reset(self) -> None:
         self.history.clear()
+        self._persist()
+
+    # ------------------------------------------------------------ the conversation survives restarts
+    history_file = None  # Path: data/conversation.json (set by app.build)
+
+    def _persist(self) -> None:
+        if not self.history_file:
+            return
+        import json
+
+        try:
+            idle = time.monotonic() - self.last_activity
+            self.history_file.write_text(json.dumps({"last_activity": time.time() - idle, "history": self.history},
+                                                    ensure_ascii=False), encoding="utf-8")
+        except OSError as e:
+            logger.debug("Couldn't save the conversation: {}", e)
+
+    def restore(self, max_hours: float = 12) -> int:
+        """Continue the conversation after a restart. Its real age is kept: if it's older than the idle limit,
+        the next turn summarizes it into memory first (as if JARVIS had kept running). Returns messages restored."""
+        import json
+
+        try:
+            data = json.loads(self.history_file.read_text(encoding="utf-8"))
+        except (OSError, ValueError, AttributeError):
+            return 0
+        age = time.time() - float(data.get("last_activity", 0))
+        if age > max_hours * 3600 or not isinstance(data.get("history"), list):
+            return 0
+        self.history = [m for m in data["history"] if isinstance(m, dict) and m.get("role") in ("user", "assistant")]
+        self.last_activity = time.monotonic() - age
+        return len(self.history)
 
     def handle(self, text: str, confirm: ConfirmFn, on_sentence=None, route_text: str | None = None,
                private: bool = False) -> str:
@@ -211,5 +245,6 @@ class Orchestrator:
 
         self.history += [user_msg, {"role": "assistant", "content": reply}]
         self.history = self.history[-2 * self.history_turns :]
+        self._persist()
         self.memory.log_turn(text, reply)
         return reply

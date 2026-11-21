@@ -101,3 +101,27 @@ def test_weekly_review_runs_once_a_week(monkeypatch, tmp_path):
     first = review.run_weekly()
     assert first.startswith("Weekly self-check: 3 turns, 1 went wrong (tool error 1)")
     assert review.run_weekly() is None  # not due again for a week
+
+
+def test_the_conversation_survives_a_restart(tmp_path):
+    import time as _t
+
+    from jarvis.core.orchestrator import Orchestrator
+
+    def make():
+        o = Orchestrator.__new__(Orchestrator)
+        o.history, o.history_turns, o.last_activity = [], 8, _t.monotonic()
+        o.history_file = tmp_path / "conversation.json"
+        return o
+
+    a = make()
+    a.history = [{"role": "user", "content": "the cafe is called Bean Me Up"}, {"role": "assistant", "content": "ok"}]
+    a._persist()
+    b = make()  # "after a restart"
+    assert b.restore(12) == 2 and "Bean Me Up" in b.history[0]["content"]
+    assert _t.monotonic() - b.last_activity < 5  # recent: no summary needed yet
+    import json
+
+    old = {"last_activity": _t.time() - 13 * 3600, "history": a.history}  # saved 13 hours ago
+    (tmp_path / "conversation.json").write_text(json.dumps(old), encoding="utf-8")
+    assert make().restore(12) == 0  # far too old: start fresh
