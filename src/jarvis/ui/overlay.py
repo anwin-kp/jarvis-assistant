@@ -74,16 +74,20 @@ def parse_strip(title: str) -> tuple[str, int] | None:
     """'JARVIS:7:strip-r-748' -> ('r', 748): the page's message strip (side, width in CSS px)."""
     import re
 
-    m = re.search(r":strip-([lr])-(\d{2,5})$", title)
+    m = re.search(r":strip-([lrc])-(\d{2,5})$", title)
     return (m.group(1), int(m.group(2))) if m else None
 
 
 def strip_geometry(screen_rect, side: str, width: int, active: bool):
-    """Passive: a full-height strip on the overlay's side; active (typing, settings): the whole display."""
+    """Passive: a full-height strip on the overlay's side (l / r, or c = the middle of the display);
+    active (typing, settings): the whole display."""
     if active or width <= 0 or width >= screen_rect.width():
         return screen_rect
     rect = type(screen_rect)(screen_rect)
-    if side == "r":
+    if side == "c":
+        rect.setLeft(screen_rect.left() + (screen_rect.width() - width) // 2)
+        rect.setWidth(width)
+    elif side == "r":
         rect.setLeft(screen_rect.right() - width + 1)
     else:
         rect.setRight(screen_rect.left() + width - 1)

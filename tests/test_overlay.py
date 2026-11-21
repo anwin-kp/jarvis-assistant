@@ -53,6 +53,7 @@ def test_overlay_settings_keep_only_valid_choices(monkeypatch, tmp_path):
     out = hud.save_overlay_settings({"corner": "tl", "size": "l", "fade": "never", "evil": "x", "width": "huge"})
     assert out == {"corner": "tl", "size": "l", "width": "normal", "fade": "never"}
     assert hud.load_overlay_settings() == out
+    assert hud.save_overlay_settings({"corner": "c"})["corner"] == "c"  # centre of the screen
 
 
 def test_passive_overlay_is_only_its_strip():
@@ -66,6 +67,8 @@ def test_passive_overlay_is_only_its_strip():
     assert (right.left(), right.right(), right.top(), right.bottom()) == (532, 1279, 0, 759)
     left = strip_geometry(screen, "l", 748, active=False)
     assert (left.left(), left.width(), left.height()) == (0, 748, 760)
+    center = strip_geometry(screen, "c", 488, active=False)
+    assert (center.left(), center.width(), center.height()) == (396, 488, 760) and parse_strip("J:1:strip-c-488")
     assert strip_geometry(screen, "r", 748, active=True) == screen  # typing / settings: whole display
     assert strip_geometry(screen, "r", 0, active=False) == screen  # page hasn't said yet
     assert strip_geometry(screen, "r", 5000, active=False) == screen

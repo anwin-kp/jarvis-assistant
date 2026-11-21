@@ -16,7 +16,8 @@ URL_FILE = Path(__file__).resolve().parents[3] / "data" / "hud-url.txt"
 
 
 OVERLAY_SETTINGS = Path(__file__).resolve().parents[3] / "data" / "overlay-settings.json"
-OVERLAY_CHOICES = {"corner": {"tl", "tr", "bl", "br"}, "size": {"s", "m", "l"}, "width": {"narrow", "normal", "wide"},
+OVERLAY_CHOICES = {"corner": {"tl", "tr", "bl", "br", "c"}, "size": {"s", "m", "l"},
+                   "width": {"narrow", "normal", "wide"},
                    "fade": {"8", "16", "30", "never"}}
 OVERLAY_DEFAULTS = {"corner": "br", "size": "m", "width": "normal", "fade": "16"}
 
