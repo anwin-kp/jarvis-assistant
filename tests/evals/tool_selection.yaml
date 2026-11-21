@@ -67,7 +67,7 @@
 - {say: "flip a coin", expect: [flip_coin]}
 - {say: "hi jarvis, how are you?", expect: [none]}
 - {say: "tell me a joke", expect: [none]}
-- {say: "what's 15 percent of 240?", expect: [none]}
+- {say: "what's 15 percent of 240?", expect: [calculate, none]}
 - {say: "translate 'good morning' to Hindi", expect: [none]}
 - {say: "write a short birthday message for my mom", expect: [none]}
 - {say: "explain how a rainbow forms in two sentences", expect: [none, web_search, wikipedia_summary]}
@@ -91,3 +91,15 @@
 - {say: "archive the emails from LinkedIn", expect: [list_unread_emails, archive_email]}
 - {say: "what song is playing right now", expect: [now_playing, spotify_now_playing]}
 - {say: "resume the video", expect: [media_control]}
+- {say: "keep only one tab in chrome, close the others", expect: [close_browser_tabs]}
+- {say: "close the YouTube tab", expect: [close_browser_tabs]}
+- {say: "what tabs do I have open in chrome", expect: [list_browser_tabs]}
+- {say: "switch to my Gmail tab", expect: [switch_browser_tab]}
+- {say: "what's 15 percent of 2400", expect: [calculate]}
+- {say: "convert 5 miles to kilometers", expect: [convert_units]}
+- {say: "how much is 100 dollars in rupees", expect: [convert_currency]}
+- {say: "how many days until christmas", expect: [date_math]}
+- {say: "what does ubiquitous mean", expect: [define_word]}
+- {say: "is my internet working", expect: [network_status]}
+- {say: "open the file I just downloaded", expect: [recent_files]}
+- {say: "open youtube.com in chrome", expect: [open_in_browser, browser_open]}
