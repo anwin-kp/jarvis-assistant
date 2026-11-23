@@ -52,7 +52,8 @@ REQUIRED = [
                 r"\bam i (?:online|connected)\b|\bmy ip\b", re.I), {"network_status"}),
     (re.compile(r"\b(?:price of|stock price|share price|bitcoin|crypto|exchange rate|who won|latest news|"
                 # sports only: a misheard "via score" (= "VS Code") forced a web search -> an oncology answer
-                r"(?:what'?s the|live|match|game|cricket|football|ipl|nba) scores?|scores? (?:of|in) the (?:match|game))\b",
+                r"(?:what'?s the|live|match|game|cricket|football|ipl|nba) scores?|"
+                r"scores? (?:of|in) the (?:match|game))\b",
                 re.I), {"web_search", "convert_currency", "news_headlines", "read_webpage"}),
     # "open WhatsApp Web in Chrome" went to JARVIS's own Edge window (browser_open) instead of the user's Chrome
     (re.compile(r"\bopen\b(?!.*\b(?:search|click|type|fill|log ?in|sign ?in)\b).{1,40}\bin (?:google )?"
