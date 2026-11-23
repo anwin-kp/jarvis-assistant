@@ -234,3 +234,44 @@ def test_the_local_model_is_not_memory_mapped():
     assert b.options["use_mmap"] is False and b.options["num_ctx"] == 8192
     b.set_cpu_only(True)
     assert b.options["use_mmap"] is False and b.options["num_gpu"] == 0
+
+
+def test_settings_buttons_dont_cut_into_an_answer():
+    """Live: pressing the listen-mode button in the HUD cancelled the weather answer -> '(no reply)'."""
+    from jarvis.__main__ import App
+
+    cut = []
+    me = types.SimpleNamespace(_awaiting_confirm=False, speaking=True, busy=threading.Event(),
+                               interrupt=lambda text, force=False: cut.append(text))
+    App.preempt(me, "/listen")
+    App.preempt(me, "/gaming")
+    assert cut == []
+    App.preempt(me, "what time is it")
+    assert cut == ["HUD: what time is it"]
+
+
+def test_a_stopped_cloud_answer_says_stopped(monkeypatch):
+    from jarvis.llm import cloud_brain
+
+    b = cloud_brain.CloudBrain(ToolRegistry(), "groq", "m")
+    b.cancel = threading.Event()
+
+    def chat(self, messages, tools=None, on_text=None):
+        b.cancel.set()  # the user stopped it while the answer was coming
+        return {"content": ""}
+
+    monkeypatch.setattr(cloud_brain.CloudBrain, "_chat", chat)
+    assert b.respond([], [], None) == "Stopped."
+
+
+def test_bare_past_tense_claims_are_caught():
+    """Live: 'Copied the mobile folder to your clipboard', 'Pasted the mobile folder into VS Code' and 'Opened
+    quickop-mobile in VS Code' were said with no tool at all."""
+    from jarvis.llm.ollama_brain import CLAIMS_ACTION
+
+    for claim in ["Opened `quickop-mobile` in VS Code.", "Copied the `mobile` folder to your clipboard.",
+                  "Pasted the `mobile` folder into VS Code.", "Done, installed VLC."]:
+        assert CLAIMS_ACTION.search(claim), claim
+    for prose in ["Kerala was formed in 1956.", "Opened in 1990, the bridge spans the river.",
+                  "Updated by the maintainers in 2024, it's stable."]:
+        assert not CLAIMS_ACTION.search(prose), prose

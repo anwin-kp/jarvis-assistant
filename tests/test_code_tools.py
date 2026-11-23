@@ -74,3 +74,35 @@ def test_discovery_skips_dependency_folders(tmp_path):
     (tmp_path / "a" / "node_modules" / "pkg" / "package.json").write_text("{}")
     (tmp_path / "a" / "package.json").write_text("{}")
     assert list(discover([tmp_path])) == ["a"]
+
+
+def test_apps_inside_a_monorepo_are_projects_and_names_are_tried_as_said(tmp_path):
+    """Live: 'open quickop mobile app' opened the repo root - the Flutter app is a folder inside it, and ' app' was
+    stripped from the name before matching."""
+    from jarvis.tools import code_tools
+
+    repo = tmp_path / "Dev" / "QuickOP-mobile"
+    (repo / "quickop_mobile_app").mkdir(parents=True)
+    (repo / "quickop_mobile_app" / "pubspec.yaml").write_text("name: app\n")
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    reg = ToolRegistry()
+    code_tools.register(reg, {"coding": {"search_roots": [str(tmp_path / "Dev")]}})
+    assert reg.code_project("quickop mobile app").path.name == "quickop_mobile_app"
+    assert reg.code_project("quickop mobile").path.name == "QuickOP-mobile"
+    assert reg.code_project("quickop_mobile_app").kinds == ["flutter"]
+
+
+def test_open_project_reports_honestly(repo, monkeypatch):
+    """Live: 'Opened quickop-mobile in VS Code' was said 5 times while VS Code kept showing another folder."""
+    from jarvis.tools import code_tools
+
+    reg, app = repo
+    launched = []
+    monkeypatch.setattr(code_tools, "vscode_cli", lambda: ["Code.exe", "cli.js"])
+    monkeypatch.setattr(code_tools.subprocess, "Popen", lambda argv, **k: launched.append(argv))
+    monkeypatch.setattr("jarvis.tools.registry.wait_for", lambda check, timeout=4.0, every=0.4: check() or None)
+    monkeypatch.setattr(code_tools, "vscode_window", lambda name: False)  # VS Code ignored it
+    out = reg.get("open_project").func("my_app")
+    assert out.startswith("WARNING") and "didn't open" in out and launched[0][-1] == str(app)
+    monkeypatch.setattr(code_tools, "vscode_window", lambda name: name == "my_app")
+    assert "checked: its window is open" in reg.get("open_project").func("my_app")

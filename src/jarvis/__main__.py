@@ -463,6 +463,8 @@ class App:
         (voice, rest of the reply, AI generation, app task) so the new input runs straight away."""
         if getattr(self, "_awaiting_confirm", False):
             return  # it's the answer to an approval request, which is part of the current turn
+        if text.strip().lower().split(" ")[0] in SETTING_COMMANDS:
+            return  # a mode / settings button: it waits its turn (it used to cancel the answer: "(no reply)")
         if self.speaking or self.busy.is_set():
             logger.info("HUD input cuts in: {}", text[:40] or "(talk)")
             self.interrupt(f"HUD: {text or 'talk'}", force=True)
@@ -1217,6 +1219,9 @@ def proper_names(text: str) -> list[str]:
     return out
 
 
+# HUD buttons that change a setting or show something: they never cut into an answer being given
+SETTING_COMMANDS = {"/listen", "/wake", "/gaming", "/private", "/persona", "/hud", "/help", "/facts", "/tools",
+                    "/export", "/unmute", "/wakeup"}
 COMMON_CAPS = {"Is", "Has", "Likes", "Works", "Lives", "Prefers", "From", "Uses", "Speaks", "Built", "Also",
                "Since", "Earlier", "Personal", "Maintains", "Looking", "Building", "The", "And", "With", "For"}
 # What a very short sound may be: one-word commands and replies (anything else from a short sound is noise).

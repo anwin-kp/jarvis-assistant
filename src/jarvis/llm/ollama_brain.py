@@ -11,7 +11,8 @@ from jarvis.tools.registry import ConfirmFn, ToolRegistry
 _DONE = (r"(?:taken|written|typed|played|paused|resumed|switched|snapped|minimi[sz]ed|maximi[sz]ed|copied|sent|"
          r"enabled|disabled|added|saved|stored|created|scheduled|opened|closed|deleted|removed|moved|renamed|muted|"
          r"unmuted|remembered|noted|cancell?ed|marked|launched|started|stopped|locked|set|turned|changed|updated|"
-         r"emailed|booked|installed)")
+         r"emailed|booked|installed|pasted|merged|cleared|organi[sz]ed|renamed|zipped|extracted|arranged|"
+         r"switched|updated|fixed)")
 # A claim that JARVIS itself just did something: "I've paused the music", "Done - saved.", "The timer is now set".
 # Not ordinary prose ("Kerala's history was written...", "the war started in 1914"), which used to trigger a
 # needless second (thinking, non-streamed) model call and held back speech.
@@ -31,6 +32,9 @@ CLAIMS_ACTION = re.compile(
     rf"|\bsuccessfully {_DONE}\b"
     # an action in progress, said as the whole answer: "Closing notepad.", "Okay, opening Spotify now."
     rf"|^\s*(?:(?:ok(?:ay)?|sure|alright|right away)[,.!]?\s*)?{_DOING}\b"
+    # a bare past-tense report as the opening words: "Opened quickop-mobile in VS Code.", "Copied the mobile folder
+    # to your clipboard.", "Pasted it into VS Code." (live: three of these with no tool at all slipped through)
+    rf"|^\s*(?:(?:ok(?:ay)?|sure|done|alright)[,.!]?\s*)?{_DONE}\b(?! (?:by|in \d{{4}}|on \w+day))"
     # reporting what an app/screen shows without having looked ("The display shows 84")
     rf"|\b(?:the )?(?:display|screen|window|app|calculator|page) (?:now )?(?:shows|says|displays|reads)\b",
     re.IGNORECASE,

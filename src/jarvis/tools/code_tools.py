@@ -120,6 +120,12 @@ def discover(roots: list[Path], depth: int = 2) -> dict[str, Project]:
                 name = d.name.lower()
                 if name not in found:
                     found[name] = Project(name, d, kinds_of(d))
+                # monorepos: the real apps are folders inside ("QuickOP-mobile/quickop_mobile_app" is the Flutter
+                # app; opening the repo root wasn't what was asked for)
+                for sub in sorted(c for c in d.iterdir() if c.is_dir() and c.name not in SKIP_DIRS
+                                  and not c.name.startswith(".")):
+                    if (k := kinds_of(sub)) and sub.name.lower() not in found:
+                        found[sub.name.lower()] = Project(sub.name.lower(), sub, k)
                 return
             if level >= depth:
                 return
@@ -237,14 +243,17 @@ def register(reg: ToolRegistry, cfg: dict) -> None:
 
     def find_project(name: str) -> Project:
         all_ = projects()
-        n = name.lower().strip().removesuffix(" project").removesuffix(" app").strip()
-        if n in all_:
-            return all_[n]
         by_key = {_key(k): k for k in all_}  # 'Modbus Codec' / 'modbus-codec' / 'ModbusCodec' -> modbus_codec
         spoken = {_key(f): by_key[_key(folder)] for f, folder in spoken_names(folder_names(all_)).items()
                   if _key(folder) in by_key}
-        if (k := _key(n)) in by_key or k in spoken:
-            return all_[by_key.get(k) or spoken[k]]
+        # the name as said first ('quickop mobile app' IS a project), then without ' app' / ' project' (live:
+        # stripping first turned 'quickop mobile app' into 'quickop mobile' and opened the repo root instead)
+        raw = name.lower().strip()
+        for n in dict.fromkeys([raw, raw.removesuffix(" project").removesuffix(" app").strip()]):
+            if n in all_:
+                return all_[n]
+            if (k := _key(n)) in by_key or k in spoken:
+                return all_[by_key.get(k) or spoken[k]]
         close = difflib.get_close_matches(n, list(all_), n=1, cutoff=0.6)
         part = [k for k in all_ if n and (n in k or k in n)]
         hit = close[0] if close else (part[0] if len(part) == 1 else None)
@@ -286,12 +295,17 @@ def register(reg: ToolRegistry, cfg: dict) -> None:
         if app == "explorer":
             os.startfile(pr.path)
             return f"Opened {pr.name} in File Explorer."
-        code = shutil.which("code")
-        exe = Path(code).parent.parent / "Code.exe" if code else None  # ...\Microsoft VS Code\bin\code.cmd
-        if not exe or not exe.exists():
-            return "ERROR: VS Code isn't installed (or 'code' isn't on PATH)."
-        subprocess.Popen([str(exe), str(pr.path)], creationflags=subprocess.CREATE_NO_WINDOW)
-        return f"Opened {pr.name} in VS Code ({pr.path})."
+        launch = vscode_cli()
+        if not launch:
+            return "ERROR: VS Code isn't installed (or its 'code' command isn't on PATH)."
+        subprocess.Popen([*launch, str(pr.path)], creationflags=subprocess.CREATE_NO_WINDOW,
+                         env={**os.environ, "ELECTRON_RUN_AS_NODE": "1"})
+        from jarvis.tools.registry import wait_for
+
+        if wait_for(lambda: vscode_window(pr.path.name), timeout=12, every=0.5):
+            return f"Opened {pr.name} in VS Code (checked: its window is open)."
+        return (f"WARNING: asked VS Code to open {pr.path}, but no VS Code window for it appeared (checked for 12 s). "
+                "Tell the user it didn't open.")
 
     @reg.tool("project_status", "A code project's git state: branch, changed files, last commits.",
               {"project": {"type": "string"}}, group="code", read_only=True)
@@ -388,6 +402,31 @@ def register(reg: ToolRegistry, cfg: dict) -> None:
         if CHANGES.search(key) and not reg.ask(f"run '{' '.join(cmds[key])}' in {pr.name} (it changes files)"):
             return "Not run: you didn't approve it."
         return run_command(pr.path, key, cmds[key], int(ccfg.get("command_timeout", 900)))
+
+
+def vscode_cli() -> list[str] | None:
+    """VS Code's own command line, as code.cmd runs it: Code.exe in Node mode + cli.js, which asks a RUNNING VS Code
+    to open the folder. (Running Code.exe with a folder while VS Code was open opened nothing - 5 times in a row,
+    each reported as 'Opened'.) No cmd.exe in between."""
+    code = shutil.which("code")
+    if not code or not code.lower().endswith(".cmd"):
+        return None
+    root = Path(code).parent.parent
+    try:
+        m = re.search(r'"%~dp0\.\.\\([^"]+cli\.js)"', Path(code).read_text(encoding="utf-8", errors="ignore"))
+    except OSError:
+        m = None
+    cli = root / m.group(1) if m else None
+    exe = root / "Code.exe"
+    return [str(exe), str(cli)] if exe.exists() and cli and cli.exists() else None
+
+
+def vscode_window(folder_name: str) -> bool:
+    """A VS Code window showing this folder: titles look like 'file.py - FolderName - Visual Studio Code'."""
+    from jarvis.tools.window_tools import list_windows
+
+    n = folder_name.lower()
+    return any(w["app"].lower() == "code" and n in w["title"].lower() for w in list_windows())
 
 
 def iter_files(base: Path, glob: str = ""):
