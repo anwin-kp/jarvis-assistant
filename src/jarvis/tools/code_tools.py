@@ -41,6 +41,58 @@ class Project:
     kinds: list[str] = field(default_factory=list)
 
 
+GENERIC = {"app", "apps", "share", "shared", "mobile", "backend", "frontend", "api", "web", "server", "client",
+           "dev", "main", "master", "project", "repo", "src", "code", "lib", "core", "new", "old", "test", "tests"}
+
+
+def name_tokens(name: str, known: set[str] | None = None) -> list[str]:
+    """'ark_field_staff-SHARE' -> [ark, field, staff, share]; 'QuickOP' -> [quick, op];
+    'arkcustomer' -> [ark, customer] when 'ark' is a word of another project (known)."""
+    parts = []
+    for raw in re.split(r"[_\-\s.]+", name):
+        parts += re.findall(r"[A-Z]+(?=[A-Z][a-z])|[A-Z]?[a-z]+|[A-Z]+|\d+", raw) or [raw]
+    out = []
+    for p in (p.lower() for p in parts if p):
+        hit = next((k for k in sorted(known or (), key=len, reverse=True)
+                    if len(k) >= 3 and p.startswith(k) and len(p) - len(k) >= 3), None)
+        out += [hit, p[len(hit):]] if hit else [p]
+    return out
+
+
+def spoken_names(names: list[str]) -> dict[str, str]:
+    """How each project is said -> its name: 'Ark Field Staff Share' and, when it's still unique, the short form
+    without generic words ('Ark Field Staff'); compounds split where another project shows the word ('Ark Customer
+    Share'). These teach speech recognition your project names and fix them when misheard."""
+    known = {t for n in names for t in name_tokens(n) if len(t) >= 3}
+    known = {k for k in known if sum(k in name_tokens(n) for n in names) >= 2}  # a word several projects use
+    forms: dict[str, str] = {}
+    for n in names:
+        toks = name_tokens(n, known)
+        full = " ".join(t.capitalize() if len(t) > 2 else t.upper() for t in toks)
+        forms.setdefault(full, n)
+        core = [t for t in toks if t not in GENERIC]
+        if core and core != toks:
+            short = " ".join(t.capitalize() if len(t) > 2 else t.upper() for t in core)
+            forms.setdefault(short, n)
+    counts: dict[str, int] = {}
+    for f in forms:
+        counts[f.lower()] = counts.get(f.lower(), 0) + 1
+    shorts = {}
+    for f, n in forms.items():  # a short form two projects share ('Ark Field Staff' vs ...) is dropped
+        if sum(1 for g, m in forms.items() if g.lower() == f.lower() and m != n) == 0:
+            shorts[f] = n
+    return shorts
+
+
+def folder_names(projects: dict) -> list[str]:
+    """The projects' real folder names ('QuickOP', not 'quickop'): their capitals show where words start."""
+    return [p.path.name for p in projects.values()]
+
+
+def _key(s: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", s.lower())
+
+
 def kinds_of(path: Path) -> list[str]:
     k = []
     if (path / "pubspec.yaml").exists():
@@ -188,6 +240,11 @@ def register(reg: ToolRegistry, cfg: dict) -> None:
         n = name.lower().strip().removesuffix(" project").removesuffix(" app").strip()
         if n in all_:
             return all_[n]
+        by_key = {_key(k): k for k in all_}  # 'Modbus Codec' / 'modbus-codec' / 'ModbusCodec' -> modbus_codec
+        spoken = {_key(f): by_key[_key(folder)] for f, folder in spoken_names(folder_names(all_)).items()
+                  if _key(folder) in by_key}
+        if (k := _key(n)) in by_key or k in spoken:
+            return all_[by_key.get(k) or spoken[k]]
         close = difflib.get_close_matches(n, list(all_), n=1, cutoff=0.6)
         part = [k for k in all_ if n and (n in k or k in n)]
         hit = close[0] if close else (part[0] if len(part) == 1 else None)

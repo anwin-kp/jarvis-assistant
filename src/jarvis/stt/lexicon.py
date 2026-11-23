@@ -20,7 +20,7 @@ from loguru import logger
 
 PROMPT_CHARS = 700
 # a source's base priority: what's most likely to be said and misheard
-PRIOR = {"config": 100, "app": 6, "playlist": 4, "artist": 4, "fact": 3, "person": 3, "event": 2}
+PRIOR = {"config": 100, "app": 6, "project": 5, "playlist": 4, "artist": 4, "fact": 3, "person": 3, "event": 2}
 COMMON = set("""a an and are as at be but by can do for from go have he her his how i if in is it its me my no not
 of on or our play please set she so stop that the their them then there they this to turn up us was we what when
 where which who will with you your open close pause next yes okay ok song music volume what's it's that's
@@ -110,12 +110,12 @@ class Lexicon:
 
         while i < len(words):
             best = None
-            for n in (1, 2, 3):  # the best-scoring span; on a tie the shorter one
+            for n in (1, 2, 3, 4):  # the best-scoring span; on a tie the shorter one (names have up to 4 words)
                 if i + n <= len(words) and (m := match(words[i:i + n])) and (not best or m[0] > best[0] + 0.01):
                     best = (m[0], m[1], n, " ".join(words[i:i + n]).strip(".,!?;:"))
             if best and best[2] > 1:  # don't swallow a neighbour: "my mixup mesh" -> the name starts at "mixup"
                 nxt = match(words[i + 1:i + best[2]]) if best[2] > 1 else None
-                if nxt and nxt[1] == best[1] and nxt[0] >= best[0] - 0.03:
+                if nxt and nxt[1] == best[1] and nxt[0] >= best[0]:  # only if the shorter span is as good
                     best = None
             if best and best[3].lower() == best[1].lower():  # heard right: keep the words as they are
                 out += words[i:i + best[2]]
