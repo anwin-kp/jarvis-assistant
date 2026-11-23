@@ -366,8 +366,9 @@ def register(reg, cfg: dict, data: Path) -> Coder:
         return t
 
     @reg.tool("code_task", "Have the coding agent CHANGE code in a project: fix a bug or failing test, add a feature, "
-              "refactor. It works in the background on its own git branch (your files are untouched) with a free "
-              "cloud model, runs the project's checks, and reports back; then merge or discard.",
+              "refactor. Call it DIRECTLY for any fix / add / change request: it finds the code, runs the tests "
+              "and checks itself. It works in the background on its own git branch (the user's files are "
+              "untouched) with a free cloud model, and reports back; then merge or discard.",
               {"project": {"type": "string"}, "task": {"type": "string", "description": "what to change, in detail"}},
               risk=Risk.CONFIRM, group="code")
     def code_task(project: str, task: str):
@@ -391,7 +392,8 @@ def register(reg, cfg: dict, data: Path) -> Coder:
         t = pick(task_id)
         return coder.changes(t) if t.status == "done" else f"Task {t.id} is {t.status}: {t.summary}"
 
-    @reg.tool("merge_code_task", "Merge the coding agent's branch into the branch it started from.",
+    @reg.tool("merge_code_task", "Merge the coding agent's finished branch into the branch it started from ('merge "
+              "it', 'keep the changes'). Call it directly: it checks the task and the repo itself.",
               {"task_id": {"type": "string"}}, required=[], risk=Risk.CONFIRM, group="code")
     def merge_code_task(task_id: str = ""):
         t = pick(task_id)

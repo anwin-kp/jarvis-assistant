@@ -36,6 +36,28 @@ INTERVIEW = """GET-TO-KNOW-YOU MODE is on: you are getting to know the user so y
 CONTEXT = re.compile(r"\b(?:this|these|here|current(?:ly)?|on (?:my |the )?screen|in front of me|"
                      r"i'?m (?:looking at|in|on|reading|watching))\b", re.I)
 
+# eval: "in calculator press seven" chose the maths tool; "where is the login screen in ark sales" chose the
+# screen tools. Both are about something else, deterministically:
+CALCULATOR_APP = re.compile(r"\b(?:in|on|open|use)\s+(?:the\s+)?calculator\b|\bcalculator app\b", re.I)
+MATH_EXPR = re.compile(r"\d\s*[-+*/x×÷^%]\s*\d|\b(?:percent|sqrt|square root)\b", re.I)
+CODE_QUESTION = re.compile(r"^\W*(?:where|which file|in which file|find|how does|how is|what does|show me where)\b",
+                           re.I)
+
+
+def unwanted_groups(words: str, projects_fn=None) -> set[str]:
+    """A code question that names one of the user's projects is about its code, not about the screen."""
+    if not projects_fn or not CODE_QUESTION.search(words or ""):
+        return set()
+    try:
+        names = projects_fn()
+    except Exception:
+        return set()
+    low = (words or "").lower()
+    if any(n in low or n.replace("_", " ").replace("-", " ") in low for n in names):
+        return {"screen"}
+    return set()
+
+
 _FILLER = re.compile(
     r"\s*(?:let me know|feel free to|is there anything else|if you need anything|anything else i can)[^.!?]*[.!?]?\s*$",
     re.IGNORECASE,
@@ -227,7 +249,10 @@ class Orchestrator:
             groups.add("interview")  # end_interview stays available while getting to know the user
         if self.semantic and words:
             groups |= self.semantic.pick(words)
+        groups -= unwanted_groups(words, getattr(self.reg, "code_projects", None))
         tools = self.reg.schemas(groups)
+        if CALCULATOR_APP.search(words) and not MATH_EXPR.search(words):  # pressing keys in the app, not maths
+            tools = [t for t in tools if t["function"]["name"] != "calculate"]
         if books and books.last_used:  # the playbook is already in context: looking it up again only wastes a step
             tools = [t for t in tools if t["function"]["name"] != "find_task_playbook"]
         self.last_think = needs_thinking(words)

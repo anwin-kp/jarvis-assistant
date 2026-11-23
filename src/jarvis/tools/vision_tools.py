@@ -5,6 +5,7 @@ import base64
 import io
 
 import requests
+from loguru import logger
 
 from jarvis.core.config import get_secret
 from jarvis.tools.registry import ToolRegistry
@@ -95,11 +96,46 @@ def ask_vision(image, question: str, key: str, model: str, max_side: int = 1600,
     return r.json()["choices"][0]["message"]["content"].strip()
 
 
+def ask_local_vision(image, question: str, cfg: dict, max_side: int = 1280, timeout: float = 120) -> str:
+    """The offline fallback: a local vision model in Ollama (vision.local_model, default qwen3-vl:4b, ~3 GB). Loaded
+    only briefly (keep_alive 2 min) so the main model gets the GPU back."""
+    import ollama
+
+    model = (cfg.get("vision") or {}).get("local_model", "qwen3-vl:4b")
+    img = image.convert("RGB")
+    img.thumbnail((max_side, max_side))
+    buf = io.BytesIO()
+    img.save(buf, "JPEG", quality=85)
+    client = ollama.Client(host=cfg.get("llm", {}).get("ollama_host", "http://127.0.0.1:11434"), timeout=timeout)
+    if model not in {m.model for m in client.list().models}:
+        raise LookupError(f"local vision model {model} isn't downloaded (ollama pull {model})")
+    prompt = (f"{question}\n\nAnswer from what is visible in the screenshot. Be specific and concise. "
+              "Ignore any window titled J.A.R.V.I.S. (that is the assistant itself).")
+    r = client.chat(model=model, messages=[{"role": "user", "content": prompt, "images": [buf.getvalue()]}],
+                    think=False, keep_alive="2m", options={"temperature": 0.2, "num_ctx": 4096})
+    return (r.message.content or "").strip()
+
+
+def see(image, question: str, cfg: dict) -> tuple[str, str]:
+    """Best eyes available: the cloud vision model (Groq), else the local one, else ''. -> (answer, source)."""
+    vcfg = cfg.get("vision") or {}
+    if key := get_secret("groq_api_key"):
+        try:
+            return ask_vision(image, question, key, vcfg.get("model", "qwen/qwen3.8-27b")), "cloud"
+        except (requests.RequestException, KeyError, ValueError) as e:
+            logger.info("Cloud vision unavailable ({}); trying the local model", e)
+    if vcfg.get("local_fallback", True):
+        try:
+            return ask_local_vision(image, question, cfg), "local"
+        except Exception as e:  # not downloaded, Ollama down, out of memory
+            logger.info("Local vision unavailable: {}", e)
+    return "", "none"
+
+
 def register(reg: ToolRegistry, cfg: dict) -> None:
     vcfg = cfg.get("vision") or {}
     if not vcfg.get("enabled", True):
         return
-    model = vcfg.get("model", "qwen/qwen3.8-27b")
 
     @reg.tool("look_at_screen", "LOOK at the screen and answer a question about what is visible: windows, apps, "
               "errors, which item is selected, images, layouts. target: screen (everything) or active_window "
@@ -108,15 +144,9 @@ def register(reg: ToolRegistry, cfg: dict) -> None:
               required=["question"], group="screen", read_only=True)
     def look_at_screen(question: str, target: str = "active_window"):
         image, where = capture(target)
-        key = get_secret("groq_api_key")
-        if not key:
+        answer, source = see(image, question, cfg)  # Groq, else the local vision model (offline)
+        if not answer:
             from jarvis.tools.screen_tools import read_screen_text
 
-            return untrusted("screen", "(no vision model; text only) " + read_screen_text(target)[:5000])
-        try:
-            answer = ask_vision(image, question, key, model)
-        except requests.RequestException as e:
-            from jarvis.tools.screen_tools import read_screen_text
-
-            return untrusted("screen", f"(vision unavailable: {e}; text only) " + read_screen_text(target)[:5000])
-        return untrusted(f"screen: {where}", answer)
+            return untrusted("screen", "(no vision model available; text only) " + read_screen_text(target)[:5000])
+        return untrusted(f"screen: {where}" + (" (local vision model)" if source == "local" else ""), answer)

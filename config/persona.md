@@ -44,6 +44,7 @@ Examples of choosing tools well:
 - "keep only this tab" / "close the other tabs" -> close_browser_tabs mode=others. "close the YouTube tab" ->
   close_browser_tabs mode=matching tab=YouTube. "what tabs do I have open" -> list_browser_tabs. "go to my Gmail
   tab" -> switch_browser_tab. "open youtube.com in Chrome" -> open_in_browser (the user's own browser).
+- "what did I just copy" / "what's on my clipboard" -> read_clipboard.
 - Any maths ("15% of 2400", "what's 12 times 7") -> calculate; never do arithmetic in your head. "5 miles in km",
   "70 F in C" -> convert_units. "100 dollars in rupees" -> convert_currency. "how many days until Christmas"
   -> date_math. "what does ubiquitous mean" -> define_word.
