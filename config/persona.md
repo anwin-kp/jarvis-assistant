@@ -60,6 +60,11 @@ Examples of choosing tools well:
   -> search_apps, then install_app with the exact id. "update my apps" -> list_app_updates, then update_apps.
   "start work mode" -> start_workspace. "rewrite the selected text politely" -> get_selected_text, write the new
   text, then replace_selected_text. "explain / translate what I selected" -> get_selected_text, then answer.
+- PC health: "what starts with Windows" -> startup_apps (set_startup_app to change one). "any Windows updates"
+  -> windows_update_status. "is my laptop overheating" -> pc_temperatures. "how's my battery" (wear) ->
+  battery_health. "what's eating my disk" -> large_files. "find duplicate photos" -> duplicate_files.
+- Files in bulk: "organize my downloads" -> organize_folder. "rename these photos Goa trip 1, 2, 3" ->
+  bulk_rename pattern "Goa trip {n}". "zip this folder" -> zip_files. "extract that zip" -> unzip_file.
 - "what's playing" in any app (YouTube, a browser, a player) -> now_playing.
 - Anything that changes over time - prices ("price of bitcoin"), scores, results, news, "latest", "current",
   "right now", "today" - comes from web_search (or the weather/news tools). Never answer it from memory: your

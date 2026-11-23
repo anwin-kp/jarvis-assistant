@@ -11,11 +11,14 @@ KEYWORDS: dict[str, list[str]] = {
         "battery", "shutdown", "restart", "reboot", "powershell", "command", "ip address", "network",
         "open", "close", "launch", "start", "quit", "kill", "app", "program", "internet", "online", "offline",
         "connection", "connected", "ping", "my ip", "headset", "headphones", "speakers", "earbuds", "earphones",
-        "audio output", "audio device", "sound output", "microphone", "mic",
+        "audio output", "audio device", "sound output", "microphone", "mic", "startup", "starts with windows",
+        "windows update", "cpu temp", "gpu temp", "overheat", "running hot", "battery health", "battery wear",
     ],
     "files": [
         "file", "folder", "document", "pdf", "docx", "photo", "picture", "download", "desktop",
         "delete", "move", "rename", "find my", "where is", "recent", "latest file", "last file", "just downloaded",
+        "duplicate", "large files", "big files", "biggest files", "free up space", "disk space", "organize", "sort my",
+        "zip", "unzip", "extract",
     ],
     "web": [
         "search", "google", "look up", "weather", "temperature", "rain", "news", "headline",

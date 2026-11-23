@@ -118,3 +118,8 @@
 - {say: "are there updates for my apps", expect: [list_app_updates]}
 - {say: "start work mode", expect: [start_workspace]}
 - {say: "rewrite the selected text to sound more polite", expect: [get_selected_text]}
+- {say: "what apps start with windows", expect: [startup_apps]}
+- {say: "is my laptop overheating", expect: [pc_temperatures, get_system_info]}
+- {say: "how healthy is my battery", expect: [battery_health, get_system_info]}
+- {say: "find duplicate files in my pictures", expect: [duplicate_files]}
+- {say: "organize my downloads folder", expect: [organize_folder]}

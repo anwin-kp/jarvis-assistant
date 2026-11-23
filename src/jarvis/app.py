@@ -50,6 +50,9 @@ def build(dry_run: bool = False):
     from jarvis.tools import pc_control
 
     pc_control.register(reg, cfg, DATA)  # audio devices, install/update apps, workspaces, selected text
+    from jarvis.tools import pc_maintenance
+
+    pc_maintenance.register(reg, file_tools.make_guard(roots), roots)  # health checks, organize/rename/zip files
     clipboard_tools.register(reg)
     pc_tools.register(reg)
     from jarvis.core.config import ROOT
