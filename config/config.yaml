@@ -5,6 +5,7 @@ llm:
   ollama_host: http://127.0.0.1:11434
   ollama_model: qwen3:8b
   num_ctx: 8192          # Ollama's default is small; tool schemas + history need room
+  use_mmap: false        # don't keep a second copy of the model file in RAM (it's on the GPU): saves ~7 GB RAM
   temperature: 0.3
   think: false           # Qwen3 "thinking" mode; false = faster replies
   keep_alive: -1         # keep the model loaded while JARVIS runs (instant replies); gaming mode / Free GPU unload it

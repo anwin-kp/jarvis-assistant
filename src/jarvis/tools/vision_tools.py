@@ -112,7 +112,7 @@ def ask_local_vision(image, question: str, cfg: dict, max_side: int = 1280, time
     prompt = (f"{question}\n\nAnswer from what is visible in the screenshot. Be specific and concise. "
               "Ignore any window titled J.A.R.V.I.S. (that is the assistant itself).")
     r = client.chat(model=model, messages=[{"role": "user", "content": prompt, "images": [buf.getvalue()]}],
-                    think=False, keep_alive="2m", options={"temperature": 0.2, "num_ctx": 4096})
+                    think=False, keep_alive="2m", options={"temperature": 0.2, "num_ctx": 4096, "use_mmap": False})
     return (r.message.content or "").strip()
 
 
