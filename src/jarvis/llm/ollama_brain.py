@@ -116,7 +116,11 @@ class OllamaBrain:
         self.model = cfg["ollama_model"]
         self.think = cfg.get("think", False)
         self.keep_alive = cfg.get("keep_alive", "10m")
-        self.options = {"num_ctx": cfg.get("num_ctx", 8192), "temperature": cfg.get("temperature", 0.3)}
+        self.options = {"num_ctx": cfg.get("num_ctx", 8192), "temperature": cfg.get("temperature", 0.3),
+                        # Ollama memory-maps the model file: with every layer on the GPU, Windows kept that file in
+                        # RAM as well (measured: 7.9 GB -> 0.9 GB for qwen3:8b without it, same speed). Sent with
+                        # every request: a request without it would reload the model the mapped way.
+                        "use_mmap": cfg.get("use_mmap", False)}
         self.max_steps = cfg.get("max_steps", 6)
         self.cancel = threading.Event()  # set when you interrupt: stop generating
 
