@@ -106,3 +106,8 @@
 - {say: "put chrome on the left and vs code on the right", expect: [arrange_windows]}
 - {say: "clear my downloads older than 30 days", expect: [clean_old_downloads]}
 - {say: "how long is left on my timer", expect: [list_reminders]}
+- {say: "what coding projects do I have", expect: [list_projects]}
+- {say: "open my portfolio project in vs code", expect: [open_project]}
+- {say: "run the tests in modbus codec", expect: [run_dev_command, list_dev_commands]}
+- {say: "what changed in the jarvis repo", expect: [project_status, git_diff]}
+- {say: "where is the login screen in ark sales", expect: [search_code, list_code_files]}
