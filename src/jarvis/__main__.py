@@ -88,6 +88,7 @@ class Voice:
         self.voiceid = None
         idcfg = vcfg.get("voice_id") or {}
         self.voiceid = load_voice_id(idcfg, DATA / "models" / "voiceid")
+        self.enforce_voice_id = idcfg.get("enabled") is True  # 'auto' only measures (shadow mode)
         self.tts = None
         if vcfg.get("tts_engine", "piper") == "piper":
             try:
@@ -115,13 +116,25 @@ class Voice:
                 self._tts_cache[name] = self.tts
         return self._tts_cache[name]
 
+    voice_score: float | None = None  # the last utterance's similarity to your voiceprint (saved with the recording)
+
     def is_owner(self, audio) -> bool:
+        """Shadow mode (enrolled, voice_id.enabled: auto): only MEASURE how much each utterance sounds like you -
+        the score is saved with the recording and nothing is blocked, because the right threshold depends on your
+        mic and room (your real commands scored 0.34-0.41 against a voiceprint from a close-up recording, the TV up
+        to 0.47). 'python -m jarvis.audio.voiceid --report' turns the scores into a threshold; enforcing it is
+        voice_id.enabled: true."""
+        self.voice_score = None
         if not self.voiceid:
             return True
         ok, score = self.voiceid.is_owner(audio)
-        if not ok:
+        self.voice_score = round(score, 3)
+        if not ok and self.enforce_voice_id:
             logger.info("Ignored speech from another voice (similarity {:.2f})", score)
-        return ok
+            return False
+        return True
+
+    enforce_voice_id = False
 
     def transcribe(self, audio) -> str:
         if not audio.size or not self.is_owner(audio):
@@ -173,7 +186,8 @@ class Voice:
             folder.mkdir(parents=True, exist_ok=True)
             stem = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
             (folder / f"{stem}.wav").write_bytes(to_wav(audio))
-            (folder / f"{stem}.json").write_text(json.dumps({"text": text, "lang": lang, "engine": self.last_engine}),
+            (folder / f"{stem}.json").write_text(json.dumps({"text": text, "lang": lang, "engine": self.last_engine,
+                                                             "voice_score": self.voice_score}),
                                                  encoding="utf-8")
             for old in sorted(folder.glob("*.wav"))[:-self.keep_recordings]:
                 old.unlink(missing_ok=True)
@@ -228,6 +242,9 @@ def load_voice_id(idcfg: dict, folder):
         from jarvis.audio.voiceid import VoiceID
 
         vid = VoiceID(folder, idcfg.get("threshold", 0.45))
+        if vid.enrolled:
+            logger.info("Voice ID {} (threshold {})", "on" if mode is True else "measuring only (shadow mode)",
+                        vid.threshold)
         return vid if vid.enrolled else None
     except Exception as e:  # e.g. "An Application Control policy has blocked this file"
         logger.warning("Voice ID unavailable ({}); listening to everyone", e)
