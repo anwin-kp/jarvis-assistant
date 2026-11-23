@@ -87,15 +87,7 @@ class Voice:
         self._tts_cache: dict = {}
         self.voiceid = None
         idcfg = vcfg.get("voice_id") or {}
-        mode = idcfg.get("enabled", "auto")  # auto = on as soon as you've enrolled your voice
-        if mode is True or str(mode).lower() == "auto":
-            from jarvis.audio.voiceid import VoiceID
-
-            self.voiceid = VoiceID(DATA / "models" / "voiceid", idcfg.get("threshold", 0.45))
-            if not self.voiceid.enrolled:
-                if mode is True:
-                    logger.warning("Voice ID is on but no voice is enrolled: run .\\jarvis.ps1 enroll-voice")
-                self.voiceid = None
+        self.voiceid = load_voice_id(idcfg, DATA / "models" / "voiceid")
         self.tts = None
         if vcfg.get("tts_engine", "piper") == "piper":
             try:
@@ -218,6 +210,27 @@ class Voice:
         score = float(self._vid.embed(audio) @ self.jarvis_print)
         logger.debug("Voice fingerprint vs JARVIS: {:.2f}", score)
         return score > self.cfg.get("echo_voice_threshold", 0.55)
+
+
+def load_voice_id(idcfg: dict, folder):
+    """Voice ID (only obey your voice), or None. 'auto' = on once you've enrolled; enrollment is checked by its file
+    first, because loading the library itself can fail: Smart App Control blocks sherpa-onnx's DLL here, and that
+    import error once took down the whole voice (no mic, no speech). Voice ID failing never stops the voice."""
+    mode = idcfg.get("enabled", "auto")
+    if mode is not True and str(mode).lower() != "auto":
+        return None
+    if not (folder / "voiceprint.npy").exists():
+        if mode is True:
+            logger.warning(r"Voice ID is on but no voice is enrolled: run .\jarvis.ps1 enroll-voice")
+        return None
+    try:
+        from jarvis.audio.voiceid import VoiceID
+
+        vid = VoiceID(folder, idcfg.get("threshold", 0.45))
+        return vid if vid.enrolled else None
+    except Exception as e:  # e.g. "An Application Control policy has blocked this file"
+        logger.warning("Voice ID unavailable ({}); listening to everyone", e)
+        return None
 
 
 def setup_logging(debug: bool) -> None:
