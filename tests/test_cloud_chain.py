@@ -135,3 +135,57 @@ def test_cloud_prompt_keeps_only_examples_for_offered_tools():
     text = out[0]["content"]
     assert "set_volume" in text and "get_weather" not in text and "with no city" not in text
     assert "just answer" in text and text.endswith("\n\n[personal]\nfacts") and out[1]["content"] == "hi"
+
+
+def test_results_survive_two_handovers_and_the_local_model_finishes():
+    """Live: Groq rate-limited right after pc_temperatures ran, Gemini timed out, and the answer became 'I did that
+    step, but couldn't finish' - the second handover had overwritten the tool results with an empty list."""
+    from jarvis.llm.cloud_brain import CloudChain, CloudUnavailable, Router
+
+    class AfterTool:  # ran the tool, then hit the limit: hands over its conversation
+        name = provider = "groq"
+        model, available, last_tool_calls = "m", True, []
+
+        def respond(self, messages, tools, confirm, prior_tools=None, **kw):
+            self.last_tool_calls = ["pc_temperatures"]
+            e = CloudUnavailable("429")
+            e.partial = [{"role": "user", "content": "hot?"},
+                         {"role": "assistant", "content": "", "tool_calls": [
+                             {"id": "1", "function": {"name": "pc_temperatures", "arguments": "{}"}}]},
+                         {"role": "tool", "tool_call_id": "1", "content": "GPU 47 C"}]
+            e.results = ["GPU 47 C"]
+            raise e
+
+    class Busy:  # the next one fails too, with nothing new
+        name = provider = "gemini"
+        model, available, last_tool_calls = "m", True, []
+
+        def respond(self, messages, tools, confirm, prior_tools=None, **kw):
+            self.last_tool_calls = list(prior_tools or [])
+            e = CloudUnavailable("timeout")
+            e.partial, e.results = messages, []
+            raise e
+
+    class Local:
+        model, last_tool_calls = "local", []
+
+        def __init__(self):
+            import threading
+
+            self.cancel, self.seen = threading.Event(), None
+
+        def respond(self, messages, tools, confirm, **kw):
+            self.seen = (messages, tools)
+            return "Your GPU is at 47 C: no overheating."
+
+    local = Local()
+    r = Router(local, CloudChain([AfterTool(), Busy()]), type("Reg", (), {"get": lambda s, n: None,
+                                                                         "names": lambda s: []})(), mode="cloud_first")
+    assert r.respond([{"role": "user", "content": "is my laptop overheating"}], [], None) == \
+        "Your GPU is at 47 C: no overheating."
+    msgs, tools = local.seen
+    assert tools == [] and "GPU 47 C" in str(msgs)  # finished from the results, with no tools to re-run
+
+    local.respond = lambda *a, **k: (_ for _ in ()).throw(ConnectionError("ollama down"))
+    r.cloud.cooldown.clear()  # (both were cooling down after the first call)
+    assert "GPU 47 C" in r.respond([{"role": "user", "content": "hot?"}], [], None)  # the result, not "couldn't"
