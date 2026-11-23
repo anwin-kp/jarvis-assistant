@@ -16,8 +16,10 @@ def repo(tmp_path):
     (r / "calc.py").write_text("def add(a, b):\n    return a - b\n")
     (r / ".env").write_text("KEY=1\n")
     subprocess.run(["git", "init", "-q", "-b", "main", str(r)], check=True)
+    git(r, "config", "user.name", "t")  # a real repo has an identity (CI has none: merges failed there)
+    git(r, "config", "user.email", "t@t")
     git(r, "add", "calc.py")
-    git(r, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "init", check=True)
+    git(r, "commit", "-qm", "init", check=True)
     (r / "notes.txt").write_text("mine, uncommitted\n")
     return r
 
@@ -67,3 +69,15 @@ def test_old_tool_results_are_trimmed():
     msgs = [{"role": "tool", "content": "x" * 1000} for _ in range(6)]
     out = compact(msgs, keep=2, limit=100)
     assert [len(m["content"]) for m in out[:4]] == [111] * 4 and len(out[-1]["content"]) == 1000
+
+
+def test_a_merge_that_fails_is_never_reported_as_merged(tmp_path, repo, monkeypatch):
+    script(monkeypatch, [("replace_in_file", {"path": "calc.py", "old": "a - b", "new": "a + b"}),
+                         ("finish", {"summary": "Fixed."})])
+    c = Coder([{"provider": "groq", "model": "m"}], tmp_path / "data")
+    t = c.start(Project("app", repo, []), "fix", background=False)
+    (repo / ".git" / "index.lock").write_text("")  # git is busy: the merge can't run
+    out = c.merge(t)
+    assert out.startswith("ERROR") and "a - b" in (repo / "calc.py").read_text()
+    (repo / ".git" / "index.lock").unlink()
+    assert c.merge(t).startswith("Merged")

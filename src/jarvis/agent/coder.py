@@ -319,10 +319,19 @@ class Coder:
             return f"ERROR: {task.project} is on '{cur}', not '{task.base}': switch back first, then merge."
         if git(task.path, "status", "--porcelain", "--untracked-files=no"):
             return f"ERROR: {task.project} has uncommitted changes: commit or stash them first."
-        out = git(task.path, "merge", "--no-ff", "-m", f"Merge {task.branch} (JARVIS: {task.task[:50]})", task.branch)
+        r = subprocess.run(["git", "-C", task.path, "merge", "--no-ff", "-m",
+                            f"Merge {task.branch} (JARVIS: {task.task[:50]})", task.branch],
+                           capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60,
+                           creationflags=subprocess.CREATE_NO_WINDOW)
+        out = (r.stdout or "") + (r.stderr or "")
         if "CONFLICT" in out or "Automatic merge failed" in out:
             git(task.path, "merge", "--abort")
             return f"ERROR: the merge has conflicts, so I undid it. Merge {task.branch} yourself."
+        # checked, never assumed: a failed merge (no git identity, a lock...) used to be reported as merged
+        merged = subprocess.run(["git", "-C", task.path, "merge-base", "--is-ancestor", task.branch, "HEAD"],
+                                capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW).returncode == 0
+        if r.returncode or not merged:
+            return f"ERROR: the merge didn't happen: {out.strip()[:200]}"
         git(task.path, "branch", "-d", task.branch)
         task.status = "merged"
         self.save(task)
