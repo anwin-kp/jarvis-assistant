@@ -111,3 +111,5 @@
 - {say: "run the tests in modbus codec", expect: [run_dev_command, list_dev_commands]}
 - {say: "what changed in the jarvis repo", expect: [project_status, git_diff]}
 - {say: "where is the login screen in ark sales", expect: [search_code, list_code_files]}
+- {say: "fix the failing test in modbus codec", expect: [code_task, run_dev_command, search_code]}
+- {say: "merge the changes jarvis made", expect: [merge_code_task]}

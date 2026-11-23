@@ -43,6 +43,9 @@ def build(dry_run: bool = False):
     from jarvis.tools import code_tools
 
     code_tools.register(reg, cfg)  # your code projects: read, search, git, run tests/analyze/build
+    from jarvis.agent import coder
+
+    reg.coder = coder.register(reg, cfg, DATA)  # code_task: changes made by a free cloud model on its own branch
     desk_tools.register(reg)  # network status, recent files, open a site in the user's browser
     clipboard_tools.register(reg)
     pc_tools.register(reg)
