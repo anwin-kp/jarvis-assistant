@@ -151,6 +151,18 @@ telegram:               # phone remote; token: .\jarvis.ps1 set-key telegram
   enabled: true
   allowed_chat_id: null  # message your bot once; JARVIS shows your chat id. Only this chat is answered.
 
+coding:                 # your code projects (git repos are found automatically: user folders + C:\<folder>\)
+  projects: {}           # extra or renamed ones: {myapp: "D:/work/myapp"}
+  commands: {}           # extra allowed commands per project: {myapp: ["npm run e2e"]}
+  private: false         # true = code never goes to the cloud (coding questions then use the local model)
+  command_timeout: 900   # seconds a test/build may take
+  agent_models:          # the coding agent (code_task): best free models first, measured 2026-11-23
+    - {provider: groq, model: openai/gpt-oss-120b}
+    - {provider: groq, model: qwen/qwen3.8-27b}
+    - {provider: groq, model: openai/gpt-oss-20b}
+    - {provider: gemini, model: gemini-3.8-flash, reasoning_effort: low}
+    - {provider: gemini, model: gemini-3.5-flash-lite, reasoning_effort: low}
+
 mcp_servers: {}          # connect MCP servers; their tools become JARVIS tools. Example:
 #  github:
 #    command: npx
