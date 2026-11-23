@@ -239,3 +239,23 @@ def test_late_echo_after_learning_window_does_not_interrupt():
     for f in [zero] * 40 + ([echo] * 6 + [zero] * 3) * 10:  # 1.2 s of nothing, then echo syllables
         eng.process(f)
     assert "barge" not in events
+
+
+def test_voice_id_can_never_take_the_voice_down(tmp_path, monkeypatch):
+    """Smart App Control blocked sherpa-onnx's DLL: 'auto' imported it at startup and the whole voice failed."""
+    import builtins
+
+    from jarvis.__main__ import load_voice_id
+
+    real_import = builtins.__import__
+
+    def blocked(name, *a, **k):
+        if name == "jarvis.audio.voiceid":
+            raise ImportError("DLL load failed: An Application Control policy has blocked this file.")
+        return real_import(name, *a, **k)
+
+    monkeypatch.setattr(builtins, "__import__", blocked)
+    assert load_voice_id({"enabled": "auto"}, tmp_path) is None  # not enrolled: the library isn't even loaded
+    (tmp_path / "voiceprint.npy").write_bytes(b"x")
+    assert load_voice_id({"enabled": "auto"}, tmp_path) is None  # enrolled, library blocked: no crash
+    assert load_voice_id({"enabled": False}, tmp_path) is None
