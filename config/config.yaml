@@ -120,7 +120,8 @@ security:
   # Clicks and key presses still ask when the target is risky ("Buy", "Pay", "Delete", "Send", Alt+F4...).
   no_approval: [operate_app, press_keys, click_ui_element, type_into_ui_field, type_text, browser_click,
                 browser_type, close_app, close_window, create_event, create_folder, draft_email, delete_task,
-                set_radio, forget, close_browser_tabs]
+                set_radio, forget, close_browser_tabs,
+                replace_selected_text]
   shell_enabled: false   # true = allow read-only PowerShell commands (always asks first)
   # Folders JARVIS may read/search. Known-folder names are resolved via Windows
   # (handles OneDrive redirection); you can also add full paths.
@@ -153,6 +154,21 @@ telegram:               # phone remote; token: .\jarvis.ps1 set-key telegram
   enabled: true
   allowed_chat_id: null  # message your bot once; JARVIS shows your chat id. Only this chat is answered.
 
+workspaces:             # "start work mode": open these apps and arrange them (more: save_workspace, by voice)
+  work: {apps: [vs code, chrome], layout: side_by_side}
+
+coding:                 # your code projects (git repos are found automatically: user folders + C:\<folder>\)
+  projects: {}           # extra or renamed ones: {myapp: "D:/work/myapp"}
+  commands: {}           # extra allowed commands per project: {myapp: ["npm run e2e"]}
+  private: false         # true = code never goes to the cloud (coding questions then use the local model)
+  command_timeout: 900   # seconds a test/build may take
+  agent_models:          # the coding agent (code_task): best free models first, measured 2026-11-23
+    - {provider: groq, model: openai/gpt-oss-120b}
+    - {provider: groq, model: qwen/qwen3.8-27b}
+    - {provider: groq, model: openai/gpt-oss-20b}
+    - {provider: gemini, model: gemini-3.8-flash, reasoning_effort: low}
+    - {provider: gemini, model: gemini-3.5-flash-lite, reasoning_effort: low}
+
 mcp_servers: {}          # connect MCP servers; their tools become JARVIS tools. Example:
 #  github:
 #    command: npx
@@ -167,6 +183,8 @@ browser:
 vision:                 # "look at my screen": screenshot + question to a free vision model (Groq)
   enabled: true          # false = never send screenshots; local text reading (OCR) only
   model: qwen/qwen3.8-27b
+  local_fallback: true   # offline / cloud busy: a local vision model in Ollama (loaded only briefly)
+  local_model: qwen3-vl:4b   # ~3 GB: ollama pull qwen3-vl:4b
 
 operator:               # operate_app: multi-step tasks in any app (sees the window, clicks/types like a person)
   enabled: true

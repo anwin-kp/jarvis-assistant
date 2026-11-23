@@ -192,7 +192,8 @@ def date_math(target: str = "", days: int = 0, from_date: str = "", today: date 
 
 def register(reg: ToolRegistry) -> None:
     @reg.tool("calculate", "Exact arithmetic. Use for ANY maths instead of working it out yourself: '15% of 2400', "
-              "'12 times 7', '(3+4)^2', 'sqrt(2)', 'sin(30)' (degrees).",
+              "'12 times 7', '(3+4)^2', 'sqrt(2)', 'sin(30)' (degrees). Not for pressing buttons in the Calculator "
+              "app (that's operate_app).",
               {"expression": {"type": "string"}}, group="utility", read_only=True)
     def calculate_tool(expression: str):
         try:

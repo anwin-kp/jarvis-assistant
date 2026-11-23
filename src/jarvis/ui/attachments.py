@@ -10,7 +10,7 @@ from pathlib import Path
 
 from loguru import logger
 
-from jarvis.core.config import DATA, get_secret
+from jarvis.core.config import DATA
 
 KNOWLEDGE = DATA / "knowledge"
 MAX_MB = 25
@@ -48,17 +48,17 @@ def display_name(path: Path) -> str:
 def describe_image(path: Path, question: str, cfg: dict) -> str:
     from PIL import Image
 
-    key = get_secret("groq_api_key")
-    if key and (cfg.get("vision") or {}).get("enabled", True):
-        from jarvis.tools.vision_tools import ask_vision
+    if (cfg.get("vision") or {}).get("enabled", True):
+        from jarvis.tools.vision_tools import see
 
         try:
             with Image.open(path) as img:
-                return ask_vision(img, "Describe this image thoroughly for an assistant that cannot see it: what "
-                                  "it shows, all readable text and numbers, and anything notable. Then, if relevant, "
-                                  f"answer: {question or 'What is this?'}", key,
-                                  (cfg.get("vision") or {}).get("model", "qwen/qwen3.8-27b"))
-        except Exception as e:  # offline / quota: fall back to the text in it
+                answer, _ = see(img, "Describe this image thoroughly for an assistant that cannot see it: what it "
+                                "shows, all readable text and numbers, and anything notable. Then, if relevant, "
+                                f"answer: {question or 'What is this?'}", cfg)  # cloud, else local (offline)
+            if answer:
+                return answer
+        except Exception as e:  # fall back to the text in it
             logger.warning("Vision failed for attachment: {}", e)
     import asyncio
 

@@ -106,3 +106,20 @@
 - {say: "put chrome on the left and vs code on the right", expect: [arrange_windows]}
 - {say: "clear my downloads older than 30 days", expect: [clean_old_downloads]}
 - {say: "how long is left on my timer", expect: [list_reminders]}
+- {say: "what coding projects do I have", expect: [list_projects]}
+- {say: "open my portfolio project in vs code", expect: [open_project]}
+- {say: "run the tests in modbus codec", expect: [run_dev_command, list_dev_commands]}
+- {say: "what changed in the jarvis repo", expect: [project_status, git_diff]}
+- {say: "where is the login screen in ark sales", expect: [search_code, list_code_files]}
+- {say: "fix the failing test in modbus codec", expect: [code_task, run_dev_command, search_code]}
+- {say: "merge the changes jarvis made", expect: [merge_code_task]}
+- {say: "switch the sound to my headphones", expect: [set_audio_device, list_audio_devices]}
+- {say: "install vlc", expect: [search_apps, install_app]}
+- {say: "are there updates for my apps", expect: [list_app_updates]}
+- {say: "start work mode", expect: [start_workspace]}
+- {say: "rewrite the selected text to sound more polite", expect: [get_selected_text]}
+- {say: "what apps start with windows", expect: [startup_apps]}
+- {say: "is my laptop overheating", expect: [pc_temperatures, get_system_info]}
+- {say: "how healthy is my battery", expect: [battery_health, get_system_info]}
+- {say: "find duplicate files in my pictures", expect: [duplicate_files]}
+- {say: "organize my downloads folder", expect: [organize_folder]}

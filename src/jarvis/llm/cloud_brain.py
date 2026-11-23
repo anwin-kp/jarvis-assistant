@@ -20,7 +20,7 @@ PROVIDERS = {  # base URL, keyring entry name
 PRIVATE_GROUPS = {"files", "email", "docs", "screen", "clipboard", "notes", "tabs"}
 # Requests that DO something: in smart mode these go to the bigger cloud model, which picks tools and follows
 # multi-step instructions far more reliably than the small local one (wrong tools, claimed actions, loops).
-ACTION_GROUPS = {"system", "media", "browser", "windows", "pc", "reminder", "home"}
+ACTION_GROUPS = {"system", "media", "browser", "windows", "pc", "reminder", "home", "code", "apps"}
 
 
 class CloudUnavailable(RuntimeError):

@@ -40,7 +40,19 @@ def build(dry_run: bool = False):
 
     tab_tools.register(reg)  # the user's own Chrome/Edge tabs: list, switch, close (others / duplicates)
     utility_tools.register(reg)  # exact maths, units, currency, dates, definitions
+    from jarvis.tools import code_tools
+
+    code_tools.register(reg, cfg)  # your code projects: read, search, git, run tests/analyze/build
+    from jarvis.agent import coder
+
+    reg.coder = coder.register(reg, cfg, DATA)  # code_task: changes made by a free cloud model on its own branch
     desk_tools.register(reg)  # network status, recent files, open a site in the user's browser
+    from jarvis.tools import pc_control
+
+    pc_control.register(reg, cfg, DATA)  # audio devices, install/update apps, workspaces, selected text
+    from jarvis.tools import pc_maintenance
+
+    pc_maintenance.register(reg, file_tools.make_guard(roots), roots)  # health checks, organize/rename/zip files
     clipboard_tools.register(reg)
     pc_tools.register(reg)
     from jarvis.core.config import ROOT
@@ -127,6 +139,10 @@ def build(dry_run: bool = False):
     from jarvis.integrations import home_assistant
 
     home_assistant.register(reg, cfg.get("home_assistant") or {})
+    if (cfg.get("coding") or {}).get("private"):  # keep code on this PC: coding questions use the local model only
+        from jarvis.llm import cloud_brain
+
+        cloud_brain.PRIVATE_GROUPS.add("code")
     if hasattr(brain, "share_personal"):
         brain.share_personal = bool((cfg.get("memory") or {}).get("share_with_cloud", False))
     orch = Orchestrator(brain, reg, memory, load_persona(cfg.get("persona")), cfg.get("history_turns", 8),

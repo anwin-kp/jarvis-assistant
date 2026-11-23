@@ -180,6 +180,18 @@ Needs **Spotify Premium** (Spotify only allows playback control for Premium acco
 
 `.\jarvis.ps1 enroll-voice` (read a few sentences), then set `voice.voice_id.enabled: true`.
 
+### Coding and PC control (no setup needed)
+
+- **Your code projects** are found automatically (git repos in your user folders and `C:\<folder>\`; add others
+  under `coding.projects`). Ask: *"what changed in my portfolio"*, *"run the tests in modbus codec"*,
+  *"where is login handled in ark sales"*, *"open jarvis in VS Code"*.
+- **Code changes**: *"fix the failing test in modbus codec"* starts the coding agent. It works in the background on
+  its own git branch with free models (Groq, then Gemini), so your files are untouched; then say *"show the
+  changes"*, *"merge it"* or *"discard it"*. Code goes to the cloud for this; `coding.private: true` keeps it local.
+- **PC**: *"switch to my headset"*, *"install VLC"*, *"update my apps"*, *"start work mode"*, *"rewrite the selected
+  text politely"*, *"what starts with Windows"*, *"how's my battery"*, *"organize my downloads"*.
+- **Offline vision** (optional, ~3 GB): `ollama pull qwen3-vl:4b` lets *"what's on my screen"* work without the cloud.
+
 ## 6. How a request flows
 
 ```mermaid
