@@ -63,3 +63,42 @@ def test_sentence_starts_are_not_names():
 
     assert proper_names("Audio setup: a Bluetooth speaker. Core skills include Flutter.") == ["Bluetooth", "Flutter"]
     assert "Siemens Goa" in proper_names("Works on Siemens Goa projects.")
+
+
+def test_project_names_are_spoken_and_misheard_ones_corrected():
+    """Measured with real Groq Whisper on synthesized commands: 2/14 project names right without them, 14/14 with
+    the names in the prompt + correction ('QuickHop Mobile', 'ARC delivery', 'Modbus Coder' were heard)."""
+    from jarvis.stt.lexicon import Lexicon
+    from jarvis.tools.code_tools import spoken_names
+
+    forms = spoken_names(["ARK_Field_Staff-SHARE", "arkcustomer-SHARE", "ark_sales", "ark_delivery", "QuickOP",
+                          "QuickOP-backend", "QuickOP-mobile", "modbus_codec", "anwin_kp_portfolio"])
+    assert forms["Ark Field Staff Share"] == "ARK_Field_Staff-SHARE" and forms["Ark Field Staff"]
+    assert forms["Ark Customer Share"] == "arkcustomer-SHARE"  # 'ark' is a word of other projects: split
+    assert forms["Quick OP Backend"] == "QuickOP-backend" and "Quick OP" in forms
+    lex = Lexicon()
+    lex.add(list(forms), "project")
+    for heard, right in [("Fix the login bug in QuickHop Mobile.", "Fix the login bug in Quick OP Mobile."),
+                         ("Any analyzer errors in ARC delivery?", "Any analyzer errors in Ark Delivery?"),
+                         ("What's new in Modbus Coder?", "What's new in Modbus Codec?"),
+                         ("Open Amun KP Portfolio in VS Code.", "Open Anwin KP Portfolio in VS Code."),  # whole name
+                         ("Where is the cart screening Arcfield staff?",
+                          "Where is the cart screening Ark Field Staff?")]:
+        assert lex.correct(heard) == right, heard
+    assert lex.correct("run the tests and show me") == "run the tests and show me"  # ordinary words untouched
+
+
+def test_projects_are_found_however_they_are_said(tmp_path):
+    import subprocess
+
+    from jarvis.tools import code_tools
+    from jarvis.tools.registry import ToolRegistry
+
+    for name in ("QuickOP-backend", "modbus_codec"):
+        (tmp_path / name).mkdir()
+        subprocess.run(["git", "init", "-q", str(tmp_path / name)], check=True)
+    reg = ToolRegistry()
+    code_tools.register(reg, {"coding": {"search_roots": [str(tmp_path)]}})
+    assert reg.code_project("Quick OP Backend").path.name == "QuickOP-backend"
+    assert reg.code_project("Modbus Codec").path.name == "modbus_codec"
+    assert reg.code_project("modbus-codec").path.name == "modbus_codec"
