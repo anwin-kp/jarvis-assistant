@@ -157,6 +157,8 @@ class CloudBrain:
                     e.partial = msgs
                     e.results = [m["content"] for m in msgs if m.get("role") == "tool"]
                 raise
+            if self.cancel.is_set():  # stopped while it answered: say so (it was "(no reply)" for cloud turns)
+                return stopped_reply(self.last_tool_calls)
             calls = msg.get("tool_calls") or []
             if stream and not calls:
                 stream.finish()
