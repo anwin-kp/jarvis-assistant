@@ -18,9 +18,16 @@ from jarvis.tools.registry import ToolRegistry
 
 SKIP_DIRS = {".git", "node_modules", "build", ".dart_tool", ".venv", "venv", "__pycache__", ".idea", ".gradle",
              "dist", "bin", "obj", "target", ".pytest_cache", ".ruff_cache", ".next", "Pods", ".vs"}
-SECRET = re.compile(r"(^|[\\/])(\.env(\..*)?|.*\.(pem|key|p12|pfx|jks|keystore)|credentials.*\.json|token.*\.json|"
-                    r"id_rsa.*|key\.properties|local\.properties|google-services\.json|GoogleService-Info\.plist|"
+# secret files, by NAME only (a whole-path match refused calc.py inside a folder called "...secrets...")
+SECRET = re.compile(r"^(\.env(\..*)?|.*\.(pem|key|p12|pfx|jks|keystore)|credentials.*\.json|token.*\.json|id_rsa.*|"
+                    r"key\.properties|local\.properties|google-services\.json|GoogleService-Info\.plist|"
                     r".*secret.*)$", re.I)
+
+
+def is_secret(path) -> bool:
+    return bool(SECRET.match(Path(str(path)).name))
+
+
 SYSTEM_DIRS = {"windows", "program files", "program files (x86)", "programdata", "$recycle.bin", "recovery",
                "system volume information", "perflogs", "documents and settings", "users", "onedrivetemp",
                "ahcache", "system.sav", "intel", "amd", "nvidia", "hp", "dell", "inetpub", "riot games", "xboxgames"}
@@ -192,7 +199,7 @@ def register(reg: ToolRegistry, cfg: dict) -> None:
         p = (pr.path / rel).resolve()
         if not (p == pr.path.resolve() or p.is_relative_to(pr.path.resolve())):
             raise PermissionError(f"{rel} is outside the project")
-        if SECRET.search(str(p)):
+        if is_secret(p):
             raise PermissionError(f"{p.name} looks like a secret (keys, tokens, .env): I don't read those")
         return p
 
@@ -254,7 +261,7 @@ def register(reg: ToolRegistry, cfg: dict) -> None:
         pr = find_project(project)
         if (pr.path / ".git").exists():
             args = ["grep", "-n", "-I", "-i", "--full-name", "-e", query, "--"] + ([file_glob] if file_glob else [])
-            out = [ln for ln in _git(pr.path, *args).splitlines() if not SECRET.search(ln.split(":", 1)[0])]
+            out = [ln for ln in _git(pr.path, *args).splitlines() if not is_secret(ln.split(":", 1)[0])]
         else:
             out = []
             rx = re.compile(re.escape(query), re.I)
@@ -293,7 +300,7 @@ def register(reg: ToolRegistry, cfg: dict) -> None:
             files = _git(pr.path, "ls-files", "--", folder or ".").splitlines()
         else:
             files = [str(f.relative_to(pr.path)) for f in iter_files(inside(pr, folder or "."))]
-        files = [f for f in files if not SECRET.search(f)]
+        files = [f for f in files if not is_secret(f)]
         return "\n".join(files[:200]) + (f"\n... and {len(files) - 200} more" if len(files) > 200 else "")
 
     @reg.tool("list_dev_commands", "The dev commands JARVIS may run in a project (test, analyze, build...).",
@@ -323,7 +330,7 @@ def iter_files(base: Path, glob: str = ""):
     for dirpath, dirnames, filenames in os.walk(base):
         dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS and not d.startswith(".")]
         for n in filenames:
-            if (not glob or Path(n).match(glob)) and not SECRET.search(n):
+            if (not glob or Path(n).match(glob)) and not is_secret(n):
                 yield Path(dirpath) / n
 
 

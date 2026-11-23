@@ -5,7 +5,7 @@ import subprocess
 import pytest
 
 from jarvis.tools import code_tools
-from jarvis.tools.code_tools import SECRET, Project, dev_commands, discover, summarize_output
+from jarvis.tools.code_tools import Project, dev_commands, discover, is_secret, summarize_output
 from jarvis.tools.registry import ToolRegistry
 
 
@@ -65,8 +65,8 @@ def test_results_are_summarized():
     s = summarize_output("test", 1, "00:02 +3 -1: Some tests failed.\nExpected: 2 Actual: 3\nerror: boom")
     assert "FAILED (exit 1)" in s and "Some tests failed." in s and "error: boom" in s
     for f in [".env", "app/.env.local", "android/key.properties", "upload.jks", "token.json", "id_rsa"]:
-        assert SECRET.search(f), f
-    assert not SECRET.search("lib/main.dart")
+        assert is_secret(f), f
+    assert not is_secret("lib/main.dart") and not is_secret("C:/client-secrets-app/lib/main.dart")  # name only
 
 
 def test_discovery_skips_dependency_folders(tmp_path):

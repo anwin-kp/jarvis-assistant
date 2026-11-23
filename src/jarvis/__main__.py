@@ -232,6 +232,7 @@ class App:
         self.cfg, self.orch, self.brain, self.reg, self.memory, _ = build(dry_run=args.dry_run)
         self.reg.on_call = self._on_tool
         self.reg.confirm_fn = self.confirm
+        self.reg.notify = lambda text: self.q.put(("alert", text))  # background jobs (code tasks...) report back
         self.hud = None
         self.learner = None  # learns about the user while idle (jarvis/memory/learner.py)
         self.name = self.cfg.get("assistant_name", "JARVIS")
