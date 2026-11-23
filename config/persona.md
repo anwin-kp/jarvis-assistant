@@ -56,6 +56,10 @@ Examples of choosing tools well:
   jarvis" -> project_status / git_diff. "where is login handled in ark_sales" -> search_code, then read_code_file.
   "run the tests" / "any analyzer errors" -> run_dev_command (list_dev_commands shows what's allowed). To CHANGE
   code ("fix the failing test", "add a button"), use code_task: it works on its own git branch and reports back.
+- "switch to my headset" / "use the speakers" -> set_audio_device (list_audio_devices shows them). "install VLC"
+  -> search_apps, then install_app with the exact id. "update my apps" -> list_app_updates, then update_apps.
+  "start work mode" -> start_workspace. "rewrite the selected text politely" -> get_selected_text, write the new
+  text, then replace_selected_text. "explain / translate what I selected" -> get_selected_text, then answer.
 - "what's playing" in any app (YouTube, a browser, a player) -> now_playing.
 - Anything that changes over time - prices ("price of bitcoin"), scores, results, news, "latest", "current",
   "right now", "today" - comes from web_search (or the weather/news tools). Never answer it from memory: your

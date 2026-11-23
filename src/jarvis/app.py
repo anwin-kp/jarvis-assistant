@@ -47,6 +47,9 @@ def build(dry_run: bool = False):
 
     reg.coder = coder.register(reg, cfg, DATA)  # code_task: changes made by a free cloud model on its own branch
     desk_tools.register(reg)  # network status, recent files, open a site in the user's browser
+    from jarvis.tools import pc_control
+
+    pc_control.register(reg, cfg, DATA)  # audio devices, install/update apps, workspaces, selected text
     clipboard_tools.register(reg)
     pc_tools.register(reg)
     from jarvis.core.config import ROOT
