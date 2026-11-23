@@ -41,7 +41,8 @@ def register(reg: ToolRegistry, profile_dir) -> Browser:
     b = Browser(profile_dir)
 
     @reg.tool("browser_open", "Open a web page in JARVIS's browser window (for tasks that need clicking or typing "
-              "on a site). Returns the page text.", {"url": {"type": "string"}}, group="browser")
+              "on a site). Returns the page text. To just open a site for the user ('open X in Chrome'), use "
+              "open_in_browser.", {"url": {"type": "string"}}, group="browser")
     def browser_open(url: str):
         if not url.startswith(("http://", "https://")):
             url = "https://" + url

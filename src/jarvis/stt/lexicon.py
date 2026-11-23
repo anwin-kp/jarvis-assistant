@@ -30,6 +30,7 @@ there's let's i'm i've don't can't won't""".split())
 
 def _fold(s: str) -> str:
     s = re.sub(r"[^a-z]", "", s.lower()).replace("ph", "f").replace("ck", "k")
+    s = s.replace("qu", "k").replace("q", "k").replace("c", "k")  # one sound: "QCopy Mobile" ~ "Quick OP Mobile"
     s = s[:1] + s[1:].replace("y", "i")
     return re.sub(r"(.)\1+", r"\1", s)
 

@@ -65,7 +65,7 @@ def bring_to_front(hwnd: int) -> bool:
     return bool(wait_for(lambda: win32gui.GetForegroundWindow() == hwnd, timeout=1.5, every=0.1))
 
 
-def close_app_named(name: str, apps: dict[str, str], wait: float = 5.0) -> str:
+def close_app_named(name: str, apps: dict[str, str], wait: float = 5.0, every_window: bool = False) -> str:
     """Close an app the way a person would (its windows' close button), check its windows are really gone, then
     end what's left in the background (e.g. Spotify in the tray). Unsaved work is never force-closed."""
     import win32con
@@ -83,6 +83,12 @@ def close_app_named(name: str, apps: dict[str, str], wait: float = 5.0) -> str:
              if (p.info.get("name") or "").lower().removesuffix(".exe") in names]
     if not windows and not procs:
         return f"ERROR: {name} isn't running (no window or process found), so nothing was closed."
+    if len(windows) > 1 and not every_window:
+        # live: "close QuickOP mobile in VS Code" -> close_app("code") closed BOTH VS Code windows
+        titles = "; ".join(f"'{w['title']}'" for w in windows[:8])
+        return (f"ERROR: nothing closed - {name} has {len(windows)} windows open: {titles}. To close just one, use "
+                f"close_window with (part of) its title. Only if the user asked to close ALL of {name}, call "
+                f"close_app again with all=true.")
     for w in windows:
         try:
             win32gui.PostMessage(w["hwnd"], win32con.WM_CLOSE, 0, 0)
@@ -139,10 +145,13 @@ def register(reg: ToolRegistry, app_allowlist: dict[str, str]) -> None:
 
     @reg.tool(
         "close_app",
-        "Close (gracefully terminate) a running application by name, e.g. 'chrome' or 'notepad'.",
-        {"name": {"type": "string"}},
+        "Close a whole running application by name, e.g. 'chrome' or 'notepad' (ALL its windows). To close one "
+        "window, project or document of an app, use close_window instead.",
+        {"name": {"type": "string"},
+         "all": {"type": "boolean", "description": "true only if the user asked to close every window of it"}},
         risk=Risk.CONFIRM,
         group="system",
+        required=["name"],
     )
-    def close_app(name: str):
-        return close_app_named(name, apps)
+    def close_app(name: str, all: bool = False):  # noqa: A002 - the model-facing name
+        return close_app_named(name, apps, every_window=bool(all))
