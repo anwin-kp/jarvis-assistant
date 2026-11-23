@@ -224,3 +224,13 @@ def test_learning_a_fact_embeds_only_new_texts(tmp_path):
     for f in ["[food] Loves biryani.", "[music] Likes A R Rahman.", "[work] Works at a startup."]:
         m.learn(f)
     assert len(seen) == len(set(seen))  # nothing was embedded twice
+
+
+def test_the_local_model_is_not_memory_mapped():
+    """qwen3:8b fully on the GPU still held 7.9 GB of RAM: Windows kept the memory-mapped model file resident."""
+    from jarvis.llm.ollama_brain import OllamaBrain
+
+    b = OllamaBrain(ToolRegistry(), {"ollama_host": "http://127.0.0.1:1", "ollama_model": "m"})
+    assert b.options["use_mmap"] is False and b.options["num_ctx"] == 8192
+    b.set_cpu_only(True)
+    assert b.options["use_mmap"] is False and b.options["num_gpu"] == 0
