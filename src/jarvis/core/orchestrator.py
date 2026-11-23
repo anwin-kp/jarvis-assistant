@@ -50,8 +50,13 @@ REQUIRED = [
      {"battery_health", "get_system_info"}),
     (re.compile(r"\b(?:internet|wi-?fi|network|connection)\b.{0,20}\b(?:working|up|down|slow|ok|okay)\b|"
                 r"\bam i (?:online|connected)\b|\bmy ip\b", re.I), {"network_status"}),
-    (re.compile(r"\b(?:price of|stock price|share price|bitcoin|crypto|exchange rate|score|who won|latest news)\b",
+    (re.compile(r"\b(?:price of|stock price|share price|bitcoin|crypto|exchange rate|who won|latest news|"
+                # sports only: a misheard "via score" (= "VS Code") forced a web search -> an oncology answer
+                r"(?:what'?s the|live|match|game|cricket|football|ipl|nba) scores?|scores? (?:of|in) the (?:match|game))\b",
                 re.I), {"web_search", "convert_currency", "news_headlines", "read_webpage"}),
+    # "open WhatsApp Web in Chrome" went to JARVIS's own Edge window (browser_open) instead of the user's Chrome
+    (re.compile(r"\bopen\b(?!.*\b(?:search|click|type|fill|log ?in|sign ?in)\b).{1,40}\bin (?:google )?"
+                r"(?:chrome|brave|firefox|edge|my browser)\b", re.I), {"open_in_browser"}),
     (re.compile(r"\bwhat'?s playing\b|\bwhat song is (?:this|playing)\b", re.I),
      {"now_playing", "spotify_now_playing"}),
     (re.compile(r"\b(?:start|starts) with windows\b|\bstartup apps\b", re.I), {"startup_apps"}),

@@ -35,6 +35,9 @@ CLAIMS_ACTION = re.compile(
     # a bare past-tense report as the opening words: "Opened quickop-mobile in VS Code.", "Copied the mobile folder
     # to your clipboard.", "Pasted it into VS Code." (live: three of these with no tool at all slipped through)
     rf"|^\s*(?:(?:ok(?:ay)?|sure|done|alright)[,.!]?\s*)?{_DONE}\b(?! (?:by|in \d{{4}}|on \w+day))"
+    # "WhatsApp Web is open in Chrome." with no tool at all
+    r"|\b(?:is|are) (?:now )?(?:open|opened|running|closed|playing) (?:in|on) (?:google )?(?:chrome|edge|brave|"
+    r"firefox|vs ?code|spotify|your browser|the browser)\b"
     # reporting what an app/screen shows without having looked ("The display shows 84")
     rf"|\b(?:the )?(?:display|screen|window|app|calculator|page) (?:now )?(?:shows|says|displays|reads)\b",
     re.IGNORECASE,

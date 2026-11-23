@@ -142,6 +142,7 @@ security:
     edge: msedge.exe
     vs code: code
     spotify: "spotify:"
+    whatsapp: "whatsapp:"
 
 documents:              # "ask your documents" (local semantic search)
   enabled: true
