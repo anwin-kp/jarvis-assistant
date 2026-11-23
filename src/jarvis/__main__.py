@@ -135,7 +135,8 @@ class Voice:
             self.last_engine = self.local_stt.device
         text = normalize_heard(text)
         if self.lexicon is not None:
-            text = self.lexicon.correct(text)
+            text = self.lexicon.correct(text, count=False)  # counted only if the turn is accepted
+            self.pending_fixes = list(self.lexicon.last_fixed)
         self.last_lang = lang if text else self.last_lang
         self._save(audio, text, lang)
         return text
@@ -563,13 +564,9 @@ class App:
                 lex.add(list(spoken_names(folder_names(projects()))), "project", private=True)
             except Exception:
                 logger.exception("Project names for speech recognition failed")
-        said = [m[2] for m in self.memory.messages_after(0, 5000) if m[1] == "user"]
-        for f in (DATA / "voice-log").glob("*.json"):
-            try:
-                said.append(json.loads(f.read_text(encoding="utf-8")).get("text", ""))
-            except (OSError, ValueError):
-                pass
-        lex.count_said(said)
+        # what YOU said: accepted turns only. The voice log also holds the TV and other people JARVIS ignored, and
+        # those made song credits count as 'said' (and land in the recogniser's prompt).
+        lex.count_said([m[2] for m in self.memory.messages_after(0, 5000) if m[1] == "user"])
         self.voice.set_lexicon(lex)
         logger.info("Speech vocabulary: {} names ranked ({} said before, {} fixed before)", len(lex.terms),
                     sum(1 for v in lex.said.values() if v), len(lex.fixes))
@@ -657,6 +654,8 @@ class App:
                     self._state("ready")
                 continue
             self._last_heard = time.monotonic()
+            if self.voice.lexicon is not None:  # a real turn: now its name corrections count
+                self.voice.lexicon.count_fixes(getattr(self.voice, "pending_fixes", []))
             self.q.put(("heard", text, utt.after_wake, took))
 
     def _input_loop(self) -> None:

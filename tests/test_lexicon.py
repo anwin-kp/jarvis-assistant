@@ -27,21 +27,35 @@ def test_ordinary_sentences_are_never_changed():
         assert L.correct(s) == s
 
 
-def test_prompt_ranks_said_and_misheard_names_within_the_limit():
+def test_prompt_has_only_said_names_as_one_clean_list():
+    """Measured on the user's recorded voice: names never said in the prompt raised the word error rate (19.5% vs
+    15.6%) and made 'Hey Jarvis' 'Kali Cervis'; one name after 'No.' made it 'Kali Jarvis' every time."""
     L = lex()
     L.count_said(["play anirudh ravichander please", "play anirudh ravichander"])
-    L.fixes["Tamil"] = 3
-    p = L.prompt("Jarvis", limit=60)
-    assert len(p) <= 60 and p.startswith("Jarvis")
-    assert p.index("Tamil") < p.index("Anirudh Ravichander") if "Anirudh Ravichander" in p else "Tamil" in p
+    L.fixes["Tamil"] = 3  # corrected often, but never said: stays out
+    p = L.prompt("Jarvis, Kochi. Stop. Yes. No.", limit=80)
+    assert p == "Jarvis, Kochi, Stop, Yes, No, Anirudh Ravichander."
+    assert "Tamil" not in p and len(p) <= 80
 
 
-def test_private_names_reach_the_cloud_only_once_said():
+def test_names_reach_the_prompt_only_once_said():
     L = lex()
     L.count_said(["hello"])
-    assert "Pradeep" not in L.prompt(cloud=True) and "Pradeep Gupta" in L.prompt(cloud=False)
+    assert "Pradeep" not in L.prompt(cloud=True) and "Pradeep" not in L.prompt(cloud=False)
     L.count_said(["send pradeep gupta the report"])
     assert "Pradeep Gupta" in L.prompt(cloud=True)
+
+
+def test_corrections_count_only_for_accepted_turns():
+    """A song on the TV was corrected again and again ('K. Sreekumar' -> 'M. G. Sreekumar') and 'trained' it."""
+    L = lex()
+    L.add(["Mix-Up Mash"], "playlist")
+    assert L.correct("play my mixup mesh", count=False) == "play my Mix-Up Mash"
+    assert L.fixes.get("Mix-Up Mash", 0) == 0 and L.last_fixed == [("mixup mesh", "Mix-Up Mash")]
+    L.count_fixes(L.last_fixed)  # the turn was accepted
+    assert L.fixes["Mix-Up Mash"] == 1
+    L.correct("nothing to fix here", count=False)
+    assert L.last_fixed == []
 
 
 def test_email_display_names_are_cleaned():
