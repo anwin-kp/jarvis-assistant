@@ -558,6 +558,13 @@ class App:
         lex.add(data.get("artist", []), "artist")
         lex.add(data.get("person", []), "person", private=True)
         lex.add(data.get("event", []), "event", private=True)
+        if projects := getattr(self.reg, "code_projects", None):  # "modbus codec", "ark sales": your code projects
+            from jarvis.tools.code_tools import folder_names, spoken_names
+
+            try:  # private like contacts: the cloud recogniser gets a name only once you've said it
+                lex.add(list(spoken_names(folder_names(projects()))), "project", private=True)
+            except Exception:
+                logger.exception("Project names for speech recognition failed")
         said = [m[2] for m in self.memory.messages_after(0, 5000) if m[1] == "user"]
         for f in (DATA / "voice-log").glob("*.json"):
             try:
