@@ -36,6 +36,38 @@ INTERVIEW = """GET-TO-KNOW-YOU MODE is on: you are getting to know the user so y
 CONTEXT = re.compile(r"\b(?:this|these|here|current(?:ly)?|on (?:my |the )?screen|in front of me|"
                      r"i'?m (?:looking at|in|on|reading|watching))\b", re.I)
 
+# Questions whose answer only a tool can know. Live, with a real conversation behind it, the model answered three
+# of these from "memory": invented CPU/GPU temperatures, three made-up Chrome tabs, and "34 days until Christmas"
+# (true two days earlier). If none of these tools runs, the brain pushes back once and speaks nothing before.
+REQUIRED = [
+    (re.compile(r"\b(?:overheat\w*|cpu temp\w*|gpu temp\w*|running hot|how hot is (?:my|the)|temperature of (?:my|the) "
+                r"(?:pc|laptop|cpu|gpu|computer))\b", re.I), {"pc_temperatures"}),
+    (re.compile(r"\btabs?\b.*\b(?:open|have|got)\b|\b(?:which|what|my) tabs\b", re.I),
+     {"list_browser_tabs", "switch_browser_tab", "close_browser_tabs"}),
+    (re.compile(r"\bhow many (?:days|weeks|months)\b|\b(?:days|weeks) (?:until|till|to go|left|since)\b", re.I),
+     {"date_math"}),
+    (re.compile(r"\bbattery (?:health|wear|capacity|cycles?)\b|\bhealthy is (?:my|the) battery\b", re.I),
+     {"battery_health", "get_system_info"}),
+    (re.compile(r"\b(?:internet|wi-?fi|network|connection)\b.{0,20}\b(?:working|up|down|slow|ok|okay)\b|"
+                r"\bam i (?:online|connected)\b|\bmy ip\b", re.I), {"network_status"}),
+    (re.compile(r"\b(?:price of|stock price|share price|bitcoin|crypto|exchange rate|score|who won|latest news)\b",
+                re.I), {"web_search", "convert_currency", "news_headlines", "read_webpage"}),
+    (re.compile(r"\bwhat'?s playing\b|\bwhat song is (?:this|playing)\b", re.I),
+     {"now_playing", "spotify_now_playing"}),
+    (re.compile(r"\b(?:start|starts) with windows\b|\bstartup apps\b", re.I), {"startup_apps"}),
+    (re.compile(r"\bupdates? (?:for|available)\b.*\bapps?\b|\bapps? (?:need|have) updates?\b|\bupdate my apps\b",
+                re.I), {"list_app_updates", "update_apps"}),
+]
+
+
+def required_tools(words: str, offered: set[str]) -> set[str]:
+    need = set()
+    for rx, tools in REQUIRED:
+        if rx.search(words or "") and tools & offered:
+            need |= tools & offered
+    return need
+
+
 # eval: "in calculator press seven" chose the maths tool; "where is the login screen in ark sales" chose the
 # screen tools. Both are about something else, deterministically:
 CALCULATOR_APP = re.compile(r"\b(?:in|on|open|use)\s+(?:the\s+)?calculator\b|\bcalculator app\b", re.I)
@@ -268,6 +300,8 @@ class Orchestrator:
             from jarvis.llm.cloud_brain import ACTION_GROUPS
 
             kw["action"] = bool(asked & ACTION_GROUPS)
+        if must := required_tools(words, {t["function"]["name"] for t in tools}):
+            kw["must_use"] = must
         try:
             reply = strip_filler(self.brain.respond(messages, tools, confirm, **kw) or "(no reply)")
         finally:
