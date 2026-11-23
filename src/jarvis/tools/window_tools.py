@@ -146,7 +146,8 @@ def register(reg: ToolRegistry) -> None:
                                     "restore": win32con.SW_RESTORE}[action])
         return f"{action.replace('_', ' ').capitalize()}: {w['app']} ({w['title'][:50]})."
 
-    @reg.tool("arrange_windows", "Put several open windows side by side on one screen, e.g. apps='chrome, code' "
+    @reg.tool("arrange_windows", "Put several open windows side by side on one screen (call it directly: it finds "
+              "the windows itself), e.g. apps='chrome, code' "
               "('Chrome on the left and VS Code on the right'), in that order (first = left / top). 2-4 windows. "
               "layout: side_by_side (default; 3 = big left + two right, 4 = grid) or stacked (top/bottom).",
               {"apps": {"type": "string", "description": "comma-separated app names or window titles, in order"},

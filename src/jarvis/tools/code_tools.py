@@ -205,9 +205,15 @@ def register(reg: ToolRegistry, cfg: dict) -> None:
 
     reg.code_projects = projects  # the coding agent and tests use the same view
     reg.code_project = find_project
+    names = sorted(projects())
+    known = f" The user's projects: {', '.join(names)}." if names else ""
+    if names:  # "where is login in ark sales": the model must know 'ark sales' is a project, not something on screen
+        from jarvis.llm.tool_groups import add_keywords
+
+        add_keywords("code", names + [n.replace("_", " ").replace("-", " ") for n in names])
 
     @reg.tool("list_projects", "List the user's code projects (git repos) with their type (flutter, python, node, "
-              "dotnet...), path and current branch.", {}, group="code", read_only=True)
+              "dotnet...), path and current branch." + known, {}, group="code", read_only=True)
     def list_projects():
         rows = []
         for p in sorted(projects().values(), key=lambda p: p.name):
@@ -253,7 +259,8 @@ def register(reg: ToolRegistry, cfg: dict) -> None:
         full = _git(pr.path, *(["diff"] + ([against] if against else [])))
         return (f"{stat or 'No changes.'}\n\n{full}")[:MAX_OUT]
 
-    @reg.tool("search_code", "Search a project's code for text or a regex; returns file:line: text.",
+    @reg.tool("search_code", "Search a project's code for text (where is X handled / defined / used); returns "
+              "file:line: text." + known,
               {"project": {"type": "string"}, "query": {"type": "string"},
                "file_glob": {"type": "string", "description": "e.g. *.dart (optional)"}},
               required=["project", "query"], group="code", read_only=True)

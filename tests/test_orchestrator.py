@@ -55,3 +55,14 @@ def test_idle_session_is_summarized(tmp_path):
     assert "User asked about chai." in orch.system_prompt()
     assert "chai" in " ".join(mem.recall("chai"))
     assert set(mem.export()) == {"facts", "fact_history", "summaries", "messages", "audit_log"}
+
+
+def test_app_and_code_questions_dont_get_the_wrong_tools():
+    from jarvis.core.orchestrator import CALCULATOR_APP, MATH_EXPR, unwanted_groups
+
+    projects = lambda: {"ark_sales": None, "modbus_codec": None}  # noqa: E731
+    assert unwanted_groups("where is the login screen in ark sales", projects) == {"screen"}
+    assert unwanted_groups("what's this error on my screen", projects) == set()
+    assert unwanted_groups("where is the login screen", projects) == set()  # no project named
+    assert CALCULATOR_APP.search("in calculator press seven") and not MATH_EXPR.search("in calculator press seven")
+    assert MATH_EXPR.search("open calculator and do 12*7")  # real maths keeps the maths tool

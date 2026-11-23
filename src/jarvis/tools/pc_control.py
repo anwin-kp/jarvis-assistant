@@ -337,7 +337,7 @@ def register(reg: ToolRegistry, cfg: dict, data: Path) -> None:
     # -------------------------------------------------------------- selected text
     @reg.tool("get_selected_text", "The text the user has selected (highlighted) in the app they're working in. "
               "Use it for 'rewrite / translate / explain / summarize this selected text'.", {},
-              group="clipboard", read_only=True)
+              group="clipboard")  # not read_only: it presses Ctrl+C in the user's window (dry runs simulate it)
     def get_selected_text():
         text = copy_selection()
         return text if text else "ERROR: nothing is selected (select some text first, then ask again)."
