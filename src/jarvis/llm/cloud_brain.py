@@ -324,7 +324,10 @@ class CloudChain:
                                "; continuing on the next one from the tool results" if b.last_tool_calls else "")
                 self.cooldown[b.name] = time.monotonic() + e.retry_after
                 if getattr(e, "partial", None):
-                    msgs, done, results = as_text_history(e.partial), list(b.last_tool_calls), e.results
+                    # keep earlier results: after one handover they're plain text, and the next model's (empty)
+                    # result list overwrote them - the answer became "I did that step, but couldn't finish"
+                    msgs, done = as_text_history(e.partial), list(b.last_tool_calls)
+                    results = (getattr(e, "results", None) or []) or results
                 elif b.last_tool_calls:  # tools ran but there's nothing to continue from: never risk running them twice
                     self.last_tool_calls = b.last_tool_calls
                     raise
@@ -332,6 +335,7 @@ class CloudChain:
         self.last_tool_calls = done
         err = CloudUnavailable(str(last) if last else "no cloud provider available")
         err.results = results
+        err.partial = msgs if done else None  # the conversation so far, tool results included (plain text)
         raise err
 
     def complete(self, messages) -> str:
@@ -385,10 +389,10 @@ class Router:
             try:
                 return self._cloud_turn(messages, tools, confirm, cloud_tools, on_sentence, must_use)
             except CloudUnavailable as e:
-                if self.cloud.last_tool_calls:  # a tool already ran; don't repeat it locally
+                if self.cloud.last_tool_calls:  # a tool already ran; don't repeat it
                     logger.warning("Cloud failed after running tools: {}", e)
                     self.last_tool_calls, self.last_backend = self.cloud.last_tool_calls, "cloud"
-                    return result_reply(getattr(e, "results", None))
+                    return self._finish_locally(e, confirm, on_sentence)
                 logger.warning("Cloud unavailable ({}); using local model", e)
         kw = {"on_sentence": on_sentence} if on_sentence else {}
         if think:
@@ -413,6 +417,20 @@ class Router:
                 raise e from ce
         self.last_tool_calls, self.last_backend = self.local.last_tool_calls, "local"
         return reply
+
+    def _finish_locally(self, e, confirm, on_sentence=None) -> str:
+        """Every cloud model busy after a tool ran: the local model writes the answer from the results it already
+        has, with NO tools (nothing can run twice). Its own failure falls back to the plain tool result."""
+        partial = getattr(e, "partial", None)
+        if partial:
+            try:
+                kw = {"on_sentence": on_sentence} if on_sentence else {}
+                reply = self.local.respond(personal_context(partial, True), [], confirm, **kw)
+                if reply and reply.strip():
+                    return reply
+            except Exception as err:
+                logger.warning("Local model couldn't finish the answer either: {}", err)
+        return result_reply(getattr(e, "results", None))
 
     def _cloud_allowed(self, tools: list[dict], private: bool | None) -> bool:
         if not (self.cloud and self.cloud.available) or self.private:
