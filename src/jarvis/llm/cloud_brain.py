@@ -8,7 +8,7 @@ import requests
 from loguru import logger
 
 from jarvis.core.config import get_secret
-from jarvis.llm.ollama_brain import acted, result_reply, stopped_reply, unbacked_claim
+from jarvis.llm.ollama_brain import NUDGE_LIVE, acted, pending, result_reply, stopped_reply, unbacked_claim
 from jarvis.tools.registry import ConfirmFn, ToolRegistry
 
 PROVIDERS = {  # base URL, keyring entry name
@@ -136,16 +136,17 @@ class CloudBrain:
         return (self._chat(messages, None).get("content") or "").strip()
 
     def respond(self, messages: list[dict], tools: list[dict], confirm: ConfirmFn, on_sentence=None,
-                prior_tools: list[str] | None = None) -> str:
-        """prior_tools: tools another provider already ran in this turn (their results are in messages)."""
+                prior_tools: list[str] | None = None, must_use=None) -> str:
+        """prior_tools: tools another provider already ran in this turn (their results are in messages).
+        must_use: live-data tools the answer needs (see OllamaBrain.respond)."""
         msgs = list(messages)
         self.last_tool_calls = list(prior_tools or [])
-        nudged = False
+        nudged = live_nudged = False
         for _ in range(self.max_steps):
             if self.cancel.is_set():
                 return stopped_reply(self.last_tool_calls)
             stream = None
-            if on_sentence and not nudged:  # speak sentences as they arrive; claims wait for the checked answer
+            if on_sentence and not nudged and not pending(must_use, self.last_tool_calls):  # claims wait
                 from jarvis.llm.ollama_brain import SentenceStream
 
                 stream = SentenceStream(on_sentence, lambda: acted(self.reg, self.last_tool_calls))
@@ -165,6 +166,11 @@ class CloudBrain:
                 if nudge:
                     nudged = True
                     msgs += [{"role": "assistant", "content": reply}, {"role": "user", "content": nudge}]
+                    continue
+                if (need := pending(must_use, self.last_tool_calls)) and not live_nudged:
+                    live_nudged = True
+                    msgs += [{"role": "assistant", "content": reply},
+                             {"role": "user", "content": NUDGE_LIVE.format(tools=", ".join(sorted(need)))}]
                     continue
                 return reply
             if self.cancel.is_set():  # interrupted while the request was out: don't run what it asked for
@@ -298,7 +304,7 @@ class CloudChain:
                 last = e
         raise CloudUnavailable(str(last) if last else "no cloud provider available")
 
-    def respond(self, messages, tools, confirm, on_sentence=None) -> str:
+    def respond(self, messages, tools, confirm, on_sentence=None, must_use=None) -> str:
         """Groq's free per-minute limit often hits mid-task (after a tool ran). The next provider then continues
         from the conversation so far, tool results included, so finished actions are never repeated."""
         import time
@@ -308,6 +314,8 @@ class CloudChain:
             self.active = b
             try:
                 kw = {"on_sentence": on_sentence} if on_sentence else {}
+                if must_use:
+                    kw["must_use"] = must_use
                 out = b.respond(msgs, tools, confirm, prior_tools=done, **kw)
                 self.last_tool_calls = b.last_tool_calls
                 return out
@@ -371,11 +379,11 @@ class Router:
 
     def respond(self, messages: list[dict], tools: list[dict], confirm: ConfirmFn, on_sentence=None,
                 think: bool = False, private: bool | None = None, action: bool = False,
-                cloud_tools: list[dict] | None = None) -> str:
+                cloud_tools: list[dict] | None = None, must_use=None) -> str:
         tried_cloud = self._use_cloud(tools, think, private, action)
         if tried_cloud:
             try:
-                return self._cloud_turn(messages, tools, confirm, cloud_tools, on_sentence)
+                return self._cloud_turn(messages, tools, confirm, cloud_tools, on_sentence, must_use)
             except CloudUnavailable as e:
                 if self.cloud.last_tool_calls:  # a tool already ran; don't repeat it locally
                     logger.warning("Cloud failed after running tools: {}", e)
@@ -385,6 +393,8 @@ class Router:
         kw = {"on_sentence": on_sentence} if on_sentence else {}
         if think:
             kw["think"] = True
+        if must_use:
+            kw["must_use"] = must_use
         try:
             reply = self.local.respond(personal_context(messages, True), tools, confirm, **kw)
         except Exception as e:
@@ -395,7 +405,7 @@ class Router:
                 raise
             logger.warning("Local model failed ({}); answering with the cloud model", e)
             try:
-                return self._cloud_turn(messages, tools, confirm, cloud_tools, on_sentence)
+                return self._cloud_turn(messages, tools, confirm, cloud_tools, on_sentence, must_use)
             except CloudUnavailable as ce:
                 if self.cloud.last_tool_calls:
                     self.last_tool_calls, self.last_backend = self.cloud.last_tool_calls, "cloud"
@@ -409,7 +419,7 @@ class Router:
             return False
         return not (private if private is not None else any(self._is_private(t) for t in tools or []))
 
-    def _cloud_turn(self, messages, tools, confirm, cloud_tools, on_sentence=None) -> str:
+    def _cloud_turn(self, messages, tools, confirm, cloud_tools, on_sentence=None, must_use=None) -> str:
         if hasattr(self.local, "cancel"):
             self.local.cancel.clear()
         offered = cloud_tools if cloud_tools is not None else tools
@@ -417,6 +427,8 @@ class Router:
         msgs = recent(personal_context(messages, self.share_personal))
         msgs = trim_examples(msgs, {t["function"]["name"] for t in public_tools}, set(self.reg.names()))
         kw = {"on_sentence": on_sentence} if on_sentence else {}
+        if must := set(must_use or ()) & {t["function"]["name"] for t in public_tools}:  # only tools it can call
+            kw["must_use"] = must
         reply = self.cloud.respond(msgs, public_tools, confirm, **kw)
         self.last_tool_calls, self.last_backend = self.cloud.last_tool_calls, "cloud"
         return reply
