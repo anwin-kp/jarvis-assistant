@@ -45,6 +45,18 @@ NUDGE_PROMISE = (
 )
 
 
+NUDGE_LIVE = (
+    "[System check] This question needs live data that only a tool has ({tools}). You answered without calling it, "
+    "so your answer may be made up or out of date. Call the tool now, then answer only from its result."
+)
+
+
+def pending(must_use, ran) -> set:
+    """Required tools (live data) of which none has run yet in this turn."""
+    must = set(must_use or ())
+    return must if must and not must & set(ran) else set()
+
+
 def acted(reg, tool_names: list[str]) -> bool:
     """Did any tool that CHANGES something run? Listing emails doesn't back "I've marked them as read"."""
     return any((t := reg.get(n)) is not None and not t.read_only for n in tool_names)
@@ -162,18 +174,20 @@ class OllamaBrain:
                          keep_alive=self.keep_alive, options={**self.options, "num_predict": 1})
 
     def respond(self, messages: list[dict], tools: list[dict], confirm: ConfirmFn, on_sentence=None,
-                think: bool = False) -> str:
-        """messages: plain [{"role", "content"}] dicts. Tool calls live only inside this turn."""
+                think: bool = False, must_use=None) -> str:
+        """messages: plain [{"role", "content"}] dicts. Tool calls live only inside this turn. must_use: tools whose
+        live data the answer needs (temperatures, open tabs, date maths...): answering without one gets pushed back,
+        and nothing is spoken until one has run (a live test heard invented temperatures and tabs)."""
         msgs = list(messages)
         self.last_tool_calls: list[str] = []
         self.cancel.clear()
-        nudged = False
+        nudged = live_nudged = False
         results: list[str] = []
         for step in range(self.max_steps):
             if self.cancel.is_set():
                 return stopped_reply(self.last_tool_calls)
             think_now = self.think or nudged or think  # think harder on complex requests / the retry
-            if on_sentence and not nudged:
+            if on_sentence and not nudged and not pending(must_use, self.last_tool_calls):
                 msg = self._chat_stream(msgs, tools, think_now, on_sentence)
             else:
                 msg = self.client.chat(model=self.model, messages=msgs, tools=tools or None, think=think_now,
@@ -189,6 +203,11 @@ class OllamaBrain:
                     nudged = True
                     logger.info("Reply claims/promises an action but no tool ran; nudging: {}", reply[:80])
                     msgs.append({"role": "user", "content": nudge})
+                    continue
+                if (need := pending(must_use, self.last_tool_calls)) and not live_nudged:
+                    live_nudged = True
+                    logger.info("Answered without the live-data tool {}; nudging: {}", sorted(need), reply[:80])
+                    msgs.append({"role": "user", "content": NUDGE_LIVE.format(tools=", ".join(sorted(need)))})
                     continue
                 if nudged and not self.last_tool_calls and CLAIMS_ACTION.search(reply):
                     reply += " (Heads-up: no tool actually ran, so nothing was changed. Please ask again.)"
