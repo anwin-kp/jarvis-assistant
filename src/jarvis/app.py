@@ -121,6 +121,10 @@ def build(dry_run: bool = False):
     from jarvis.llm.cloud_brain import Router
 
     brain = Router(local, cloud, reg, cfg["llm"].get("mode", "local"), ccfg.get("use_in_gaming_mode", True))
+    from jarvis.agent import missions
+
+    reports = file_tools.resolve_root("documents") / "JARVIS Reports"
+    reg.missions = missions.register(reg, cfg, DATA, reports, brain)  # multi-step goals in the background
     from jarvis.core import gaming
     from jarvis.scheduler import reminders
 

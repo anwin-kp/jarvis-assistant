@@ -249,6 +249,13 @@ Restart after changes: `.\jarvis.ps1 restart`.
 kill-jarvis.cmd            # emergency stop: JARVIS, HUD, model and Ollama
 ```
 
+### Missions (bigger goals, in the background)
+
+Say or type: *"Start a mission: research three laptops under 80,000 rupees, compare them, save a report and remind me
+on Friday at 6 pm"*. Then: *"how is my mission going"*, *"pause / resume / cancel the mission"*, *"approve the mission"*
+(shows the exact action that waits for your OK), *"skip that mission step"*. Reports go to `Documents\JARVIS Reports`.
+Limits and models: `missions:` in `config/config.yaml`.
+
 ## 9. Optional: the desktop overlay version
 
 Besides the HUD window there's a **transparent desktop overlay** (the reactor in a screen corner, replies

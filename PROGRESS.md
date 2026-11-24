@@ -18,6 +18,11 @@ Compact state for continuing work without re-reading the codebase. Update it wit
 | Overlay app | branch `feature/desktop-overlay` only: `ui/overlay.py` | PySide6; never merge into develop (draft PR #42) |
 | Health | weekly self-check (auto), `.\jarvis.ps1 review`, `evals --local` (cloud off), `data/logs/jarvis.log` | private data in `data/` is never committed |
 
+- **Missions** (`agent/missions.py`): goal -> checked plan (call / work / write steps) -> background worker -> review.
+  State in `data/missions/*.json` (saved after each change; resumes after a restart). Policy in code: `QUIET` changes
+  run, every other change waits for approval; re-plans can't add risky tools; private data stays on the local model;
+  `ASKED` / `INTENT` tie changes to the user's own words. Eval: `python -m jarvis.mission_eval` (real models, fake tools).
+
 ## Workflow
 - **Two folders.** `C:\Developmnet\Jarvis` = the user's running app, always on `feature/desktop-overlay` (never switch it).
   `C:\Developmnet\Jarvis-dev` = git worktree for development (`data` is a junction to the app's data).

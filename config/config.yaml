@@ -169,6 +169,17 @@ coding:                 # your code projects (git repos are found automatically:
     - {provider: gemini, model: gemini-3.8-flash, reasoning_effort: low}
     - {provider: gemini, model: gemini-3.5-flash-lite, reasoning_effort: low}
 
+missions:               # "start a mission: ..." - multi-step goals in the background (free cloud models, private steps local)
+  max_steps: 10
+  max_model_calls: 60
+  max_minutes: 30        # working time, not waiting time
+  models:                # spares the voice assistant's first model (its free limit is shared)
+    - {provider: groq, model: openai/gpt-oss-20b}
+    - {provider: groq, model: qwen/qwen3.8-27b}
+    - {provider: gemini, model: gemini-3.8-flash, reasoning_effort: low}
+    - {provider: groq, model: openai/gpt-oss-120b}
+    - {provider: gemini, model: gemini-3.5-flash-lite, reasoning_effort: low}
+
 mcp_servers: {}          # connect MCP servers; their tools become JARVIS tools. Example:
 #  github:
 #    command: npx

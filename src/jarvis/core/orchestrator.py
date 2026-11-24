@@ -58,6 +58,10 @@ REQUIRED = [
     # "open WhatsApp Web in Chrome" went to JARVIS's own Edge window (browser_open) instead of the user's Chrome
     (re.compile(r"\bopen\b(?!.*\b(?:search|click|type|fill|log ?in|sign ?in)\b).{1,40}\bin (?:google )?"
                 r"(?:chrome|brave|firefox|edge|my browser)\b", re.I), {"open_in_browser"}),
+    (re.compile(r"\b(?:start|create|run|launch|begin) (?:a |the )?(?:new )?mission\b|\bas a mission\b|"
+                r"^\W*(?:new )?mission\s*:", re.I), {"start_mission"}),
+    (re.compile(r"\bmission status\b|\bhow(?:'s| is) (?:the|my) mission\b|\bmission (?:done|finished)\b", re.I),
+     {"mission_status"}),
     (re.compile(r"\bwhat'?s playing\b|\bwhat song is (?:this|playing)\b", re.I),
      {"now_playing", "spotify_now_playing"}),
     (re.compile(r"\b(?:start|starts) with windows\b|\bstartup apps\b", re.I), {"startup_apps"}),
@@ -308,6 +312,9 @@ class Orchestrator:
             kw["action"] = bool(asked & ACTION_GROUPS)
         if must := required_tools(words, {t["function"]["name"] for t in tools}):
             kw["must_use"] = must
+            if "cloud_tools" in kw:  # the short cloud list must contain what the answer depends on
+                have = {t["function"]["name"] for t in kw["cloud_tools"]}
+                kw["cloud_tools"] += [t for t in tools if t["function"]["name"] in must - have]
         try:
             reply = strip_filler(self.brain.respond(messages, tools, confirm, **kw) or "(no reply)")
         finally:
