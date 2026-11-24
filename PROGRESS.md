@@ -22,6 +22,9 @@ Compact state for continuing work without re-reading the codebase. Update it wit
   State in `data/missions/*.json` (saved after each change; resumes after a restart). Policy in code: `QUIET` changes
   run, every other change waits for approval; re-plans can't add risky tools; private data stays on the local model;
   `ASKED` / `INTENT` tie changes to the user's own words. Eval: `python -m jarvis.mission_eval` (real models, fake tools).
+- **Developer loop** (`agent/coder.py`): checks before -> fix -> checks after -> review by another model -> a bug's new
+  test must fail without the fix; up to 3 rounds. `verified` is decided in code. `open_pull_request` (draft, asks).
+  Missions use it through `fix_code` (group "background": never offered in conversation). Eval: `python -m jarvis.code_eval`.
 
 ## Workflow
 - **Two folders.** `C:\Developmnet\Jarvis` = the user's running app, always on `feature/desktop-overlay` (never switch it).

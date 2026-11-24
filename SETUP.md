@@ -256,6 +256,12 @@ on Friday at 6 pm"*. Then: *"how is my mission going"*, *"pause / resume / cance
 (shows the exact action that waits for your OK), *"skip that mission step"*. Reports go to `Documents\JARVIS Reports`.
 Limits and models: `missions:` in `config/config.yaml`.
 
+### Let JARVIS fix code
+
+*"Fix the login crash in QuickOP mobile"*: it works on its own git branch, runs the project's checks before and after,
+has a second model review the change, and says **verified** or **NOT verified** (and why). Then: *"show the changes"*,
+*"merge it"*, *"open a pull request"* (a draft; asks before anything is uploaded) or *"discard it"*.
+
 ## 9. Optional: the desktop overlay version
 
 Besides the HUD window there's a **transparent desktop overlay** (the reactor in a screen corner, replies

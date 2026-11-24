@@ -85,13 +85,19 @@ class ToolRegistry:
         return tool.risk is Risk.DANGER or tool.name not in self.no_approval
 
     @contextlib.contextmanager
-    def asking(self, fn: Callable[[str], bool]):
+    def asking(self, fn: Callable[[str], bool], stopped: Callable[[], bool] = lambda: False):
         """In this thread, questions from inside tools go to fn instead of the app's approval prompt."""
         before, self._local.ask = getattr(self._local, "ask", None), fn
+        self._local.stopped = stopped
         try:
             yield
         finally:
             self._local.ask = before
+            self._local.stopped = lambda: False
+
+    def stopped(self) -> bool:
+        """Long tools in a background job check this: has the user paused or cancelled it?"""
+        return bool(getattr(self._local, "stopped", lambda: False)())
 
     def ask(self, what: str) -> bool:
         """Ask the user about one specific risky step inside an otherwise approval-free tool

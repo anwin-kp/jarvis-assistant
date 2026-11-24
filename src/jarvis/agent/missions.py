@@ -25,9 +25,9 @@ from loguru import logger
 
 from jarvis.tools.registry import Risk, Tool
 
-GROUPS = {"web", "utility", "docs", "notes", "reminder", "email", "files", "code", "report"}
+GROUPS = {"web", "utility", "docs", "notes", "reminder", "email", "files", "code", "report", "background"}
 EXCLUDED = {"open_project", "open_file", "code_task", "code_task_status", "code_task_changes", "merge_code_task",
-            "discard_code_task", "index_documents", "get_my_location"}
+            "discard_code_task", "open_pull_request", "index_documents", "get_my_location"}
 EXTRA = {"get_system_info", "battery_health", "network_status", "pc_temperatures", "startup_apps"}
 # changes that are harmless and easy to undo: they run unattended. Every other change asks.
 QUIET = {"save_report", "take_note", "create_reminder", "add_task", "run_dev_command", "draft_email", "create_folder"}
@@ -849,7 +849,7 @@ class Missions:
 
         t = time.monotonic()
         try:
-            with self.reg.asking(ask_inside):
+            with self.reg.asking(ask_inside, lambda: m.id in self._wanted):
                 res, _, status = self.reg._execute(name, args, lambda *a: True)  # approval was handled above
         finally:
             m.seconds += time.monotonic() - t
@@ -911,6 +911,8 @@ def register(reg, cfg: dict, data: Path, reports: Path, brain=None) -> Missions:
 
     def local_only() -> bool:
         return bool(getattr(brain, "private", False)) or getattr(brain, "mode", "smart") == "local"
+
+    reg.local_only = local_only
 
     mind = Mind(models, cfg["llm"], cloud_ok=lambda: not local_only(),
                 local_ok=lambda: not getattr(getattr(reg, "gaming", None), "active", False))

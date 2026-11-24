@@ -291,6 +291,7 @@ class Orchestrator:
             groups.add("interview")  # end_interview stays available while getting to know the user
         if self.semantic and words:
             groups |= self.semantic.pick(words)
+        groups.discard("background")  # tools only missions use
         groups -= unwanted_groups(words, getattr(self.reg, "code_projects", None))
         tools = self.reg.schemas(groups)
         if CALCULATOR_APP.search(words) and not MATH_EXPR.search(words):  # pressing keys in the app, not maths
