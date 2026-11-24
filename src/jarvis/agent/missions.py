@@ -790,13 +790,14 @@ class Missions:
         if lacking := self._asked(m) - {e["tool"] for e in m.ledger if e["ok"]}:
             return f"not done yet: {', '.join(sorted(lacking))}"
         # from the ledger, not from what any model says: "Add to-do: ..." was once written as text and believed
-        acts = [f"- {e['tool']}({json.dumps(e['args'], ensure_ascii=False, default=str)[:200]})" for e in m.ledger
+        acts = [f"- {e['tool']}({json.dumps(e['args'], ensure_ascii=False, default=str)[:2500]})" for e in m.ledger
                 if e["ok"] and (t := self.reg.get(e["tool"])) and not t.read_only]
         acts = "\n".join(acts) or "(none)"
         text = (f"Task: {m.goal}\nTest: every part of the task was really done.\n\nCHANGES REALLY MADE "
                 "(complete list). Anything the task wants saved, added, set or sent that isn't in this list "
-                f"was NOT done, whatever the text below says:\n{acts}\n\nRESULT and EVIDENCE "
-                f"(tool results and checked work; long texts are shortened here):\n{done[:9000]}")
+                f"was NOT done, whatever the text below says. "
+                f"A saved text must itself contain what was asked for:\n{acts}\n\nRESULT and EVIDENCE "
+                f"(tool results and checked work; long texts are shortened here):\n{done[:7000]}")
         refused: list[str] = []
         for _ in range(3):  # finished work is sent back only if two of three reviews agree
             try:
