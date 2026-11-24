@@ -48,6 +48,7 @@ class FastIntents:
         self.apps = {k.lower() for k in (cfg.get("security", {}).get("app_allowlist") or {})}
         r = re.compile
         self.rules = [
+            (r(r"(pause|stop|resume|continue|cancel|approve|skip) (?:the |my |that |this )?mission(?: step)?"), self._mission),
             (r(r"(?:pause|stop)(?: the)?(?: music| song| video| playback| media| it)?"), self._media("pause", None)),
             (r(r"(?:resume|play|unpause|continue|start playing|keep playing)(?: the)? ?(?:music|song|playback|it)?"),
              self._media("play", None)),
@@ -136,6 +137,12 @@ class FastIntents:
             return None
         pct = max(0, min(100, now + (10 if m.group(1) == "up" else -10)))
         return self._run("set_volume", {"percent": pct}, confirm, f"Volume {pct} percent.")
+
+    def _mission(self, m, confirm):
+        if self.reg.get("control_mission") is None:
+            return None
+        action = {"stop": "pause", "continue": "resume"}.get(m.group(1), m.group(1))
+        return self.reg.execute("control_mission", {"action": action}, confirm).text.removeprefix("ERROR: ")
 
     def _mute(self, m, confirm):
         on = m.group(1) == "mute"

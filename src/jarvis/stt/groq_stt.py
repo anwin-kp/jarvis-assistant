@@ -2,10 +2,12 @@
 than the local small model, especially for accents). Audio is sent to Groq; local Whisper is the fallback."""
 
 import io
+import re
 import wave
 
 import numpy as np
 import requests
+from loguru import logger
 
 from jarvis.stt.whisper_stt import is_hallucination
 
@@ -22,6 +24,11 @@ def keep_segment(no_speech_prob: float, avg_logprob: float) -> bool:
     if avg_logprob < -2.0:
         return False
     return not (no_speech_prob > 0.6 and avg_logprob < -1.0)
+
+
+# letters English doesn't use ("Jú, glóði Fómi" = "You close it for me"): turbo ignored language=en
+NOT_ENGLISH = re.compile(r"[ðþæøœßłđáíúýąęőűčřšžěůćńśźżăîșțğşа-яёіїєґ\u0900-\u0dff\u0600-\u06ff\u3040-\u9fff]", re.I)
+BETTER = "whisper-large-v3"
 
 
 def to_wav(audio: np.ndarray, rate: int = 16000) -> bytes:
@@ -46,7 +53,19 @@ class GroqSTT:
         if audio.size < 16000 * 0.3:
             return "", ""
         lang = language or (self.languages[0] if len(self.languages) == 1 else None)
-        data = {"model": self.model, "response_format": "verbose_json", "temperature": "0"}
+        text, detected = self._request(audio, lang, self.model)
+        if lang == "en" and self.model != BETTER and NOT_ENGLISH.search(text):
+            try:  # large-v3 heard these clips right; it's a little slower, so only when needed
+                again = self._request(audio, lang, BETTER)
+            except requests.RequestException as e:
+                logger.info("{} retry failed: {}", BETTER, e)
+            else:
+                if again[0] and not NOT_ENGLISH.search(again[0]):
+                    return again
+        return text, detected
+
+    def _request(self, audio, lang: str | None, model: str) -> tuple[str, str]:
+        data = {"model": model, "response_format": "verbose_json", "temperature": "0"}
         if lang:
             data["language"] = lang
         if self.vocabulary:

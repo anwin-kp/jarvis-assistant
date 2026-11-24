@@ -27,6 +27,11 @@ of on or our play please set she so stop that the their them then there they thi
 where which who will with you your open close pause next yes okay ok song music volume what's it's that's
 there's let's i'm i've don't can't won't""".split())
 
+# "copy mobile" is a mishearing of "Quick OP Mobile", but "copy mobile folder" / "can you copy ..." can be a real
+# command: a span starting with one of these verbs, where a command starts, is left alone
+VERBS = {"copy", "call", "quit", "cut", "clear", "check", "cancel", "create"}
+BEFORE_VERB = {"", "please", "you", "and", "then", "i", "we", "jarvis"}
+
 
 def _fold(s: str) -> str:
     s = re.sub(r"[^a-z]", "", s.lower()).replace("ph", "f").replace("ck", "k")
@@ -127,6 +132,9 @@ class Lexicon:
         while i < len(words):
             best = None
             for n in (1, 2, 3, 4):  # the best-scoring span; on a tie the shorter one (names have up to 4 words)
+                first = words[i].strip(".,!?;:").lower()
+                if n > 1 and first in VERBS and (words[i - 1].strip(".,!?;:").lower() if i else "") in BEFORE_VERB:
+                    continue
                 if i + n <= len(words) and (m := match(words[i:i + n])) and (not best or m[0] > best[0] + 0.01):
                     best = (m[0], m[1], n, " ".join(words[i:i + n]).strip(".,!?;:"))
             if best and best[2] > 1:  # don't swallow a neighbour: "my mixup mesh" -> the name starts at "mixup"
