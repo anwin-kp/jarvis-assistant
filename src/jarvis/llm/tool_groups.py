@@ -65,6 +65,7 @@ KEYWORDS: dict[str, list[str]] = {
              "run the tests", "run tests", "failing test", "test fail", "build the", "build apk", "compile", "analyze",
              "analyzer", "lint", "flutter", "dart", "python", "function", "class ", "refactor", "bug", "fix the",
              "vs code", "source file", "codebase", "pull request", "stack trace"],
+    "mission": ["mission", "in the background", "step by step", "research", "compare"],
     "utility": ["calculate", "plus", "minus", "times", "multiplied", "divided", "percent", "square root",
                 "squared", "how much is", "convert", "in km", "in miles", "kg", "pounds", "celsius", "fahrenheit",
                 "degrees", "inches", "feet", "cm", "liters", "litres", "ml", "cups", "mph", "km/h", "gb", "mb",

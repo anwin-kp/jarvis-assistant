@@ -387,6 +387,8 @@ class App:
         self.gaming.start_watcher()
         self._start_learner()
         self.reminders.start()
+        if n := self.reg.missions.resume_interrupted():
+            logger.info("Continuing {} interrupted mission(s)", n)
         if getattr(self.reg, "doc_index", None) and self.cfg.get("documents", {}).get("index_on_start", True):
             self.reg.doc_index.start_background()
         if self.proactive:

@@ -7,7 +7,9 @@ never by the prompt.
 
 from __future__ import annotations
 
+import contextlib
 import json
+import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -74,6 +76,7 @@ class ToolRegistry:
         # security.no_approval: everyday CONFIRM tools that just run. DANGER tools always ask.
         self.no_approval: set[str] = set()
         self.trace: list | None = None
+        self._local = threading.local()
         self.confirm_fn: ConfirmFn | None = None  # the app's approval prompt, for tools that ask mid-way
 
     def needs_approval(self, tool: Tool) -> bool:
@@ -81,9 +84,20 @@ class ToolRegistry:
             return False
         return tool.risk is Risk.DANGER or tool.name not in self.no_approval
 
+    @contextlib.contextmanager
+    def asking(self, fn: Callable[[str], bool]):
+        """In this thread, questions from inside tools go to fn instead of the app's approval prompt."""
+        before, self._local.ask = getattr(self._local, "ask", None), fn
+        try:
+            yield
+        finally:
+            self._local.ask = before
+
     def ask(self, what: str) -> bool:
         """Ask the user about one specific risky step inside an otherwise approval-free tool
         (clicking 'Buy now', pressing Alt+F4). No approval prompt available = no."""
+        if own := getattr(self._local, "ask", None):  # a background job: it can't use the app's prompt
+            return bool(own(what))
         if not self.confirm_fn:
             return False
         step = Tool("risky_step", "A risky step", {"type": "object", "properties": {}, "required": []},

@@ -123,3 +123,6 @@
 - {say: "how healthy is my battery", expect: [battery_health, get_system_info]}
 - {say: "find duplicate files in my pictures", expect: [duplicate_files]}
 - {say: "organize my downloads folder", expect: [organize_folder]}
+- {say: "start a mission: find three quiet keyboards under 5000 rupees, compare them and save a report", expect: [start_mission]}
+- {say: "start a new mission to learn what's new in Flutter this month and remind me to read it tomorrow at 9", expect: [start_mission]}
+- {say: "how is my mission going", expect: [mission_status]}
