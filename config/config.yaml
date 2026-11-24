@@ -94,6 +94,8 @@ hud:
   enabled: true          # futuristic window (local only: 127.0.0.1 + secret token)
   port: 8765
   open_on_start: true
+  mode: overlay          # overlay = transparent, always-on-top desktop overlay (Ctrl+Alt+J: use it, Esc: let clicks
+                         #   through, Ctrl+Alt+H: hide, Ctrl+Alt+D: next display) | window = the full HUD in its own window
 
 briefing:
   enabled: true

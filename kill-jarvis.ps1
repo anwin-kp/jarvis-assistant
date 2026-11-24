@@ -22,6 +22,10 @@ function Get-JarvisProcesses {
 function Get-HudProcesses {
     # The HUD runs in its own Edge profile (data\hud-profile), so your normal browser is never touched.
     Get-CimInstance Win32_Process -Filter "Name='msedge.exe'" | Where-Object { $_.CommandLine -like '*hud-profile*' }
+    # the desktop overlay (python -m jarvis.ui.overlay) and Qt's web renderer processes it started
+    Get-CimInstance Win32_Process -Filter "Name='python.exe' OR Name='pythonw.exe'" |
+        Where-Object { $_.CommandLine -match '-m\s+jarvis\.ui\.overlay' }
+    Get-CimInstance Win32_Process -Filter "Name='QtWebEngineProcess.exe'" | Where-Object { $_.ExecutablePath -like "$Root*" }
 }
 
 Write-Host ''

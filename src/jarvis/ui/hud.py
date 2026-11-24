@@ -15,6 +15,35 @@ WEB = Path(__file__).parent / "web"
 URL_FILE = Path(__file__).resolve().parents[3] / "data" / "hud-url.txt"
 
 
+OVERLAY_SETTINGS = Path(__file__).resolve().parents[3] / "data" / "overlay-settings.json"
+OVERLAY_CHOICES = {"corner": {"tl", "tr", "bl", "br", "c"}, "size": {"s", "m", "l"},
+                   "width": {"narrow", "normal", "wide"},
+                   "fade": {"8", "16", "30", "never"}}
+OVERLAY_DEFAULTS = {"corner": "br", "size": "m", "width": "normal", "fade": "16"}
+
+
+def load_overlay_settings() -> dict:
+    import json
+
+    try:
+        saved = json.loads(OVERLAY_SETTINGS.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        saved = {}
+    return {k: saved.get(k) if saved.get(k) in OVERLAY_CHOICES[k] else v for k, v in OVERLAY_DEFAULTS.items()}
+
+
+def save_overlay_settings(new: dict) -> dict:
+    """Only known keys and values are kept (the page is local, but never trust input blindly)."""
+    import json
+
+    merged = load_overlay_settings()
+    for k, v in (new or {}).items():
+        if k in OVERLAY_CHOICES and str(v) in OVERLAY_CHOICES[k]:
+            merged[k] = str(v)
+    OVERLAY_SETTINGS.write_text(json.dumps(merged), encoding="utf-8")
+    return merged
+
+
 class Hud:
     def __init__(self, app_queue, port: int = 8765):
         self.q = app_queue
@@ -22,6 +51,7 @@ class Hud:
         self.on_input = None  # called immediately for buttons and typed messages: they cut in on JARVIS talking
         self.memory_api = None  # (action, msg) -> facts list: the Memory panel (list / forget / teach)
         self.port = port
+        self.mode = "window"  # hud.mode: window (Edge app window) | overlay (transparent desktop overlay)
         self.token = secrets.token_urlsafe(24)
         self.clients: set = set()
         self.no_stats: set = set()  # connected views that don't show the CPU/GPU gauges (the overlay)
@@ -82,6 +112,18 @@ class Hud:
             except ValueError as e:
                 return JSONResponse({"error": str(e)}, status_code=413)
             return JSONResponse({"id": path.name, "name": attachments.display_name(path)})
+
+        @app.get("/overlay-settings")
+        async def overlay_settings_get(token: str = ""):
+            if not secrets.compare_digest(token, self.token):
+                return PlainTextResponse("Forbidden", status_code=403)
+            return JSONResponse(load_overlay_settings())
+
+        @app.post("/overlay-settings")
+        async def overlay_settings_set(request: Request, token: str = ""):
+            if not secrets.compare_digest(token, self.token):
+                return PlainTextResponse("Forbidden", status_code=403)
+            return JSONResponse(save_overlay_settings(await request.json()))
 
         @app.get("/file/{file_id}")
         async def file(file_id: str, token: str = ""):
@@ -167,7 +209,23 @@ class Hud:
             pass
 
     def open(self) -> None:
-        """Open as a standalone app window (Edge --app), falling back to the default browser."""
+        """Open the HUD: the transparent desktop overlay (hud.mode: overlay, needs PySide6) or a standalone
+        Edge app window, falling back to the default browser."""
+        if self.mode == "overlay":
+            from jarvis.ui.overlay import available
+
+            if available():
+                import sys
+
+                pyw = Path(sys.executable).with_name("pythonw.exe")
+                import os
+
+                subprocess.Popen([str(pyw if pyw.exists() else sys.executable), "-m", "jarvis.ui.overlay", self.url,
+                                  str(os.getpid())],
+                                 cwd=str(Path(__file__).resolve().parents[3]),
+                                 creationflags=subprocess.CREATE_NO_WINDOW)
+                return
+            logger.warning("Overlay needs PySide6 (pip install PySide6-Essentials PySide6-WebEngine); using a window")
         try:
             # Own Edge profile: a separate process that kill-jarvis.ps1 can close without touching your browser.
             profile = Path(__file__).resolve().parents[3] / "data" / "hud-profile"

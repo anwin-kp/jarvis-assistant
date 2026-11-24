@@ -70,6 +70,10 @@ Issues = "https://github.com/anwin-kp/jarvis-assistant/issues"
 [project.scripts]
 jarvis = "jarvis.__main__:main"
 
+[project.optional-dependencies]
+# Transparent desktop overlay HUD (hud.mode: overlay). Qt's DLLs are signed, so Smart App Control allows them.
+overlay = ["PySide6-Essentials>=6.12", "PySide6-WebEngine>=6.12"]
+
 [tool.uv]
 # Smart App Control blocks uv's unsigned Python builds; use the signed python.org install.
 python-preference = "only-system"

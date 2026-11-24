@@ -52,9 +52,16 @@ if ($running.Count -gt 0) {
     Write-Ok "JARVIS is already running (PID $($running[0].ProcessId)). Use kill-jarvis to stop it."
     if (Test-Path $HudUrl) {  # bring the HUD back
         $url = (Get-Content $HudUrl -Raw).Trim()
-        $prof = Join-Path $Root 'data\hud-profile'
-        Start-Process msedge -ArgumentList "--app=$url", '--start-maximized', "--user-data-dir=`"$prof`"", '--no-first-run', '--disable-extensions', '--disable-sync'
-        Write-Ok 'HUD opened'
+        $overlay = (Select-String -Path (Join-Path $Root 'config\config.yaml') -Pattern '^\s+mode:\s*overlay' -Quiet) -and
+                   (Test-Path (Join-Path $Root '.venv\Lib\site-packages\PySide6\QtWebEngineWidgets.pyd'))
+        if ($overlay) {  # the desktop overlay (already open = it stays; Ctrl+Alt+J brings it forward)
+            Start-Process -FilePath $PythonW -ArgumentList "-m jarvis.ui.overlay `"$url`"" -WorkingDirectory $Root
+            Write-Ok 'Overlay opened (Ctrl+Alt+J to use it, Ctrl+Alt+H to hide)'
+        } else {
+            $prof = Join-Path $Root 'data\hud-profile'
+            Start-Process msedge -ArgumentList "--app=$url", '--start-maximized', "--user-data-dir=`"$prof`"", '--no-first-run', '--disable-extensions', '--disable-sync'
+            Write-Ok 'HUD opened'
+        }
     }
     Write-Host ''
     exit 0
